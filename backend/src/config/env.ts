@@ -5,6 +5,7 @@ export const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
   FRONTEND_URL: z.string().url().default('http://localhost'),
+  SERVER_URL: z.string().url().optional(),
   REPORTS_DIR: z.string().min(1).default('/reports'),
   DATABASE_PATH: z.string().min(1).default('/data/fashion-report.db'),
   ACCESS_TOKEN_EXPIRES_IN: z.string().min(1).default('2h'),

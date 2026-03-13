@@ -1,0 +1,19 @@
+{
+  "loading": "Loading...",
+  "error": "Error",
+  "success": "Success",
+  "confirm": "Confirm",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "save": "Save",
+  "view": "View",
+  "back": "Back",
+  "next": "Next",
+  "previous": "Previous",
+  "noData": "No data available",
+  "logout": "Logout",
+  "notLoggedIn": "Not logged in",
+  "subscribedUntil": "Subscribed until",
+  "notSubscribed": "Not subscribed"
+}

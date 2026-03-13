@@ -7,9 +7,9 @@ export const REPORT_SPEC = {
     required: ['index.html', 'overview.html', 'images/'],
     optional: ['metadata.json'],
     images: {
-      original: 'images/look-001.jpg ~ look-052.jpg',
-      compressed: 'images/compressed/look-001-400.jpg (可选)',
-      thumbnails: 'images/thumbnails/look-001-thumb.jpg (可选)'
+      description: '图片资源目录，数量不限，命名自由',
+      examples: ['look-01.jpg', 'zimmermann-fall-2026-look-01.jpg', 'detail-embroidery.jpg', 'runway-001.webp'],
+      formats: ['.jpg', '.jpeg', '.png', '.webp']
     }
   },
   iframeRules: {

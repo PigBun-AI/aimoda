@@ -9,7 +9,7 @@ fs.mkdirSync(config.UPLOAD_TMP_DIR, { recursive: true })
 const upload = multer({
   dest: config.UPLOAD_TMP_DIR,
   limits: {
-    fileSize: 100 * 1024 * 1024,
+    fileSize: 1024 * 1024 * 1024, // 1GB
     files: 1
   },
   fileFilter: (_request, file, callback) => {

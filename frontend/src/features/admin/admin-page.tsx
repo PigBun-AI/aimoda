@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -23,16 +25,17 @@ function getPermissions(role: string | undefined): string[] {
 }
 
 export function AdminPage() {
+  const { t } = useTranslation('admin')
   const adminUsersQuery = useAdminUsers()
 
   return (
     <section className="space-y-8">
       <div>
         <h1 className="font-serif text-3xl font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-          管理员
+          {t('admin')}
         </h1>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          管理用户与权限分配
+          {t('userManagementDesc')}
         </p>
       </div>
 
@@ -45,10 +48,10 @@ export function AdminPage() {
       >
         <CardHeader className="pb-4">
           <CardTitle className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>
-            用户管理
+            {t('userManagement')}
           </CardTitle>
           <CardDescription className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            系统所有用户列表与权限配置
+            {t('userManagementDesc')}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 text-sm">
@@ -77,7 +80,7 @@ export function AdminPage() {
                       <Badge
                         className={`${roleBadgeClass[user.role] || ''} border-0 text-xs`}
                       >
-                        {user.role === 'admin' ? '管理员' : user.role === 'editor' ? '编辑者' : '查看者'}
+                        {t(user.role === 'admin' ? 'admin' : user.role === 'editor' ? 'editor' : 'viewer')}
                       </Badge>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
@@ -95,7 +98,7 @@ export function AdminPage() {
                       ))}
                     </div>
                     <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
-                      最近活跃：{user.lastActiveAt
+                      {t('recentlyActive')}: {user.lastActiveAt
                         ? new Date(user.lastActiveAt).toLocaleString('zh-CN', {
                             year: 'numeric',
                             month: 'short',

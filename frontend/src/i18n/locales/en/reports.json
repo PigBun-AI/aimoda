@@ -1,0 +1,15 @@
+{
+  "title": "Trend Articles",
+  "subtitle": "View the latest fashion trend articles",
+  "published": "Published",
+  "archived": "Archived",
+  "viewDetails": "View Details",
+  "previousPage": "Previous",
+  "nextPage": "Next",
+  "noReports": "No articles available",
+  "notFound": "Article not found",
+  "backToList": "Back to List",
+  "previousArticle": "Previous",
+  "nextArticle": "Next",
+  "iframeError": "This article URL does not meet security loading policy"
+}

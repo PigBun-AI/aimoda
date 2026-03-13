@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,7 @@ import { register } from '@/lib/api'
 import { saveSession } from './protected-route'
 
 export function RegisterPage() {
+  const { t } = useTranslation('auth')
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -29,12 +31,12 @@ export function RegisterPage() {
     setValidationError('')
 
     if (password !== confirmPassword) {
-      setValidationError('两次输入的密码不一致')
+      setValidationError(t('passwordMismatch'))
       return
     }
 
     if (password.length < 8) {
-      setValidationError('密码至少需要 8 个字符')
+      setValidationError(t('passwordTooShort'))
       return
     }
 
@@ -60,8 +62,8 @@ export function RegisterPage() {
               World Wear Watch Daily
             </p>
             <h1 className="mb-4">
-              <img src="/WWWD_logo_clean.svg" alt="WWWD" className="dark:hidden" style={{ height: '56px' }} />
-              <img src="/WWWD_logo_inverted.svg" alt="WWWD" className="hidden dark:block" style={{ height: '56px' }} />
+              <img src="/WWWD_logo_clean.svg" alt="WWWD" className="dark:hidden" style={{ height: 'clamp(56px, 7vw, 80px)' }} />
+              <img src="/WWWD_logo_inverted.svg" alt="WWWD" className="hidden dark:block" style={{ height: 'clamp(56px, 7vw, 80px)' }} />
             </h1>
             <div
               className="w-12 h-px mb-6"
@@ -86,16 +88,16 @@ export function RegisterPage() {
       >
         <div className="w-full max-w-sm">
           <div className="lg:hidden mb-10 text-center">
-            <img src="/WWWD_logo_clean.svg" alt="WWWD" className="dark:hidden mx-auto" style={{ height: '36px' }} />
-            <img src="/WWWD_logo_inverted.svg" alt="WWWD" className="hidden dark:block mx-auto" style={{ height: '36px' }} />
+            <img src="/WWWD_logo_clean.svg" alt="WWWD" className="dark:hidden mx-auto" style={{ height: '48px' }} />
+            <img src="/WWWD_logo_inverted.svg" alt="WWWD" className="hidden dark:block mx-auto" style={{ height: '48px' }} />
           </div>
 
           <div className="mb-8">
             <h2 className="text-2xl font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-              创建账号
+              {t('createAccount')}
             </h2>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              注册后即可浏览趋势报告
+              {t('registerHint')}
             </p>
           </div>
 
@@ -106,7 +108,7 @@ export function RegisterPage() {
                 className="text-sm"
                 style={{ color: 'var(--text-secondary)' }}
               >
-                邮箱
+                {t('email')}
               </Label>
               <Input
                 id="email"
@@ -128,7 +130,7 @@ export function RegisterPage() {
                 className="text-sm"
                 style={{ color: 'var(--text-secondary)' }}
               >
-                密码
+                {t('password')}
               </Label>
               <Input
                 id="password"
@@ -150,7 +152,7 @@ export function RegisterPage() {
                 className="text-sm"
                 style={{ color: 'var(--text-secondary)' }}
               >
-                确认密码
+                {t('confirmPassword')}
               </Label>
               <Input
                 id="confirmPassword"
@@ -172,7 +174,7 @@ export function RegisterPage() {
             )}
 
             {mutation.isError && (
-              <p className="text-sm text-red-500">注册失败，请稍后重试。</p>
+              <p className="text-sm text-red-500">{t('registerFailed')}，{t('emailExists')}。</p>
             )}
 
             <Button
@@ -184,7 +186,7 @@ export function RegisterPage() {
               disabled={mutation.isPending}
               type="submit"
             >
-              {mutation.isPending ? '注册中...' : '注册'}
+              {mutation.isPending ? t('registering') : t('register')}
             </Button>
           </form>
 
@@ -192,9 +194,9 @@ export function RegisterPage() {
             className="mt-6 text-center text-sm"
             style={{ color: 'var(--text-muted)' }}
           >
-            已有账号？{' '}
+            {t('haveAccount')}{' '}
             <Link to="/login" className="underline" style={{ color: 'var(--text-primary)' }}>
-              登录
+              {t('login')}
             </Link>
           </p>
 

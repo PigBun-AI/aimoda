@@ -6,6 +6,7 @@ import multer from 'multer'
 import { asyncHandler } from '../../middleware/error.middleware.js'
 import { uploadRateLimiter } from '../../middleware/rate-limit.middleware.js'
 import { uploadReportArchive } from '../reports/report.service.js'
+import { config } from '../../config/index.js'
 
 // skills 目录位于项目根目录（/app）
 const SKILLS_DIR = path.resolve(process.cwd(), 'skills')
@@ -47,44 +48,11 @@ const mcpTools = [
   },
   {
     name: 'upload_report',
-    description: '上传报告压缩包（zip），支持两种方式：1) base64Content: 传入 base64 编码的文件内容；2) 通过 /api/mcp/upload 端点进行 HTTP multipart 上传。推荐使用 multipart 方式上传大文件。',
+    description: '上传报告压缩包（zip）到 WWWD 平台。使用 multipart/form-data POST 到返回的 URL。',
     inputSchema: {
       type: 'object',
-      properties: {
-        base64Content: {
-          type: 'string',
-          description: 'ZIP 文件的 Base64 编码内容（可选，与 filePath 二选一）'
-        },
-        fileName: {
-          type: 'string',
-          description: '文件名，例如 report.zip'
-        },
-        uploadedBy: {
-          type: 'number',
-          description: '上传者用户 ID',
-          default: 1
-        }
-      },
-      required: ['fileName']
-    }
-  },
-  {
-    name: 'get_upload_url',
-    description: '获取一个预签名的上传 URL，用于大文件上传。支持 PUT 方法上传文件。',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        fileName: {
-          type: 'string',
-          description: '要上传的文件名'
-        },
-        contentType: {
-          type: 'string',
-          description: '文件的 MIME 类型',
-          default: 'application/zip'
-        }
-      },
-      required: ['fileName']
+      properties: {},
+      required: []
     }
   }
 ] as const
@@ -93,7 +61,7 @@ const mcpTools = [
 const upload = multer({
   dest: '/tmp/',
   limits: {
-    fileSize: 100 * 1024 * 1024 // 100MB limit
+    fileSize: 1024 * 1024 * 1024 // 1GB limit
   }
 })
 
@@ -184,105 +152,17 @@ mcpRouter.post(
             }
 
             case 'upload_report': {
-              const base64Content = toolArgs.base64Content as string | undefined
-              const fileName = toolArgs.fileName as string | undefined
-
-              if (!fileName) {
-                response.json({
-                  jsonrpc: '2.0',
-                  id,
-                  error: {
-                    code: -32602,
-                    message: 'Missing required parameter: fileName'
-                  }
-                })
-                return
-              }
-
-              const uploadedBy = (toolArgs.uploadedBy as number) || 1
-
-              // Handle base64 content
-              if (base64Content) {
-                // Decode base64 and write to temp file
-                const buffer = Buffer.from(base64Content, 'base64')
-                const tempPath = `/tmp/${Date.now()}-${fileName}`
-                fs.writeFileSync(tempPath, buffer)
-
-                try {
-                  const report = await uploadReportArchive({
-                    archivePath: tempPath,
-                    uploadedBy
-                  })
-
-                  const result = {
-                    content: [
-                      {
-                        type: 'text',
-                        text: JSON.stringify({
-                          success: true,
-                          message: '报告上传成功',
-                          report: {
-                            id: report.id,
-                            slug: report.slug,
-                            title: report.title,
-                            brand: report.brand,
-                            season: `${report.season} ${report.year}`,
-                            lookCount: report.lookCount
-                          }
-                        }, null, 2)
-                      }
-                    ]
-                  }
-                  response.json({ jsonrpc: '2.0', id, result })
-                } finally {
-                  // Clean up temp file
-                  fs.rmSync(tempPath, { force: true })
-                }
-                return
-              }
-
-              // If no base64, suggest using multipart upload
-              response.json({
-                jsonrpc: '2.0',
-                id,
-                result: {
-                  content: [
-                    {
-                      type: 'text',
-                      text: JSON.stringify({
-                        error: '请使用以下方式上传文件：',
-                        methods: [
-                          '1. 通过 base64Content 参数传入文件的 Base64 编码',
-                          '2. 通过 HTTP POST 到 /api/mcp/upload 端点进行 multipart 上传'
-                        ],
-                        uploadEndpoint: '/api/mcp/upload',
-                        example: {
-                          method: 'multipart',
-                          contentType: 'multipart/form-data',
-                          fieldName: 'file'
-                        }
-                      }, null, 2)
-                    }
-                  ]
-                }
-              })
-              return
-            }
-
-            case 'get_upload_url': {
-              // For now, return the direct upload URL
-              const uploadFileName = toolArgs.fileName as string
+              const serverUrl = config.SERVER_URL || 'http://localhost:38180'
               const result = {
                 content: [
                   {
                     type: 'text',
                     text: JSON.stringify({
-                      message: '请使用 multipart 方式上传文件',
-                      uploadUrl: '/api/mcp/upload',
+                      uploadUrl: `${serverUrl}/api/mcp/upload`,
                       method: 'POST',
                       contentType: 'multipart/form-data',
                       fields: {
-                        file: '(二进制文件)',
+                        file: '(二进制文件，必需)',
                         uploadedBy: '(用户ID，可选，默认1)'
                       }
                     }, null, 2)

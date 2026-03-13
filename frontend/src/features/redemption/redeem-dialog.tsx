@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -14,6 +15,7 @@ import {
 import { useRedeemCode } from '@/features/redemption/use-redeem'
 
 export function RedeemDialog() {
+  const { t } = useTranslation('admin')
   const [open, setOpen] = useState(false)
   const [code, setCode] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
@@ -28,7 +30,7 @@ export function RedeemDialog() {
       {
         onSuccess: (data) => {
           const endsAt = new Date(data.subscription.endsAt).toLocaleDateString('zh-CN')
-          setSuccessMessage(`兑换成功！订阅有效期至 ${endsAt}`)
+          setSuccessMessage(`${t('redeemSuccess')} ${endsAt}`)
           setCode('')
           queryClient.invalidateQueries({ queryKey: ['my-subscription'] })
         },
@@ -53,7 +55,7 @@ export function RedeemDialog() {
           className="w-full justify-start gap-2 text-sm bg-transparent hover:bg-[var(--bg-tertiary)]"
           style={{ color: 'var(--text-secondary)' }}
         >
-          兑换码
+          {t('redeemCode')}
         </Button>
       </DialogTrigger>
       <DialogContent
@@ -64,14 +66,14 @@ export function RedeemDialog() {
         }}
       >
         <DialogHeader>
-          <DialogTitle style={{ color: 'var(--text-primary)' }}>兑换订阅</DialogTitle>
+          <DialogTitle style={{ color: 'var(--text-primary)' }}>{t('redeemSubscription')}</DialogTitle>
           <DialogDescription style={{ color: 'var(--text-muted)' }}>
-            输入兑换码以激活或延长订阅
+            {t('redeemHint')}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 pt-2">
           <Input
-            placeholder="请输入兑换码"
+            placeholder={t('enterCode')}
             value={code}
             onChange={(e) => setCode(e.target.value)}
             className="h-12 font-mono"
@@ -85,7 +87,7 @@ export function RedeemDialog() {
             <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
           )}
           {mutation.isError && (
-            <p className="text-sm text-red-500">兑换失败，请检查兑换码是否正确。</p>
+            <p className="text-sm text-red-500">{t('redeemFailed')}</p>
           )}
           <Button
             onClick={handleRedeem}
@@ -93,7 +95,7 @@ export function RedeemDialog() {
             className="w-full h-10"
             style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-primary)' }}
           >
-            {mutation.isPending ? '兑换中...' : '兑换'}
+            {mutation.isPending ? `${t('redeem')}...` : t('redeem')}
           </Button>
         </div>
       </DialogContent>

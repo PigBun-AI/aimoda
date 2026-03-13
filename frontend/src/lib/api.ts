@@ -34,36 +34,6 @@ const mockUser: AuthUser = {
   permissions: ['reports:read', 'reports:write', 'users:manage'],
 }
 
-const mockReports: ReportSummary[] = [
-  {
-    id: 'report-2026-aw-01',
-    slug: 'multi-brand-fall-2026',
-    title: '2026 秋冬女装趋势总览',
-    brand: 'Multi Brand',
-    season: 'AW26',
-    status: 'published',
-    updatedAt: '2026-03-12T10:00:00.000Z',
-  },
-  {
-    id: 'report-2026-ss-02',
-    slug: 'material-lab-spring-2026',
-    title: '2026 春夏面料情绪图谱',
-    brand: 'Material Lab',
-    season: 'SS26',
-    status: 'draft',
-    updatedAt: '2026-03-10T08:30:00.000Z',
-  },
-  {
-    id: 'report-2025-fw-03',
-    slug: 'archive-studio-fall-2025',
-    title: '2025 秋冬秀场造型复盘',
-    brand: 'Archive Studio',
-    season: 'FW25',
-    status: 'archived',
-    updatedAt: '2026-02-21T12:15:00.000Z',
-  },
-]
-
 const mockAdminUsers: AdminUser[] = [
   {
     id: 'u-admin',
@@ -214,8 +184,42 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return normalizeAuthUser(data)
 }
 
-export async function getReports(): Promise<ReportSummary[]> {
-  return request('/api/reports', undefined, mockReports)
+export interface PaginatedReports {
+  reports: ReportSummary[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
+export async function getReports(page = 1, limit = 12): Promise<PaginatedReports> {
+  const response = await fetch(`/api/reports?page=${page}&limit=${limit}`, {
+    credentials: 'include',
+    headers: createHeaders(),
+  })
+
+  if (!response.ok) {
+    throw new ApiError(`Request failed with status ${response.status}`, response.status)
+  }
+
+  const payload = await response.json() as {
+    success: boolean
+    data: ReportSummary[]
+    meta: { total: number; page: number; limit: number; totalPages: number }
+  }
+
+  if (!payload.success || !payload.data) {
+    throw new ApiError('Failed to fetch reports', 500)
+  }
+
+  // Transform backend data to include coverImageUrl
+  return {
+    reports: payload.data.map((report: ReportSummary) => ({
+      ...report,
+      coverImageUrl: `/reports/${report.slug}/cover.jpg`,
+    })),
+    ...payload.meta
+  }
 }
 
 export async function getReportById(id: string): Promise<ReportDetail> {
@@ -239,8 +243,9 @@ export async function getReportById(id: string): Promise<ReportDetail> {
     title: data.title,
     brand: data.brand,
     season: data.season,
-    status: 'draft',
+    status: 'published',
     updatedAt: data.updatedAt,
+    coverImageUrl: `/reports/${data.slug}/cover.jpg`,
     description: `${data.brand} ${data.season} ${data.year} RTW 趋势报告，包含 ${data.lookCount} 个造型`,
     iframeUrl: `/reports/${data.slug}/index.html`,
     tags: [data.brand, data.season, String(data.year), 'RTW']
@@ -284,4 +289,15 @@ export async function redeemCode(payload: { code: string }): Promise<{ subscript
 
 export async function getMySubscription(): Promise<Subscription | null> {
   return request('/api/users/me/subscription')
+}
+
+export async function deleteReport(id: string): Promise<void> {
+  await request(`/api/reports/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function getAdminReports(): Promise<ReportSummary[]> {
+  const result = await getReports(1, 100) // Admin sees all reports
+  return result.reports
 }

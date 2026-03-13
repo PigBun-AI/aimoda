@@ -32,9 +32,19 @@ export const findReportById = (id: number): ReportRecord | null => {
   return row ? mapReport(row) : null
 }
 
-export const listReports = (): ReportRecord[] => {
-  const rows = db.prepare('SELECT * FROM reports ORDER BY id DESC').all() as Record<string, unknown>[]
-  return rows.map(mapReport)
+export const listReports = (page = 1, limit = 12): { reports: ReportRecord[]; total: number } => {
+  const offset = (page - 1) * limit
+  const countRow = db.prepare('SELECT COUNT(*) as total FROM reports').get() as { total: number }
+  const rows = db.prepare('SELECT * FROM reports ORDER BY id DESC LIMIT ? OFFSET ?').all(limit, offset) as Record<string, unknown>[]
+  return {
+    reports: rows.map(mapReport),
+    total: countRow.total
+  }
+}
+
+export const deleteReport = (id: number): boolean => {
+  const result = db.prepare('DELETE FROM reports WHERE id = ?').run(id)
+  return result.changes > 0
 }
 
 export const createReport = (input: CreateReportInput): ReportRecord => {

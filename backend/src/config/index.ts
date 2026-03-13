@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import path from 'node:path'
 
 import { envSchema } from './env.js'
@@ -9,6 +10,7 @@ const parsedEnv = envSchema.parse({
   PORT: process.env.PORT,
   JWT_SECRET: runtimeJwtSecret,
   FRONTEND_URL: process.env.FRONTEND_URL,
+  SERVER_URL: process.env.SERVER_URL,
   REPORTS_DIR: process.env.REPORTS_DIR,
   DATABASE_PATH: process.env.DATABASE_PATH,
   ACCESS_TOKEN_EXPIRES_IN: process.env.ACCESS_TOKEN_EXPIRES_IN,

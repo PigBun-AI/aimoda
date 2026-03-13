@@ -5,6 +5,7 @@ import { LoginPage } from '@/features/auth/login-page'
 import { RegisterPage } from '@/features/auth/register-page'
 import { AdminRoute, ProtectedRoute } from '@/features/auth/protected-route'
 import { AdminPage } from '@/features/admin/admin-page'
+import { ArticlesPage } from '@/features/admin/articles-page'
 import { DashboardPage } from '@/features/admin/dashboard-page'
 import { RedemptionCodesPage } from '@/features/admin/redemption-codes-page'
 import { ReportDetailPage } from '@/features/reports/report-detail-page'
@@ -43,6 +44,10 @@ export const router = createBrowserRouter([
               {
                 path: '/admin',
                 element: <DashboardPage />,
+              },
+              {
+                path: '/admin/articles',
+                element: <ArticlesPage />,
               },
               {
                 path: '/admin/users',

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 
 import { Badge } from '@/components/ui/badge'
@@ -11,23 +12,24 @@ import type { RedemptionCodeStatus, RedemptionCodeType } from '@/lib/types'
 import { useRedemptionCodes, useGenerateCodes } from '@/features/admin/use-redemption-codes'
 
 const typeLabels: Record<RedemptionCodeType, string> = {
-  '1week': '1 周',
-  '1month': '1 月',
-  '3months': '3 月',
-  '1year': '1 年',
-}
-
-const statusConfig: Record<RedemptionCodeStatus, { label: string; className: string }> = {
-  unused: { label: '未使用', className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
-  used: { label: '已使用', className: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
-  expired: { label: '已过期', className: 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300' },
+  '1week': '1 week',
+  '1month': '1 month',
+  '3months': '3 months',
+  '1year': '1 year',
 }
 
 export function RedemptionCodesPage() {
+  const { t } = useTranslation('admin')
   const [type, setType] = useState<RedemptionCodeType>('1month')
   const [count, setCount] = useState('5')
   const codesQuery = useRedemptionCodes()
   const generateMutation = useGenerateCodes()
+
+  const statusConfig: Record<RedemptionCodeStatus, { label: string; className: string }> = {
+    unused: { label: t('unused'), className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
+    used: { label: t('used'), className: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
+    expired: { label: t('expired'), className: 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300' },
+  }
 
   function handleGenerate() {
     const num = parseInt(count, 10)
@@ -40,17 +42,17 @@ export function RedemptionCodesPage() {
     <section className="space-y-8">
       <div>
         <h1 className="font-serif text-3xl font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-          兑换码管理
+          {t('redemptionCodes')}
         </h1>
         <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          生成和管理订阅兑换码
+          {t('redemptionCodesDesc')}
         </p>
       </div>
 
       {/* Generate form */}
       <Card className="border" style={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--border-color)' }}>
         <CardHeader className="pb-4">
-          <CardTitle className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>生成兑换码</CardTitle>
+          <CardTitle className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('generateCodes')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-3">
@@ -66,10 +68,10 @@ export function RedemptionCodesPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
-                <SelectItem value="1week">1 周</SelectItem>
-                <SelectItem value="1month">1 月</SelectItem>
-                <SelectItem value="3months">3 月</SelectItem>
-                <SelectItem value="1year">1 年</SelectItem>
+                <SelectItem value="1week">1 week</SelectItem>
+                <SelectItem value="1month">1 month</SelectItem>
+                <SelectItem value="3months">3 months</SelectItem>
+                <SelectItem value="1year">1 year</SelectItem>
               </SelectContent>
             </Select>
             <Input
@@ -79,7 +81,7 @@ export function RedemptionCodesPage() {
               value={count}
               onChange={(e) => setCount(e.target.value)}
               className="w-full sm:w-24 h-10"
-              placeholder="数量"
+              placeholder={t('quantity')}
               style={{
                 backgroundColor: 'var(--bg-secondary)',
                 borderColor: 'var(--border-color)',
@@ -92,11 +94,11 @@ export function RedemptionCodesPage() {
               className="h-10"
               style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-primary)' }}
             >
-              {generateMutation.isPending ? '生成中...' : '生成'}
+              {generateMutation.isPending ? t('generating') : t('generateCodes')}
             </Button>
           </div>
           {generateMutation.isError && (
-            <p className="text-sm text-red-500 mt-2">生成失败，请重试。</p>
+            <p className="text-sm text-red-500 mt-2">{t('common:error')}</p>
           )}
         </CardContent>
       </Card>
@@ -114,12 +116,12 @@ export function RedemptionCodesPage() {
             <Table>
               <TableHeader>
                 <TableRow style={{ borderColor: 'var(--border-color)' }}>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>兑换码</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>类型</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>状态</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>创建时间</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>使用者</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>使用时间</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)' }}>{t('redemptionCodes')}</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)' }}>Type</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)' }}>Status</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)' }}>Created</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)' }}>Used By</TableHead>
+                  <TableHead style={{ color: 'var(--text-muted)' }}>Used At</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -151,7 +153,7 @@ export function RedemptionCodesPage() {
                 {codesQuery.data?.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
-                      暂无兑换码
+                      {t('noCodes')}
                     </TableCell>
                   </TableRow>
                 )}

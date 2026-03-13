@@ -2,7 +2,7 @@
   "mcpServers": {
     "wwwd-reports": {
       "type": "http",
-      "url": "http://localhost:38180/api/mcp"
+      "url": "https://www-d.net/api/mcp"
     }
   }
 }

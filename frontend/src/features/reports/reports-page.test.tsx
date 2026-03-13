@@ -8,11 +8,13 @@ import { ReportsPage } from '@/features/reports/reports-page'
 const reports = [
   {
     id: 'report-1',
+    slug: 'test-brand-fall-2026',
     title: '测试报告',
     brand: 'Brand',
     season: 'AW26',
     status: 'published' as const,
     updatedAt: '2026-03-12T10:00:00.000Z',
+    coverImageUrl: '/reports/test-brand-fall-2026/cover.jpg',
   },
 ]
 

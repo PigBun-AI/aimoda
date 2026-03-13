@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useReportDetail } from '@/features/reports/use-report-detail'
@@ -23,6 +24,7 @@ function getSafeIframeUrl(url: string): string | null {
 }
 
 export function ReportDetailPage() {
+  const { t } = useTranslation('reports')
   const params = useParams()
   const navigate = useNavigate()
   const reportId = params.reportId ?? ''
@@ -37,7 +39,7 @@ export function ReportDetailPage() {
   }, [reportQuery.data?.iframeUrl])
 
   const { prevReport, nextReport } = useMemo(() => {
-    const list = reportsQuery.data ?? []
+    const list = reportsQuery.data?.reports ?? []
     const currentIndex = list.findIndex((r) => String(r.id) === reportId)
     return {
       prevReport: currentIndex > 0 ? list[currentIndex - 1] : null,
@@ -48,7 +50,7 @@ export function ReportDetailPage() {
   if (reportQuery.isLoading) {
     return (
       <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>加载中...</div>
+        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('common:loading')}</div>
       </div>
     )
   }
@@ -57,13 +59,13 @@ export function ReportDetailPage() {
     return (
       <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
         <div className="text-center">
-          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>未找到对应报告</p>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>{t('notFound')}</p>
           <button
             className="text-sm underline"
             style={{ color: 'var(--text-secondary)' }}
             onClick={() => navigate('/reports')}
           >
-            返回列表
+            {t('backToList')}
           </button>
         </div>
       </div>
@@ -86,7 +88,7 @@ export function ReportDetailPage() {
             onClick={() => navigate('/reports')}
           >
             <ArrowLeft size={14} />
-            返回列表
+            {t('backToList')}
           </button>
           <span className="text-xs" style={{ color: 'var(--border-color)' }}>|</span>
           <span className="text-sm font-medium truncate max-w-[400px]" style={{ color: 'var(--text-primary)' }}>
@@ -102,7 +104,7 @@ export function ReportDetailPage() {
             onClick={() => prevReport && navigate(`/reports/${prevReport.id}`)}
           >
             <ChevronLeft size={14} />
-            上一篇
+            {t('previousArticle')}
           </button>
           <button
             className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors hover:opacity-70 disabled:opacity-30"
@@ -110,7 +112,7 @@ export function ReportDetailPage() {
             disabled={!nextReport}
             onClick={() => nextReport && navigate(`/reports/${nextReport.id}`)}
           >
-            下一篇
+            {t('nextArticle')}
             <ChevronRight size={14} />
           </button>
         </div>
@@ -126,7 +128,7 @@ export function ReportDetailPage() {
         ) : (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              该报告地址不符合安全加载策略。
+              {t('iframeError')}
             </p>
           </div>
         )}

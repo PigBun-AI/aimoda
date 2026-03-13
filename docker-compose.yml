@@ -8,6 +8,7 @@ services:
       PORT: ${API_PORT:-3000}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:38180}
+      SERVER_URL: ${SERVER_URL:-${FRONTEND_URL:-http://localhost:38180}}
       REPORTS_DIR: /reports
       DATABASE_PATH: /data/fashion-report.db
       ACCESS_TOKEN_EXPIRES_IN: ${ACCESS_TOKEN_EXPIRES_IN:-2h}

@@ -30,6 +30,7 @@ export interface ReportSummary {
   season: string
   status: 'draft' | 'published' | 'archived'
   updatedAt: string
+  coverImageUrl: string
 }
 
 export interface ReportDetail extends ReportSummary {
