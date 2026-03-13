@@ -6,13 +6,6 @@ dist/
 backend/dist/
 frontend/dist/
 
-# Environment files
-.env
-.env.local
-.env.production
-.env.development
-.env.deploy
-
 # Logs
 *.log
 npm-debug.log*
