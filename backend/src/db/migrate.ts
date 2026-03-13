@@ -84,6 +84,45 @@ const migrations = [
     CREATE INDEX IF NOT EXISTS idx_activity_logs_user_action ON user_activity_logs(user_id, action);
     CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status ON subscriptions(user_id, status);
     CREATE INDEX IF NOT EXISTS idx_redemption_codes_status ON redemption_codes(status);
+  `,
+  // 报告查看记录表 - 追踪免费用户的报告查看次数
+  `
+    CREATE TABLE IF NOT EXISTS report_views (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      report_id INTEGER NOT NULL,
+      viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+      UNIQUE (user_id, report_id)
+    );
+  `,
+  // 会话表 - 支持单点登录控制
+  `
+    CREATE TABLE IF NOT EXISTS sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      refresh_token_hash TEXT NOT NULL UNIQUE,
+      device_info TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      last_active_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `,
+  // 报告查看记录索引
+  `
+    CREATE INDEX IF NOT EXISTS idx_report_views_user_id ON report_views(user_id);
+    CREATE INDEX IF NOT EXISTS idx_report_views_user_viewed_at ON report_views(user_id, viewed_at);
+  `,
+  // 会话表索引
+  `
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_last_active ON sessions(user_id, last_active_at);
   `
 ]
 

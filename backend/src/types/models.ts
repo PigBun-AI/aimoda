@@ -85,3 +85,43 @@ export interface ActivityLogRecord {
   action: ActivityAction
   createdAt: string
 }
+
+// 报告查看记录 - 用于免费用户查看限制
+export interface ReportViewRecord {
+  id: number
+  userId: number
+  reportId: number
+  viewedAt: string
+}
+
+// 会话记录 - 用于单点登录控制
+export interface SessionRecord {
+  id: number
+  userId: number
+  refreshTokenHash: string
+  deviceInfo: string | null
+  ipAddress: string | null
+  userAgent: string | null
+  lastActiveAt: string
+  expiresAt: string
+  createdAt: string
+}
+
+// 设备信息（存储为 JSON）
+export interface DeviceInfo {
+  device?: string      // 设备类型：mobile, tablet, desktop
+  os?: string          // 操作系统：iOS, Android, Windows, macOS
+  browser?: string     // 浏览器：Chrome, Safari, Firefox
+  deviceName?: string  // 用户友好的设备名称
+}
+
+// 免费用户查看限制配置
+export const FREE_USER_VIEW_LIMIT = 3
+
+// 用户查看报告权限结果
+export interface ReportViewPermission {
+  canView: boolean
+  reason: 'allowed' | 'limit_exceeded' | 'already_viewed' | 'subscriber'
+  viewsRemaining: number
+  totalLimit: number
+}

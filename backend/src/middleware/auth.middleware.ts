@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 
 import { verifyAccessToken } from '../modules/auth/auth.token.js'
+import { isSessionValid } from '../modules/sessions/session.repository.js'
 import type { AuthenticatedRequestUser, UserRole } from '../types/models.js'
 
 declare module 'express-serve-static-core' {
@@ -20,7 +21,15 @@ export const requireAuth = (request: Request, response: Response, next: NextFunc
   const token = authorizationHeader.slice('Bearer '.length)
 
   try {
-    request.user = verifyAccessToken(token)
+    const user = verifyAccessToken(token)
+
+    // 验证会话是否仍然有效（SSO 支持）
+    if (user.sessionId && !isSessionValid(user.sessionId)) {
+      response.status(401).json({ success: false, error: '会话已失效，请重新登录' })
+      return
+    }
+
+    request.user = user
     next()
   } catch {
     response.status(401).json({ success: false, error: '认证令牌无效或已过期' })

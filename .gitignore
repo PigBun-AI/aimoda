@@ -15,6 +15,13 @@ coverage/
 
 # Database
 backend/data/
+*.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+backend/.env
 
 # Backups
 backups/
