@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+backend/dist/
+frontend/dist/
+
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+.env.deploy
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Database
+backend/data/
+
+# Backups
+backups/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary files
+temp/
+.tmp/
+
+# Playwright MCP
+.playwright-mcp/

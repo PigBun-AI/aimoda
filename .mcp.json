@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "wwwd-reports": {
+      "type": "http",
+      "url": "http://localhost:38180/api/mcp"
+    }
+  }
+}

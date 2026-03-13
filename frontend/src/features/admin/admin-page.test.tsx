@@ -1,0 +1,42 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { describe, expect, it, vi } from 'vitest'
+
+import { AdminPage } from '@/features/admin/admin-page'
+
+const adminUsers = [
+  {
+    id: 'admin-1',
+    name: 'Admin User',
+    email: 'admin@example.com',
+    role: 'admin' as const,
+    permissions: ['users:manage'],
+    lastActiveAt: '2026-03-12T16:20:00.000Z',
+  },
+]
+
+vi.mock('@/features/admin/use-admin-users', () => ({
+  useAdminUsers: () => ({
+    isLoading: false,
+    data: adminUsers,
+  }),
+}))
+
+describe('AdminPage', () => {
+  it('renders admin user information and upload entry', () => {
+    const queryClient = new QueryClient()
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AdminPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByText('Admin User')).toBeInTheDocument()
+    expect(screen.getByText('admin@example.com')).toBeInTheDocument()
+    expect(screen.getByText('进入上传入口')).toBeInTheDocument()
+  })
+})
