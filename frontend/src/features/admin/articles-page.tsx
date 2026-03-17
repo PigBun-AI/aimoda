@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 
+import type { ReportSummary } from '@/lib/types'
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Trash2 } from 'lucide-react'
 
@@ -23,7 +25,30 @@ function useDeleteReport() {
 
   return useMutation({
     mutationFn: deleteReport,
-    onSuccess: () => {
+    onMutate: async (reportId) => {
+      // 取消正在进行的查询，防止覆盖我们的乐观更新
+      await queryClient.cancelQueries({ queryKey: adminReportsQueryKey })
+
+      // 获取当前缓存的数据
+      const previousReports = queryClient.getQueryData<ReportSummary[]>(adminReportsQueryKey)
+
+      // 乐观更新：立即从列表中移除被删除的报告
+      queryClient.setQueryData<ReportSummary[]>(adminReportsQueryKey, (old) => {
+        if (!old) return old
+        return old.filter((report) => report.id !== reportId)
+      })
+
+      // 返回上下文以便在失败时回滚
+      return { previousReports }
+    },
+    onError: (_error, _reportId, context) => {
+      // 如果删除失败，恢复之前的数据
+      if (context?.previousReports) {
+        queryClient.setQueryData(adminReportsQueryKey, context.previousReports)
+      }
+    },
+    onSettled: () => {
+      // 无论成功或失败，都重新获取数据以确保同步
       queryClient.invalidateQueries({ queryKey: adminReportsQueryKey })
     },
   })

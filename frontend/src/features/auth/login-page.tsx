@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { login } from '@/lib/api'
+import { queryClient } from '@/main'
 
 import { saveSession } from './protected-route'
 
@@ -21,6 +22,7 @@ export function LoginPage() {
   const mutation = useMutation({
     mutationFn: login,
     onSuccess: (user) => {
+      queryClient.removeQueries()
       saveSession(JSON.stringify(user))
       navigate(redirectTo, { replace: true })
     },

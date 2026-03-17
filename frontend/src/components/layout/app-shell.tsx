@@ -11,6 +11,7 @@ import { RedeemDialog } from '@/features/redemption/redeem-dialog'
 import { useMySubscription } from '@/features/redemption/use-redeem'
 
 import { clearSession, getSessionUser } from '@/features/auth/protected-route'
+import { queryClient } from '@/main'
 
 const SIDEBAR_WIDTH = 280
 const SIDEBAR_COLLAPSED = 72
@@ -74,6 +75,7 @@ export function AppShell() {
   }, [location.pathname, isLargeScreen])
 
   function handleLogout() {
+    queryClient.clear()
     clearSession()
     navigate('/login', { replace: true })
   }

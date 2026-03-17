@@ -16,12 +16,21 @@ export const createApp = () => {
 
   app.set('trust proxy', 1)
 
-  app.use(
-    cors({
-      origin: config.FRONTEND_URL,
-      credentials: false
-    })
-  )
+  // CORS 配置：MCP 端点允许任意来源，其他端点限制为 FRONTEND_URL
+  app.use((request, response, next) => {
+    const isMcpEndpoint = request.path.startsWith('/api/mcp')
+    const corsOrigin = isMcpEndpoint ? '*' : config.FRONTEND_URL
+
+    response.setHeader('Access-Control-Allow-Origin', corsOrigin)
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+    if (request.method === 'OPTIONS') {
+      response.status(204).end()
+      return
+    }
+    next()
+  })
   app.use(express.json({ limit: '1mb' }))
   app.use('/api', apiRateLimiter, apiRouter)
   app.use(errorHandler)

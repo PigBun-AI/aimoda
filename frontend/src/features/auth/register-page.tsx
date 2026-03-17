@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { register } from '@/lib/api'
+import { queryClient } from '@/main'
 
 import { saveSession } from './protected-route'
 
@@ -21,6 +22,7 @@ export function RegisterPage() {
   const mutation = useMutation({
     mutationFn: register,
     onSuccess: (user) => {
+      queryClient.removeQueries()
       saveSession(JSON.stringify(user))
       navigate('/reports', { replace: true })
     },

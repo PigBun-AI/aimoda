@@ -6,8 +6,21 @@ import { RouterProvider } from 'react-router-dom'
 import './i18n'
 import '@/index.css'
 import { router } from '@/app/router'
+import { ApiError } from '@/lib/api'
 
-const queryClient = new QueryClient()
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        // 401/403 错误不重试，避免缓存认证失败
+        if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
+          return false
+        }
+        return failureCount < 3
+      },
+    },
+  },
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -5,7 +5,8 @@ import multer from 'multer'
 
 import { asyncHandler } from '../../middleware/error.middleware.js'
 import { uploadRateLimiter } from '../../middleware/rate-limit.middleware.js'
-import { uploadReportArchive } from '../reports/report.service.js'
+import { uploadReportArchive, getReports } from '../reports/report.service.js'
+import { findReportBySlug } from '../reports/report.repository.js'
 import { config } from '../../config/index.js'
 
 // skills 目录位于项目根目录（/app）
@@ -52,6 +53,22 @@ const mcpTools = [
     inputSchema: {
       type: 'object',
       properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'list_reports',
+    description: '查询平台上已发布的报告列表。可通过 slug 精确查找单篇报告（用于上传后验证）。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        slug: {
+          type: 'string',
+          description: '按 slug 精确查找（如 zimmermann-fall-2026）。省略则返回全部报告列表。'
+        },
+        page: { type: 'number', description: '页码，默认 1' },
+        limit: { type: 'number', description: '每页条数，默认 20' }
+      },
       required: []
     }
   }
@@ -170,6 +187,47 @@ mcpRouter.post(
                 ]
               }
               response.json({ jsonrpc: '2.0', id, result })
+              return
+            }
+
+            case 'list_reports': {
+              const slug = toolArgs.slug as string | undefined
+
+              const sanitize = (r: { id: number; slug: string; title: string; brand: string; season: string; year: number; lookCount: number; createdAt: string; updatedAt: string }) => ({
+                id: r.id,
+                slug: r.slug,
+                title: r.title,
+                brand: r.brand,
+                season: r.season,
+                year: r.year,
+                lookCount: r.lookCount,
+                createdAt: r.createdAt,
+                updatedAt: r.updatedAt
+              })
+
+              if (slug) {
+                const report = findReportBySlug(slug)
+                const payload = report
+                  ? { found: true, report: sanitize(report) }
+                  : { found: false, slug, message: `未找到 slug 为 "${slug}" 的报告` }
+                response.json({
+                  jsonrpc: '2.0', id,
+                  result: { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] }
+                })
+                return
+              }
+
+              const page = Number(toolArgs.page) || 1
+              const limit = Number(toolArgs.limit) || 20
+              const { reports, total } = getReports(page, limit)
+              const payload = {
+                reports: reports.map(sanitize),
+                pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
+              }
+              response.json({
+                jsonrpc: '2.0', id,
+                result: { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] }
+              })
               return
             }
 
