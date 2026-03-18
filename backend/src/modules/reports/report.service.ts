@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises'
 import unzipper from 'unzipper'
 
 import { config } from '../../config/index.js'
+import { db } from '../../db/client.js'
 import { REPORT_SPEC } from '../../constants/report-spec.js'
 import type { ReportRecord } from '../../types/models.js'
 import { AppError } from '../../types/app-error.js'
@@ -88,17 +89,14 @@ export const uploadReportArchive = async ({ archivePath, uploadedBy }: UploadPay
   ensureReportsDirectory()
 
   const extractionDirectory = createExtractionDirectory()
+  let destinationPath: string | null = null
 
   try {
     await extractArchive(archivePath, extractionDirectory)
     const reportRoot = resolveReportRoot(extractionDirectory)
     const metadata = extractReportMetadata(reportRoot)
 
-    if (findReportBySlug(metadata.slug)) {
-      throw new AppError(`报告 slug 已存在: ${metadata.slug}`, 409)
-    }
-
-    const destinationPath = path.join(config.REPORTS_DIR, metadata.slug)
+    destinationPath = path.join(config.REPORTS_DIR, metadata.slug)
 
     if (fs.existsSync(destinationPath)) {
       throw new AppError(`报告目录已存在: ${metadata.slug}`, 409)
@@ -106,12 +104,28 @@ export const uploadReportArchive = async ({ archivePath, uploadedBy }: UploadPay
 
     fs.cpSync(reportRoot, destinationPath, { recursive: true, force: false })
 
-    return createReport({
-      ...metadata,
-      path: destinationPath,
-      uploadedBy: parsedContext.uploadedBy,
-      metadataJson: JSON.stringify(metadata)
-    })
+    // Use transaction to atomically check slug uniqueness + insert
+    // This prevents race conditions between concurrent uploads
+    const report = db.transaction(() => {
+      if (findReportBySlug(metadata.slug)) {
+        throw new AppError(`报告 slug 已存在: ${metadata.slug}`, 409)
+      }
+
+      return createReport({
+        ...metadata,
+        path: destinationPath!,
+        uploadedBy: parsedContext.uploadedBy,
+        metadataJson: JSON.stringify(metadata)
+      })
+    })()
+
+    return report
+  } catch (error) {
+    // Rollback: clean up destination directory if it was created
+    if (destinationPath && fs.existsSync(destinationPath)) {
+      fs.rmSync(destinationPath, { recursive: true, force: true })
+    }
+    throw error
   } finally {
     fs.rmSync(extractionDirectory, { recursive: true, force: true })
     fs.rmSync(archivePath, { force: true })

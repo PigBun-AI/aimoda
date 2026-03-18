@@ -123,6 +123,50 @@ const migrations = [
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
     CREATE INDEX IF NOT EXISTS idx_sessions_user_last_active ON sessions(user_id, last_active_at);
+  `,
+  // P1 #3: reports.uploaded_by → ON DELETE SET NULL（允许删除用户而不影响报告）
+  `
+    CREATE TABLE IF NOT EXISTS reports_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      brand TEXT NOT NULL,
+      season TEXT NOT NULL,
+      year INTEGER NOT NULL,
+      look_count INTEGER NOT NULL,
+      path TEXT NOT NULL,
+      uploaded_by INTEGER,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+    INSERT OR IGNORE INTO reports_new SELECT * FROM reports;
+    DROP TABLE IF EXISTS reports;
+    ALTER TABLE reports_new RENAME TO reports;
+
+    CREATE TRIGGER IF NOT EXISTS reports_set_updated_at
+    AFTER UPDATE ON reports
+    BEGIN
+      UPDATE reports SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+    END;
+  `,
+  // P1 #4: report_views → 移除 report_id 的 ON DELETE CASCADE（删除报告时保留查看记录，防止免费额度被回收）
+  `
+    CREATE TABLE IF NOT EXISTS report_views_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      report_id INTEGER NOT NULL,
+      viewed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE (user_id, report_id)
+    );
+    INSERT OR IGNORE INTO report_views_new SELECT * FROM report_views;
+    DROP TABLE IF EXISTS report_views;
+    ALTER TABLE report_views_new RENAME TO report_views;
+
+    CREATE INDEX IF NOT EXISTS idx_report_views_user_id ON report_views(user_id);
+    CREATE INDEX IF NOT EXISTS idx_report_views_user_viewed_at ON report_views(user_id, viewed_at);
   `
 ]
 
