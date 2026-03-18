@@ -5,7 +5,7 @@ import { asyncHandler } from '../../middleware/error.middleware.js'
 import { uploadRateLimiter } from '../../middleware/rate-limit.middleware.js'
 import { reportUploadMiddleware } from '../../middleware/upload.middleware.js'
 import { checkReportViewPermission, getViewStatus } from '../../middleware/permission.middleware.js'
-import { deleteReport, getReports, getReport, getReportSpec, uploadReportArchive } from './report.service.js'
+import { deleteReportWithFiles, getReports, getReport, getReportSpec, uploadReportArchive } from './report.service.js'
 import { logActivity } from '../activity/activity.repository.js'
 
 export const reportRouter = Router()
@@ -113,7 +113,7 @@ reportRouter.delete(
       return
     }
 
-    const deleted = deleteReport(id)
+    const deleted = deleteReportWithFiles(id)
 
     if (!deleted) {
       response.status(404).json({ success: false, error: '未找到对应报告' })

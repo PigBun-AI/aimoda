@@ -8,7 +8,7 @@ import { config } from '../../config/index.js'
 import { REPORT_SPEC } from '../../constants/report-spec.js'
 import type { ReportRecord } from '../../types/models.js'
 import { AppError } from '../../types/app-error.js'
-import { createReport, deleteReport, findReportBySlug, findReportById, listReports } from './report.repository.js'
+import { createReport, deleteReportById, findReportBySlug, findReportById, listReports } from './report.repository.js'
 import { uploadContextSchema } from './report.schema.js'
 import { extractReportMetadata } from './report-scanner.js'
 
@@ -72,7 +72,16 @@ export const getReport = (id: number) => findReportById(id)
 
 export const getReports = (page?: number, limit?: number) => listReports(page, limit)
 
-export { deleteReport }
+export const deleteReportWithFiles = (id: number): boolean => {
+  const report = findReportById(id)
+  if (!report) return false
+
+  const deleted = deleteReportById(id)
+  if (deleted && report.path) {
+    fs.rmSync(report.path, { recursive: true, force: true })
+  }
+  return deleted
+}
 
 export const uploadReportArchive = async ({ archivePath, uploadedBy }: UploadPayload) => {
   const parsedContext = uploadContextSchema.parse({ uploadedBy })

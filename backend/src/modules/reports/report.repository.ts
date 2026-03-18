@@ -42,7 +42,7 @@ export const listReports = (page = 1, limit = 12): { reports: ReportRecord[]; to
   }
 }
 
-export const deleteReport = (id: number): boolean => {
+export const deleteReportById = (id: number): boolean => {
   const result = db.prepare('DELETE FROM reports WHERE id = ?').run(id)
   return result.changes > 0
 }

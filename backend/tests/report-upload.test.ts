@@ -102,8 +102,43 @@ describe('report upload flow', () => {
       .set('Authorization', `Bearer ${token}`)
       .attach('file', secondArchive)
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(409)
     expect(response.body.error).toContain('已存在')
+  })
+
+  it('allows re-upload after deletion', async () => {
+    const token = await createAdminToken()
+    const firstArchive = path.join(process.env.UPLOAD_TMP_DIR!, 'reupload-first.zip')
+    const secondArchive = path.join(process.env.UPLOAD_TMP_DIR!, 'reupload-second.zip')
+    await makeZipFixture(firstArchive, 'chanel-spring-2027')
+    await makeZipFixture(secondArchive, 'chanel-spring-2027')
+
+    // Upload first
+    const uploadRes = await request(app)
+      .post('/api/reports/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', firstArchive)
+
+    expect(uploadRes.status).toBe(201)
+    const reportId = uploadRes.body.report.id
+    expect(fs.existsSync(path.join(process.env.REPORTS_DIR!, 'chanel-spring-2027'))).toBe(true)
+
+    // Delete via API
+    const deleteRes = await request(app)
+      .delete(`/api/reports/${reportId}`)
+      .set('Authorization', `Bearer ${token}`)
+
+    expect(deleteRes.status).toBe(200)
+    expect(fs.existsSync(path.join(process.env.REPORTS_DIR!, 'chanel-spring-2027'))).toBe(false)
+
+    // Re-upload same slug
+    const reuploadRes = await request(app)
+      .post('/api/reports/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', secondArchive)
+
+    expect(reuploadRes.status).toBe(201)
+    expect(reuploadRes.body.report.slug).toBe('chanel-spring-2027')
   })
 
   it('rejects archive missing required files', async () => {
@@ -138,7 +173,7 @@ describe('report upload flow', () => {
 
   it('returns empty report list from service initially', async () => {
     const reportService = await import('../src/modules/reports/report.service.js')
-    expect(reportService.getReports()).toEqual([])
+    expect(reportService.getReports()).toEqual({ reports: [], total: 0 })
   })
 
   it('keeps upload limiter middleware callable', async () => {
