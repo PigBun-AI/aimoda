@@ -7,7 +7,7 @@
 ```
 {brand}-{season}-{year}/
 ├── index.html          # 全屏滚动报告（主页面）
-├── overview.html       # 品牌纵览 Dashboard
+├── overview.html       # 必需：品牌纵览 Dashboard
 ├── cover.jpg           # 封面图片（首页截图，必需）
 ├── metadata.json       # 报告元数据（可选）
 └── images/
@@ -561,7 +561,7 @@ if (prefersDark || theme === 'dark') {
 生成新报告前检查：
 
 - [ ] 文件夹命名符合规范 (`{brand}-{season}-{year}`)
-- [ ] 包含 `index.html` 和 `overview.html`
+- [ ] 包含 `index.html` 和 `overview.html`（两者均为必需）
 - [ ] 图片放在 `images/` 目录
 - [ ] 使用正确的 CSS 变量
 - [ ] 引入 Playfair Display 和 Inter 字体

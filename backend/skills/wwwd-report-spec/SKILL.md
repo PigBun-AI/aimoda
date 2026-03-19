@@ -10,7 +10,7 @@ World Wear Watch Daily (WWWD) 时尚趋势报告的资源层级规范。
 {brand}-{season}-{year}/
 ├── index.html          # 必需：主报告页面
 ├── cover.jpg           # 必需：封面图片（首页截图）
-├── overview.html       # 可选：品牌纵览页面
+├── overview.html       # 必需：品牌纵览页面
 ├── metadata.json       # 可选：元数据
 └── images/             # 图片资源目录
     ├── look-01.jpg
@@ -95,7 +95,7 @@ World Wear Watch Daily (WWWD) 时尚趋势报告的资源层级规范。
 ## 3. 可选文件
 
 ### overview.html
-- 品牌纵览、数据看板
+- 品牌纵览、数据看板（**上传时必需**）
 - 与主报告页面风格独立
 
 ### metadata.json
@@ -356,7 +356,7 @@ html, body {
 上传前确认：
 
 - [ ] 文件夹命名符合 `{brand}-{season}-{year}` 格式
-- [ ] 包含 `index.html` 和 `overview.html`
+- [ ] 包含 `index.html` 和 `overview.html`（两者均为必需）
 - [ ] **封面使用 Playwright 截取**（不是手动绘制）
 - [ ] 封面比例 16:9（1920x1080 或 1280x720）
 - [ ] 封面包含正确的中文字体
