@@ -5,10 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAdminUsers } from '@/features/admin/use-admin-users'
 
-const roleBadgeClass: Record<string, string> = {
-  admin: 'bg-gray-900 text-white dark:bg-white dark:text-gray-900',
-  editor: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-  viewer: 'bg-gray-50 text-gray-400 dark:bg-gray-900 dark:text-gray-500',
+const roleBadgeVariant: Record<string, 'primary' | 'default' | 'error'> = {
+  admin: 'primary',
+  editor: 'default',
+  viewer: 'default',
 }
 
 function getPermissions(role: string | undefined): string[] {
@@ -29,32 +29,26 @@ export function AdminPage() {
   const adminUsersQuery = useAdminUsers()
 
   return (
-    <section className="space-y-8">
+    <section className="space-y-6 sm:space-y-8 font-sans">
       <div>
-        <h1 className="font-serif text-3xl font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+        <h1 className="font-serif text-2xl sm:text-3xl font-medium mb-2 text-foreground">
           {t('admin')}
         </h1>
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-sm text-muted-foreground">
           {t('userManagementDesc')}
         </p>
       </div>
 
-      <Card
-        className="border"
-        style={{
-          backgroundColor: 'var(--card-bg)',
-          borderColor: 'var(--border-color)'
-        }}
-      >
+      <Card className="border">
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>
+          <CardTitle className="text-lg font-medium text-foreground">
             {t('userManagement')}
           </CardTitle>
-          <CardDescription className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          <CardDescription className="text-sm text-muted-foreground">
             {t('userManagementDesc')}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4 text-sm">
+        <CardContent className="space-y-4 text-sm font-sans">
           {adminUsersQuery.isLoading
             ? Array.from({ length: 3 }).map((_, index) => (
                 <Skeleton key={index} className="h-24 w-full rounded-lg" />
@@ -65,21 +59,18 @@ export function AdminPage() {
                 return (
                   <div
                     key={user.id}
-                    className="rounded-lg p-4 transition-colors hover:bg-[var(--bg-tertiary)]"
-                    style={{ backgroundColor: 'var(--bg-secondary)' }}
+                    className="rounded-lg p-3 sm:p-4 transition-colors hover:bg-accent bg-secondary"
                   >
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                       <div>
-                        <p className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                        <p className="font-medium text-foreground font-sans">
                           {userName}
                         </p>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-xs text-muted-foreground">
                           {user.email}
                         </p>
                       </div>
-                      <Badge
-                        className={`${roleBadgeClass[user.role] || ''} border-0 text-xs`}
-                      >
+                      <Badge variant={roleBadgeVariant[user.role] || 'default'} size="sm">
                         {t(user.role === 'admin' ? 'admin' : user.role === 'editor' ? 'editor' : 'viewer')}
                       </Badge>
                     </div>
@@ -87,17 +78,13 @@ export function AdminPage() {
                       {userPermissions.map((permission) => (
                         <span
                           key={permission}
-                          className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs"
-                          style={{
-                            borderColor: 'var(--border-color)',
-                            color: 'var(--text-muted)'
-                          }}
+                          className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs text-muted-foreground"
                         >
                           {permission}
                         </span>
                       ))}
                     </div>
-                    <p className="mt-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <p className="mt-3 text-xs text-muted-foreground">
                       {t('recentlyActive')}: {user.lastActiveAt
                         ? new Date(user.lastActiveAt).toLocaleString('zh-CN', {
                             year: 'numeric',

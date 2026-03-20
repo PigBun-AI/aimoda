@@ -3,12 +3,12 @@ import { Languages } from 'lucide-react'
 import { Button } from './button'
 
 const languages = [
-  { code: 'en', label: 'EN' },
-  { code: 'zh-CN', label: '中' }
+  { code: 'en', labelKey: 'switchToEn' },
+  { code: 'zh-CN', labelKey: 'switchToZh' },
 ]
 
 export function LanguageSwitcher() {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation('common')
 
   const toggleLanguage = () => {
     const nextLang = i18n.language === 'zh-CN' ? 'en' : 'zh-CN'
@@ -26,7 +26,7 @@ export function LanguageSwitcher() {
       onClick={toggleLanguage}
     >
       <Languages className="h-4 w-4" />
-      <span>{currentLang.label}</span>
+      <span>{t(currentLang.labelKey)}</span>
     </Button>
   )
 }

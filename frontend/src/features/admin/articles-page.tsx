@@ -7,7 +7,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Trash2 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { deleteReport, getAdminReports } from '@/lib/api'
 
@@ -66,32 +65,26 @@ export function ArticlesPage() {
   }
 
   return (
-    <section className="space-y-8">
+    <section className="space-y-6 sm:space-y-8 font-sans">
       <div>
-        <h1 className="font-serif text-3xl font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+        <h1 className="font-serif text-2xl sm:text-3xl font-medium mb-2 text-foreground">
           {t('articleManagement')}
         </h1>
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-sm text-muted-foreground">
           {t('articleManagementDesc')}
         </p>
       </div>
 
-      <Card
-        className="border"
-        style={{
-          backgroundColor: 'var(--card-bg)',
-          borderColor: 'var(--border-color)'
-        }}
-      >
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>
+      <div className="space-y-4 text-sm">
+        <div>
+          <h2 className="text-lg font-medium text-foreground">
             {t('articleList')}
-          </CardTitle>
-          <CardDescription className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
             {t('articleListDesc')}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
+          </p>
+        </div>
+        <div className="space-y-4">
           {adminReportsQuery.isLoading
             ? Array.from({ length: 3 }).map((_, index) => (
                 <Skeleton key={index} className="h-24 w-full rounded-lg" />
@@ -99,16 +92,15 @@ export function ArticlesPage() {
             : adminReportsQuery.data?.map((report) => (
                 <div
                   key={report.id}
-                  className="rounded-lg p-4 transition-colors hover:bg-[var(--bg-tertiary)]"
-                  style={{ backgroundColor: 'var(--bg-secondary)' }}
+                  className="rounded-lg p-4 transition-colors hover:bg-accent bg-secondary"
                 >
-                  <div className="flex gap-4">
+                  <div className="flex flex-col sm:flex-row gap-4">
                     {/* 封面图片 */}
                     <Link
                       to={`/reports/${report.id}`}
-                      className="flex-shrink-0"
+                      className="sm:flex-shrink-0"
                     >
-                      <div className="w-24 h-24 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">
+                      <div className="w-full h-48 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">
                         {report.coverImageUrl ? (
                           <img
                             src={report.coverImageUrl}
@@ -127,23 +119,22 @@ export function ArticlesPage() {
                     <div className="flex-1 min-w-0">
                       <Link
                         to={`/reports/${report.id}`}
-                        className="block font-medium hover:underline truncate"
-                        style={{ color: 'var(--text-primary)' }}
+                        className="block font-medium hover:underline line-clamp-2 text-sm font-sans text-foreground"
                       >
                         {report.title}
                       </Link>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        <span className="text-xs text-muted-foreground">
                           {report.brand}
                         </span>
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        <span className="text-xs text-muted-foreground">
                           /
                         </span>
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        <span className="text-xs text-muted-foreground">
                           {report.season}
                         </span>
                       </div>
-                      <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                      <p className="text-xs mt-2 text-muted-foreground font-sans">
                         {t('updatedAt')}: {new Date(report.updatedAt).toLocaleString(i18n.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
                           year: 'numeric',
                           month: 'short',
@@ -153,7 +144,7 @@ export function ArticlesPage() {
                     </div>
 
                     {/* 操作按钮 */}
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-2 sm:flex-col flex-shrink-0">
                       <Link to={`/reports/${report.id}`}>
                         <Button
                           variant="outline"
@@ -165,9 +156,9 @@ export function ArticlesPage() {
                         </Button>
                       </Link>
                       <Button
-                        variant="outline"
+                        variant="destructive"
                         size="sm"
-                        className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950"
+                        className="gap-1"
                         onClick={() => handleDelete(report.id)}
                         disabled={deleteReportMutation.isPending}
                       >
@@ -178,12 +169,12 @@ export function ArticlesPage() {
                 </div>
               ))}
           {adminReportsQuery.data?.length === 0 && (
-            <div className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
+            <div className="text-center py-8 text-muted-foreground font-sans">
               {t('noArticles')}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </section>
   )
 }

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ export function RedeemDialog() {
   const mutation = useRedeemCode()
   const queryClient = useQueryClient()
 
-  function handleRedeem() {
+  const handleRedeem = useCallback(() => {
     if (!code.trim()) return
     setSuccessMessage('')
     mutation.mutate(
@@ -36,7 +36,7 @@ export function RedeemDialog() {
         },
       },
     )
-  }
+  }, [code, mutation, queryClient, t])
 
   function handleOpenChange(nextOpen: boolean) {
     setOpen(nextOpen)
@@ -52,22 +52,15 @@ export function RedeemDialog() {
       <DialogTrigger asChild>
         <Button
           variant="ghost"
-          className="w-full justify-start gap-2 text-sm bg-transparent hover:bg-[var(--bg-tertiary)]"
-          style={{ color: 'var(--text-secondary)' }}
+          className="w-full justify-start gap-2 text-sm bg-transparent hover:bg-accent text-muted-foreground"
         >
           {t('redeemCode')}
         </Button>
       </DialogTrigger>
-      <DialogContent
-        style={{
-          backgroundColor: 'var(--bg-primary)',
-          borderColor: 'var(--border-color)',
-          color: 'var(--text-primary)',
-        }}
-      >
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle style={{ color: 'var(--text-primary)' }}>{t('redeemSubscription')}</DialogTitle>
-          <DialogDescription style={{ color: 'var(--text-muted)' }}>
+          <DialogTitle style={{ color: 'var(--foreground)' }}>{t('redeemSubscription')}</DialogTitle>
+          <DialogDescription style={{ color: 'var(--muted-foreground)' }}>
             {t('redeemHint')}
           </DialogDescription>
         </DialogHeader>
@@ -76,24 +69,18 @@ export function RedeemDialog() {
             placeholder={t('enterCode')}
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            className="h-12 font-mono"
-            style={{
-              backgroundColor: 'var(--bg-secondary)',
-              borderColor: 'var(--border-color)',
-              color: 'var(--text-primary)',
-            }}
+            className="h-10 sm:h-12 font-mono"
           />
           {successMessage && (
-            <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
+            <p className="text-sm" style={{ color: 'var(--success)' }}>{successMessage}</p>
           )}
           {mutation.isError && (
-            <p className="text-sm text-red-500">{t('redeemFailed')}</p>
+            <p className="text-sm text-destructive">{t('redeemFailed')}</p>
           )}
           <Button
             onClick={handleRedeem}
             disabled={mutation.isPending || !code.trim()}
-            className="w-full h-10"
-            style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-primary)' }}
+            className="h-10 sm:h-11"
           >
             {mutation.isPending ? `${t('redeem')}...` : t('redeem')}
           </Button>

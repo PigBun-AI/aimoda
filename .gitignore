@@ -42,3 +42,7 @@ temp/
 
 # Playwright MCP
 .playwright-mcp/
+
+# python
+.pytest_cache/
+*.pyc

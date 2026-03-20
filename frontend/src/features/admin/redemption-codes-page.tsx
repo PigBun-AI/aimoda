@@ -9,14 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { RedemptionCodeStatus, RedemptionCodeType } from '@/lib/types'
+import { REDEMPTION_CODE_TYPE_LABELS } from '@/lib/constants'
 import { useRedemptionCodes, useGenerateCodes } from '@/features/admin/use-redemption-codes'
-
-const typeLabels: Record<RedemptionCodeType, string> = {
-  '1week': '1 week',
-  '1month': '1 month',
-  '3months': '3 months',
-  '1year': '1 year',
-}
 
 export function RedemptionCodesPage() {
   const { t } = useTranslation('admin')
@@ -25,10 +19,10 @@ export function RedemptionCodesPage() {
   const codesQuery = useRedemptionCodes()
   const generateMutation = useGenerateCodes()
 
-  const statusConfig: Record<RedemptionCodeStatus, { label: string; className: string }> = {
-    unused: { label: t('unused'), className: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' },
-    used: { label: t('used'), className: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400' },
-    expired: { label: t('expired'), className: 'bg-red-100 text-red-600 dark:bg-red-900 dark:text-red-300' },
+  const statusConfig: Record<RedemptionCodeStatus, { label: string; variant: 'success' | 'default' | 'error' }> = {
+    unused: { label: t('unused'), variant: 'success' },
+    used: { label: t('used'), variant: 'default' },
+    expired: { label: t('expired'), variant: 'error' },
   }
 
   function handleGenerate() {
@@ -39,35 +33,28 @@ export function RedemptionCodesPage() {
   }
 
   return (
-    <section className="space-y-8">
+    <section className="space-y-6 sm:space-y-8 font-sans">
       <div>
-        <h1 className="font-serif text-3xl font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+        <h1 className="font-serif text-2xl sm:text-3xl font-medium mb-2 text-foreground">
           {t('redemptionCodes')}
         </h1>
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-sm text-muted-foreground">
           {t('redemptionCodesDesc')}
         </p>
       </div>
 
       {/* Generate form */}
-      <Card className="border" style={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--border-color)' }}>
+      <Card className="border">
         <CardHeader className="pb-4">
-          <CardTitle className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('generateCodes')}</CardTitle>
+          <CardTitle className="text-sm font-medium text-foreground">{t('generateCodes')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-3">
             <Select value={type} onValueChange={(v) => setType(v as RedemptionCodeType)}>
-              <SelectTrigger
-                className="w-full sm:w-40 h-10"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderColor: 'var(--border-color)',
-                  color: 'var(--text-primary)',
-                }}
-              >
+              <SelectTrigger className="w-full sm:w-40 h-10 sm:h-12">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+              <SelectContent>
                 <SelectItem value="1week">1 week</SelectItem>
                 <SelectItem value="1month">1 month</SelectItem>
                 <SelectItem value="3months">3 months</SelectItem>
@@ -80,71 +67,66 @@ export function RedemptionCodesPage() {
               max="100"
               value={count}
               onChange={(e) => setCount(e.target.value)}
-              className="w-full sm:w-24 h-10"
+              className="w-full sm:w-24 h-10 sm:h-12"
               placeholder={t('quantity')}
-              style={{
-                backgroundColor: 'var(--bg-secondary)',
-                borderColor: 'var(--border-color)',
-                color: 'var(--text-primary)',
-              }}
             />
             <Button
               onClick={handleGenerate}
               disabled={generateMutation.isPending}
               className="h-10"
-              style={{ backgroundColor: 'var(--text-primary)', color: 'var(--bg-primary)' }}
             >
               {generateMutation.isPending ? t('generating') : t('generateCodes')}
             </Button>
           </div>
           {generateMutation.isError && (
-            <p className="text-sm text-red-500 mt-2">{t('common:error')}</p>
+            <p className="text-sm text-destructive mt-2">{t('common:error')}</p>
           )}
         </CardContent>
       </Card>
 
       {/* Codes table */}
-      <Card className="border" style={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--border-color)' }}>
+      <Card className="border bg-card border-border">
         <CardContent className="p-0">
-          {codesQuery.isLoading ? (
-            <div className="p-6 space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full rounded" />
-              ))}
-            </div>
-          ) : (
-            <Table>
+          <div className="overflow-x-auto">
+            {codesQuery.isLoading ? (
+              <div className="p-6 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full rounded" />
+                ))}
+              </div>
+            ) : (
+              <Table>
               <TableHeader>
-                <TableRow style={{ borderColor: 'var(--border-color)' }}>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>{t('redemptionCodes')}</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>Type</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>Status</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>Created</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>Used By</TableHead>
-                  <TableHead style={{ color: 'var(--text-muted)' }}>Used At</TableHead>
+                <TableRow className="border-border">
+                  <TableHead className="text-muted-foreground font-sans">{t('redemptionCodes')}</TableHead>
+                  <TableHead className="text-muted-foreground font-sans">Type</TableHead>
+                  <TableHead className="text-muted-foreground font-sans">Status</TableHead>
+                  <TableHead className="text-muted-foreground font-sans">Created</TableHead>
+                  <TableHead className="text-muted-foreground font-sans">Used By</TableHead>
+                  <TableHead className="text-muted-foreground font-sans">Used At</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {codesQuery.data?.map((code) => {
                   const status = statusConfig[code.status]
                   return (
-                    <TableRow key={code.id} style={{ borderColor: 'var(--border-color)' }}>
+                    <TableRow key={code.id} className="border-border font-sans">
                       <TableCell>
-                        <code className="text-xs font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                        <code className="text-xs font-mono px-1.5 py-0.5 rounded bg-accent text-foreground">
                           {code.code}
                         </code>
                       </TableCell>
-                      <TableCell style={{ color: 'var(--text-secondary)' }}>{typeLabels[code.type]}</TableCell>
+                      <TableCell className="text-muted-foreground font-sans">{REDEMPTION_CODE_TYPE_LABELS[code.type]}</TableCell>
                       <TableCell>
-                        <Badge className={`${status.className} border-0 text-xs`}>{status.label}</Badge>
+                        <Badge variant={status.variant} size="sm">{status.label}</Badge>
                       </TableCell>
-                      <TableCell className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <TableCell className="text-xs text-muted-foreground font-sans">
                         {new Date(code.createdAt).toLocaleDateString('zh-CN')}
                       </TableCell>
-                      <TableCell className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <TableCell className="text-xs text-muted-foreground font-sans">
                         {code.usedBy ?? '-'}
                       </TableCell>
-                      <TableCell className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <TableCell className="text-xs text-muted-foreground font-sans">
                         {code.usedAt ? new Date(code.usedAt).toLocaleDateString('zh-CN') : '-'}
                       </TableCell>
                     </TableRow>
@@ -152,14 +134,15 @@ export function RedemptionCodesPage() {
                 })}
                 {codesQuery.data?.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8" style={{ color: 'var(--text-muted)' }}>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground font-sans">
                       {t('noCodes')}
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
-          )}
+            )}
+          </div>
         </CardContent>
       </Card>
     </section>

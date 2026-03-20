@@ -49,20 +49,19 @@ export function ReportDetailPage() {
 
   if (reportQuery.isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <div className="text-sm" style={{ color: 'var(--text-muted)' }}>{t('common:loading')}</div>
+      <div className="flex h-dvh items-center justify-center bg-background">
+        <div className="text-sm text-muted-foreground">{t('common:loading')}</div>
       </div>
     )
   }
 
   if (!reportQuery.data) {
     return (
-      <div className="flex h-screen items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+      <div className="flex h-dvh items-center justify-center bg-background">
         <div className="text-center">
-          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>{t('notFound')}</p>
+          <p className="text-sm mb-4 text-muted-foreground">{t('notFound')}</p>
           <button
-            className="text-sm underline"
-            style={{ color: 'var(--text-secondary)' }}
+            className="text-sm underline text-muted-foreground"
             onClick={() => navigate('/reports')}
           >
             {t('backToList')}
@@ -73,33 +72,27 @@ export function ReportDetailPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col" style={{ background: 'var(--bg-primary)' }}>
+    <div className="flex h-dvh flex-col bg-background">
       <nav
-        className="flex h-12 shrink-0 items-center justify-between border-b px-4"
-        style={{
-          background: 'var(--bg-secondary)',
-          borderColor: 'var(--border-color)',
-        }}
+        className="flex h-12 shrink-0 items-center justify-between border-b px-4 bg-secondary border-border"
       >
         <div className="flex items-center gap-3">
           <button
-            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors hover:opacity-70"
-            style={{ color: 'var(--text-secondary)' }}
+            className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs transition-colors hover:opacity-70 text-muted-foreground"
             onClick={() => navigate('/reports')}
           >
             <ArrowLeft size={14} />
             {t('backToList')}
           </button>
-          <span className="text-xs" style={{ color: 'var(--border-color)' }}>|</span>
-          <span className="text-sm font-medium truncate max-w-[400px]" style={{ color: 'var(--text-primary)' }}>
+          <span className="text-xs text-border">|</span>
+          <span className="text-sm font-medium truncate max-w-[200px] sm:max-w-[400px]" style={{ color: 'var(--foreground)' }}>
             {reportQuery.data.title}
           </span>
         </div>
 
         <div className="flex items-center gap-1">
           <button
-            className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors hover:opacity-70 disabled:opacity-30"
-            style={{ color: 'var(--text-secondary)' }}
+            className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors hover:opacity-70 disabled:opacity-30 text-muted-foreground"
             disabled={!prevReport}
             onClick={() => prevReport && navigate(`/reports/${prevReport.id}`)}
           >
@@ -107,8 +100,7 @@ export function ReportDetailPage() {
             {t('previousArticle')}
           </button>
           <button
-            className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors hover:opacity-70 disabled:opacity-30"
-            style={{ color: 'var(--text-secondary)' }}
+            className="flex items-center gap-1 rounded-md px-2 py-1.5 text-xs transition-colors hover:opacity-70 disabled:opacity-30 text-muted-foreground"
             disabled={!nextReport}
             onClick={() => nextReport && navigate(`/reports/${nextReport.id}`)}
           >
@@ -127,7 +119,7 @@ export function ReportDetailPage() {
           />
         ) : (
           <div className="flex h-full items-center justify-center">
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-sm text-muted-foreground">
               {t('iframeError')}
             </p>
           </div>

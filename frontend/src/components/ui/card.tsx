@@ -6,14 +6,7 @@ const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(({ class
   <div
     ref={ref}
     className={cn(
-      [
-        'rounded-[var(--radius-md)]',
-        'bg-[var(--card-bg)]',
-        'border border-[var(--border-color)]',
-        'shadow-[var(--shadow-sm)]',
-        'transition-all duration-[var(--duration-normal)] ease-[var(--ease-out-expo)]',
-        'hover:shadow-[var(--shadow-md)] hover:border-[var(--text-muted)]/30',
-      ].join(' '),
+      '@container rounded-lg bg-card border border-border shadow-sm transition-all duration-300 hover:shadow-md',
       className,
     )}
     {...props}
@@ -29,14 +22,14 @@ CardHeader.displayName = 'CardHeader'
 const CardTitle = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLHeadingElement>>(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn('text-xl font-semibold leading-tight tracking-tight text-[var(--text-primary)]', className)}
+    className={cn('text-xl font-semibold leading-tight tracking-tight text-card-foreground', className)}
     {...props}
   />
 ))
 CardTitle.displayName = 'CardTitle'
 
 const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(({ className, ...props }, ref) => (
-  <p ref={ref} className={cn('text-sm text-[var(--text-secondary)]', className)} {...props} />
+  <p ref={ref} className={cn('text-sm text-muted-foreground', className)} {...props} />
 ))
 CardDescription.displayName = 'CardDescription'
 

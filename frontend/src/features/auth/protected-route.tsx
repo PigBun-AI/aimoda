@@ -1,7 +1,9 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Navigate, Outlet } from 'react-router-dom'
 
 import type { AuthUser } from '@/lib/types'
 import { clearAccessToken } from '@/lib/api'
+import { useLoginDialog } from '@/features/auth/auth-store'
 
 const sessionKey = 'fashion-report-session'
 
@@ -34,28 +36,40 @@ export function getSessionUser(): AuthUser | null {
 }
 
 export function ProtectedRoute() {
-  const location = useLocation()
   const sessionUser = getSessionUser()
+  const { openLogin } = useLoginDialog()
+
+  useEffect(() => {
+    if (!sessionUser) {
+      openLogin()
+    }
+  }, [sessionUser, openLogin])
 
   if (!sessionUser) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    return <Navigate to="/" replace />
   }
 
   return <Outlet />
 }
 
 export function AdminRoute() {
-  const location = useLocation()
   const sessionUser = getSessionUser()
+  const { openLogin } = useLoginDialog()
+
+  useEffect(() => {
+    if (!sessionUser) {
+      openLogin()
+    }
+  }, [sessionUser, openLogin])
 
   if (!sessionUser) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+    return <Navigate to="/" replace />
   }
 
   const isAdmin = sessionUser.role === 'admin' && sessionUser.permissions.includes('users:manage')
 
   if (!isAdmin) {
-    return <Navigate to="/reports" replace state={{ from: location.pathname }} />
+    return <Navigate to="/" replace />
   }
 
   return <Outlet />

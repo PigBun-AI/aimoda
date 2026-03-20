@@ -1,63 +1,43 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter } from 'react-router-dom'
 
 import { AppShell } from '@/components/layout/app-shell'
-import { LoginPage } from '@/features/auth/login-page'
-import { RegisterPage } from '@/features/auth/register-page'
-import { AdminRoute, ProtectedRoute } from '@/features/auth/protected-route'
-import { AdminPage } from '@/features/admin/admin-page'
-import { ArticlesPage } from '@/features/admin/articles-page'
-import { DashboardPage } from '@/features/admin/dashboard-page'
-import { RedemptionCodesPage } from '@/features/admin/redemption-codes-page'
+import { ProtectedRoute } from '@/features/auth/protected-route'
 import { ReportDetailPage } from '@/features/reports/report-detail-page'
 import { ReportsPage } from '@/features/reports/reports-page'
+import { CoverPage } from '@/features/cover/cover-page'
+import { ChatPage } from '@/features/chat/chat-page'
+import { ProfilePage } from '@/features/profile/profile-page'
 
 export const router = createBrowserRouter([
   {
-    path: '/',
-    element: <Navigate replace to="/reports" />,
-  },
-  {
-    path: '/login',
-    element: <LoginPage />,
-  },
-  {
-    path: '/register',
-    element: <RegisterPage />,
-  },
-  {
-    element: <ProtectedRoute />,
+    element: <AppShell />,
     children: [
       {
-        path: '/reports/:reportId',
-        element: <ReportDetailPage />,
+        path: '/',
+        element: <CoverPage />,
       },
       {
-        element: <AppShell />,
+        element: <ProtectedRoute />,
         children: [
+          {
+            path: '/chat',
+            element: <ChatPage />,
+          },
           {
             path: '/reports',
             element: <ReportsPage />,
           },
           {
-            element: <AdminRoute />,
-            children: [
-              {
-                path: '/admin',
-                element: <DashboardPage />,
-              },
-              {
-                path: '/admin/articles',
-                element: <ArticlesPage />,
-              },
-              {
-                path: '/admin/users',
-                element: <AdminPage />,
-              },
-              {
-                path: '/admin/redemption-codes',
-                element: <RedemptionCodesPage />,
-              },
-            ],
+            path: '/report',
+            element: <ReportsPage />,
+          },
+          {
+            path: '/reports/:reportId',
+            element: <ReportDetailPage />,
+          },
+          {
+            path: '/profile',
+            element: <ProfilePage />,
           },
         ],
       },

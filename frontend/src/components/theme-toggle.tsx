@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Moon, Sun } from 'lucide-react'
 
+import { cn } from '@/lib/utils'
+
 type Theme = 'light' | 'dark'
 
 const THEME_KEY = 'fashion-report-theme'
@@ -28,19 +30,19 @@ export function useTheme() {
   return { theme, toggleTheme }
 }
 
-export function ThemeToggle() {
+export function ThemeToggle({ className }: { className?: string }) {
   const { theme, toggleTheme } = useTheme()
 
   return (
     <button
       onClick={toggleTheme}
-      className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-tertiary)]"
+      className={cn('p-2 rounded-lg transition-colors hover:bg-accent', className)}
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
     >
       {theme === 'light' ? (
-        <Moon className="h-4 w-4 text-[var(--text-secondary)]" />
+        <Moon className="h-4 w-4 text-muted-foreground" />
       ) : (
-        <Sun className="h-4 w-4 text-[var(--text-secondary)]" />
+        <Sun className="h-4 w-4 text-muted-foreground" />
       )}
     </button>
   )
