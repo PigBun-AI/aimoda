@@ -48,6 +48,10 @@ export async function ensureSchema(): Promise<void> {
       created_at    TIMESTAMPTZ DEFAULT now()
     );
 
+    -- Backfill newer gallery schema on existing deployments.
+    ALTER TABLE gallery_images
+      ADD COLUMN IF NOT EXISTS colors JSONB DEFAULT '[]'::jsonb;
+
     CREATE INDEX IF NOT EXISTS idx_galleries_category ON galleries(category);
     CREATE INDEX IF NOT EXISTS idx_galleries_status ON galleries(status);
     CREATE INDEX IF NOT EXISTS idx_galleries_created ON galleries(created_at DESC);
@@ -92,6 +96,7 @@ export interface GalleryImage {
   width: number;
   height: number;
   created_at: string;
+  colors?: any[];
 }
 
 export async function createGallery(input: GalleryInput): Promise<Gallery> {
