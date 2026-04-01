@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "aimoda-style-knowledge": {
+      "command": "npx",
+      "args": ["tsx", "src/index.ts"],
+      "env": {
+        "QDRANT_URL": "http://220.168.84.134:16333",
+        "QDRANT_API_KEY": "aimoda2025",
+        "QDRANT_COLLECTION": "style_knowledge",
+        "FASHION_CLIP_ENDPOINT": "http://183.62.232.22:18730"
+      }
+    }
+  }
+}

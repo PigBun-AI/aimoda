@@ -9,6 +9,8 @@ frontend/dist/
 # Logs
 *.log
 npm-debug.log*
+nohup.out
+backend/nohup.out
 
 # Test coverage
 coverage/

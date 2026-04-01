@@ -44,7 +44,11 @@ jobs:
             --exclude ".git/" \
             --exclude ".github/" \
             --exclude ".playwright-mcp/" \
-            --exclude "services/style-knowledge-mcp/" \
+            --exclude "node_modules/" \
+            --exclude "dist/" \
+            --exclude ".claude/" \
+            --exclude ".DS_Store" \
+            --exclude "backend/nohup.out" \
             --exclude "temp/" \
             -e "ssh -p ${{ secrets.PIXELSURGE_PORT }}" \
             ./ "${{ secrets.PIXELSURGE_USER }}@${{ secrets.PIXELSURGE_HOST }}:$TARGET_DIR/"

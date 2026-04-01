@@ -48,6 +48,6 @@ Create these repository secrets before enabling the workflow:
 
 Use orange-cloud proxied DNS records for both domains and set SSL mode to `Full (strict)`.
 
-## Current note
+## Build behavior
 
-`services/style-knowledge-mcp` is still maintained as a nested Git repository in the local workspace, so the GitHub Actions rsync step currently excludes it and keeps the server-side copy in place.
+The MCP services are built from source inside Docker during deployment, so the server does not rely on pre-built local `dist/` artifacts or local `node_modules/`.

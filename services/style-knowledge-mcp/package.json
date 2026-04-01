@@ -1,0 +1,46 @@
+{
+    "name": "@aimoda/style-knowledge-mcp",
+    "version": "1.0.0",
+    "description": "风格知识库 MCP 服务 — 管理时尚风格结构化知识，支持精确匹配和语义搜索",
+    "keywords": [
+        "mcp",
+        "fashion",
+        "style",
+        "qdrant",
+        "fashion-clip",
+        "knowledge-base"
+    ],
+    "author": "AiModa",
+    "license": "MIT",
+    "type": "module",
+    "bin": {
+        "aimoda-style-knowledge-mcp": "./dist/index.js"
+    },
+    "main": "./dist/index.js",
+    "files": [
+        "dist/index.js",
+        "README.md"
+    ],
+    "scripts": {
+        "build": "node build.cjs",
+        "build:dev": "tsc",
+        "dev": "tsx src/index.ts",
+        "start": "node dist/index.js",
+        "prepublishOnly": "npm run build"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.27.1",
+        "@qdrant/js-client-rest": "^1.13.0",
+        "express": "^5.2.1"
+    },
+    "devDependencies": {
+        "@types/express": "^5.0.6",
+        "@types/node": "^22.13.9",
+        "esbuild": "^0.25.12",
+        "tsx": "^4.19.2",
+        "typescript": "^5.7.3"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
