@@ -50,29 +50,34 @@ jobs:
             ./ "${{ secrets.PIXELSURGE_USER }}@${{ secrets.PIXELSURGE_HOST }}:$TARGET_DIR/"
 
       - name: Write environment files on server
+        env:
+          AIMODA_SERVER_ENV_DEV: ${{ secrets.AIMODA_SERVER_ENV_DEV }}
+          AIMODA_SERVER_ENV_PROD: ${{ secrets.AIMODA_SERVER_ENV_PROD }}
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
             TARGET_DIR="${{ secrets.PIXELSURGE_DEPLOY_DIR_PROD }}"
           else
             TARGET_DIR="${{ secrets.PIXELSURGE_DEPLOY_DIR_DEV }}"
           fi
-          mkdir -p /tmp/aimoda-env
 
-          cat > /tmp/aimoda-env/server.dev.env <<'EOF'
-          ${{ secrets.AIMODA_SERVER_ENV_DEV }}
-          EOF
-
-          cat > /tmp/aimoda-env/server.prod.env <<'EOF'
-          ${{ secrets.AIMODA_SERVER_ENV_PROD }}
-          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          tmp = Path("/tmp/aimoda-env")
+          tmp.mkdir(parents=True, exist_ok=True)
+          tmp.joinpath("server.dev.env").write_text(os.environ["AIMODA_SERVER_ENV_DEV"])
+          tmp.joinpath("server.prod.env").write_text(os.environ["AIMODA_SERVER_ENV_PROD"])
+          PY
 
           ssh -p "${{ secrets.PIXELSURGE_PORT }}" "${{ secrets.PIXELSURGE_USER }}@${{ secrets.PIXELSURGE_HOST }}" \
             "mkdir -p '$TARGET_DIR/env'"
 
-          scp -P "${{ secrets.PIXELSURGE_PORT }}" /tmp/aimoda-env/server.dev.env \
+          rsync -az -e "ssh -p ${{ secrets.PIXELSURGE_PORT }}" \
+            /tmp/aimoda-env/server.dev.env \
             "${{ secrets.PIXELSURGE_USER }}@${{ secrets.PIXELSURGE_HOST }}:$TARGET_DIR/env/server.dev.env"
 
-          scp -P "${{ secrets.PIXELSURGE_PORT }}" /tmp/aimoda-env/server.prod.env \
+          rsync -az -e "ssh -p ${{ secrets.PIXELSURGE_PORT }}" \
+            /tmp/aimoda-env/server.prod.env \
             "${{ secrets.PIXELSURGE_USER }}@${{ secrets.PIXELSURGE_HOST }}:$TARGET_DIR/env/server.prod.env"
 
       - name: Deploy stack on server
