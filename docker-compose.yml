@@ -107,6 +107,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_COVER_ASSET_BASE_URL: ${COVER_ASSET_BASE_URL:-}
     volumes:
       - reports:/reports:ro
     deploy:
