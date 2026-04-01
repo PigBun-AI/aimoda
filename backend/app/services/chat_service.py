@@ -31,8 +31,8 @@ def _get_pg_conn():
 def _uuid(val: str) -> str:
     """Normalize a UUID string for PostgreSQL queries.
 
-    chat_sessions.id is stored as text (not UUID) due to psycopg v3 behavior,
-    so we pass strings consistently. This helper validates the format and returns str.
+    Chat identifiers are stored as UUID in PostgreSQL. This helper validates the
+    format and returns a string psycopg can adapt correctly.
     """
     if isinstance(val, uuid.UUID):
         return str(val)
@@ -437,8 +437,8 @@ def list_messages(
             f"""
             SELECT m.id, m.session_id, m.role, m.content, m.token_count, m.metadata, m.created_at
             FROM messages m
-            INNER JOIN chat_sessions s ON m.session_id::text = s.id
-            WHERE m.session_id::text = %s AND s.user_id = %s AND m.deleted_at IS NULL {role_filter}
+            INNER JOIN chat_sessions s ON m.session_id = s.id
+            WHERE m.session_id = %s AND s.user_id = %s AND m.deleted_at IS NULL {role_filter}
             ORDER BY m.created_at ASC
             LIMIT %s OFFSET %s
             """,
@@ -567,6 +567,53 @@ def list_artifacts(
         }
         for r in rows
     ]
+
+
+def get_artifact(
+    artifact_id: str,
+    *,
+    session_id: str | None = None,
+    artifact_type: str | None = None,
+) -> dict | None:
+    """Fetch a single artifact by id with optional session/type guards."""
+    clauses = ["id = %s", "deleted_at IS NULL"]
+    params: list[object] = [_uuid(artifact_id)]
+
+    if session_id is not None:
+        clauses.append("session_id = %s")
+        params.append(_uuid(session_id))
+    if artifact_type is not None:
+        clauses.append("artifact_type = %s")
+        params.append(artifact_type)
+
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            f"""
+            SELECT id, message_id, session_id, artifact_type, storage_type,
+                   storage_path, content, metadata, is_permanent, expires_at, created_at
+            FROM artifacts
+            WHERE {' AND '.join(clauses)}
+            LIMIT 1
+            """,
+            params,
+        ).fetchone()
+
+    if not row:
+        return None
+
+    return {
+        "id": row[0],
+        "message_id": row[1],
+        "session_id": row[2],
+        "artifact_type": row[3],
+        "storage_type": row[4],
+        "storage_path": row[5],
+        "content": row[6],
+        "metadata": dict(row[7]) if row[7] else {},
+        "is_permanent": row[8],
+        "expires_at": row[9].isoformat() if row[9] else None,
+        "created_at": row[10].isoformat() if row[10] else None,
+    }
 
 
 # ── Context Summary CRUD ──────────────────────────────────────────────────────

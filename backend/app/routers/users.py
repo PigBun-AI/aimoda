@@ -10,13 +10,13 @@ from ..services.subscription_service import get_user_subscription
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.get("/")
+@router.get("")
 def list_users(user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))]):
     users = get_users()
     return {"success": True, "data": [u.model_dump(by_alias=True) for u in users]}
 
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 def create_user(
     body: CreateUserRequest,
     user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],

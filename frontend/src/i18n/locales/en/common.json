@@ -88,6 +88,9 @@
   "profileTab": "Profile",
   "dashboardTab": "Dashboard",
   "articlesTab": "Articles",
+  "galleriesTab": "Galleries",
+  "galleriesDesc": "Manage all inspiration gallery titles, covers, and image deletion across the platform.",
+  "galleryList": "Gallery List",
   "usersTab": "Users",
   "redemptionTab": "Redemption Codes",
   "username": "Username",
@@ -102,5 +105,6 @@
   "redeemCode": "Redemption Code",
   "redeemSubscription": "Redeem Subscription",
   "redeemHint": "Enter code to activate or extend subscription",
+  "deleteConfirm": "Are you sure you want to delete this content? This action cannot be undone.",
   "filingNumber": "ICP Registration No. 2025511349"
 }

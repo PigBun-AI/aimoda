@@ -21,7 +21,7 @@ def _get_report_spec_skill() -> str:
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
 
-@router.post("/")
+@router.post("")
 async def mcp_jsonrpc(request: Request):
     """MCP JSON-RPC 2.0 endpoint."""
     body = await request.json()
@@ -129,6 +129,9 @@ async def mcp_jsonrpc(request: Request):
                         "season": r.season,
                         "year": r.year,
                         "lookCount": r.look_count,
+                        "indexUrl": r.index_url,
+                        "overviewUrl": r.overview_url,
+                        "coverUrl": r.cover_url,
                         "createdAt": r.created_at,
                         "updatedAt": r.updated_at,
                     }
@@ -207,5 +210,8 @@ async def mcp_upload(file: UploadFile = File(...), uploadedBy: int = 1):
             "brand": report.brand,
             "season": f"{report.season} {report.year}",
             "lookCount": report.look_count,
+            "indexUrl": report.index_url,
+            "overviewUrl": report.overview_url,
+            "coverUrl": report.cover_url,
         },
     }

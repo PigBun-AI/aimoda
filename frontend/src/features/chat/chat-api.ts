@@ -20,11 +20,20 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return headers
 }
 
+/** Clear stale session and reload page to trigger login dialog */
+function handle401(resp: Response) {
+  if (resp.status === 401) {
+    window.localStorage.removeItem(authTokenStorageKey)
+    window.localStorage.removeItem('fashion-report-session')
+    window.location.reload()
+  }
+}
+
 /**
  * Send a chat message and stream SSE events
  */
 export async function sendChatSSE(
-  message: string,
+  content: ContentBlock[],
   sessionId: string,
   history: Array<{ role: string; content: ContentBlock[] }>,
   onEvent: (event: SSEEvent) => void,
@@ -32,10 +41,11 @@ export async function sendChatSSE(
   const resp = await fetch('/api/chat', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ message, session_id: sessionId, history }),
+    body: JSON.stringify({ content, session_id: sessionId, history }),
   })
 
   if (!resp.ok) {
+    handle401(resp)
     throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
   }
 
@@ -81,6 +91,34 @@ export async function fetchSearchSession(
     body: JSON.stringify({ ...searchReq, offset, limit }),
   })
   if (!resp.ok) {
+    handle401(resp)
+    throw new Error(`HTTP ${resp.status}`)
+  }
+  return resp.json()
+}
+
+export async function fetchSearchSessionById(
+  searchRequestId: string,
+  offset: number,
+  limit = 20,
+): Promise<{
+  images: ImageResult[]
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
+}> {
+  const resp = await fetch('/api/chat/search_session_by_id', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      search_request_id: searchRequestId,
+      offset,
+      limit,
+    }),
+  })
+  if (!resp.ok) {
+    handle401(resp)
     throw new Error(`HTTP ${resp.status}`)
   }
   return resp.json()
@@ -92,7 +130,7 @@ export async function listSessions(): Promise<ChatSession[]> {
   const resp = await fetch('/api/chat/sessions', {
     headers: authHeaders(),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data ?? []
 }
@@ -103,7 +141,7 @@ export async function createSession(title = '新对话'): Promise<ChatSession> {
     headers: authHeaders(),
     body: JSON.stringify({ title }),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data
 }
@@ -117,7 +155,7 @@ export async function updateSession(
     headers: authHeaders(),
     body: JSON.stringify(patch),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data
 }
@@ -127,18 +165,96 @@ export async function deleteSessionApi(sessionId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
 }
 
 /**
  * Fetch messages for a given session
- * TODO: Wire up backend GET /api/chat/sessions/{sessionId}/messages
  */
 export async function getSessionMessages(sessionId: string): Promise<Array<{ id: string; role: string; content: ContentBlock[] | string }>> {
   const resp = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
     headers: authHeaders(),
   })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data ?? []
+}
+
+// ── Single image detail ──
+
+export async function fetchImageDetail(imageId: string): Promise<ImageResult> {
+  const resp = await fetch(`/api/chat/image/${imageId}`, {
+    headers: authHeaders(),
+  })
+  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  return resp.json()
+}
+
+
+// ── Image detail inline search ──
+
+export interface SearchSimilarParams {
+  brand?: string
+  categories?: string[]
+  garment_tags?: string[]
+  image_id?: string
+  top_category?: string
+  gender?: string
+  page?: number
+  page_size?: number
+}
+
+export interface SearchByColorParams {
+  hex: string
+  color_name?: string
+  threshold?: number
+  gender?: string
+  quarter?: string
+  page?: number
+  page_size?: number
+}
+
+export interface SearchResponse {
+  images: ImageResult[]
+  total: number
+  page: number
+  page_size: number
+  has_more: boolean
+}
+
+export async function searchSimilar(params: SearchSimilarParams): Promise<SearchResponse> {
+  const resp = await fetch('/api/chat/search_similar', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      brand: params.brand,
+      categories: params.categories,
+      garment_tags: params.garment_tags,
+      image_id: params.image_id,
+      top_category: params.top_category,
+      gender: params.gender,
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 56,
+    }),
+  })
+  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  return resp.json()
+}
+
+export async function searchByColor(params: SearchByColorParams): Promise<SearchResponse> {
+  const resp = await fetch('/api/chat/search_by_color', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      hex: params.hex,
+      color_name: params.color_name ?? '',
+      threshold: params.threshold ?? 75.0,
+      gender: params.gender,
+      quarter: params.quarter,
+      page: params.page ?? 1,
+      page_size: params.page_size ?? 56,
+    }),
+  })
+  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  return resp.json()
 }

@@ -28,6 +28,10 @@ export function ImageDrawer({ open, data, onClose, onLoadMore }: ImageDrawerProp
   const safeImages = data.images || []
   const displayCount = data.total || safeImages.length
 
+  const handleImageClick = (img: typeof safeImages[number]) => {
+    window.open(`/image/${img.image_id}`, '_blank')
+  }
+
   return (
     <div className="h-full flex flex-col animate-in slide-in-from-right duration-normal border-l border-border bg-background">
       {/* Header — 仿 aimoda-web HeaderCommon */}
@@ -62,11 +66,13 @@ export function ImageDrawer({ open, data, onClose, onLoadMore }: ImageDrawerProp
             <div key={i} className="space-y-2 w-full">
               {/* Image card — 1:2 ratio with bbox crop */}
               <div
-                className="relative group overflow-hidden bg-muted w-full transition-all border border-border/70 hover:border-primary/40 hover:shadow-md"
+                onClick={() => handleImageClick(img)}
+                className="relative group overflow-hidden bg-muted w-full transition-all border border-border/70 hover:border-primary/40 hover:shadow-md cursor-pointer"
                 style={{ aspectRatio: '1 / 2', width: '100%' }}
+                title={`查看 ${img.brand || '图片'}`}
               >
                 <FashionImage image={img} className="w-full h-full" />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
               </div>
 
               {/* Image info — 仿 aimoda-web ImageCardBase gallery mode */}

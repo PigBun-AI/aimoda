@@ -7,8 +7,21 @@ import { ReportsPage } from '@/features/reports/reports-page'
 import { CoverPage } from '@/features/cover/cover-page'
 import { ChatPage } from '@/features/chat/chat-page'
 import { ProfilePage } from '@/features/profile/profile-page'
+import { ImageDetailPage } from '@/features/chat/image-detail-page'
+import { InspirationPage } from '@/features/inspiration/inspiration-page'
+import { GalleryDetailPage } from '@/features/inspiration/gallery-detail-page'
 
 export const router = createBrowserRouter([
+  {
+    // Standalone full-screen pages (no sidebar)
+    element: <ProtectedRoute />,
+    children: [
+      {
+        path: '/image/:imageId',
+        element: <ImageDetailPage />,
+      },
+    ],
+  },
   {
     element: <AppShell />,
     children: [
@@ -38,6 +51,14 @@ export const router = createBrowserRouter([
           {
             path: '/profile',
             element: <ProfilePage />,
+          },
+          {
+            path: '/inspiration',
+            element: <InspirationPage />,
+          },
+          {
+            path: '/inspiration/:galleryId',
+            element: <GalleryDetailPage />,
           },
         ],
       },

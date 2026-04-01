@@ -35,6 +35,7 @@ ARTIFACT_SUBPATHS = {
     "color_analysis": "color_analysis",
     "trend_chart": "trend_charts",
     "collection_result": "collections",
+    "vision_analysis": "vision_analysis",
     "other": "other",
 }
 
@@ -81,6 +82,16 @@ class OSSService:
         digest = hashlib.md5(f"{session_id}{timestamp}".encode()).hexdigest()[:8]
         ext = PurePosixPath(filename).suffix.lower()
         return f"artifacts/{session_id}/{subpath}/{digest}{ext}"
+
+    @staticmethod
+    def report_path(slug: str, filename: str) -> str:
+        """Build OSS path for report files.
+
+        Examples:
+            reports/zimmermann-fall-2026/images/look-01.jpg
+            reports/zimmermann-fall-2026/index.html
+        """
+        return f"reports/{slug}/{filename}"
 
     # ── Upload ───────────────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ import { useChat } from './chat-hooks'
 import { useSessionStore } from './session-store'
 import { useIsDesktop } from '@/lib/use-breakpoint'
 import { cn } from '@/lib/utils'
+import type { ChatComposerInput } from './chat-types'
 
 function LoadingIndicator() {
   return (
@@ -48,6 +49,7 @@ export function ChatPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const urlSessionId = searchParams.get('session')
+
   const [drawerWidthPercent, setDrawerWidthPercent] = useState(() => {
     if (typeof window === 'undefined') return 45
     const stored = Number(window.localStorage.getItem(drawerWidthStorageKey))
@@ -70,13 +72,14 @@ export function ChatPage() {
     drawerOpen,
     setDrawerOpen,
     drawerData,
-    openDrawerFromSearchRequest,
+    openDrawerFromSearchRequestId,
     loadMoreDrawerImages,
   } = useChat(activeSessionId)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const initDone = useRef(false)
   const mainRef = useRef<HTMLDivElement>(null)
+
 
   // Load sessions on mount (once only)
   useEffect(() => {
@@ -110,6 +113,7 @@ export function ChatPage() {
     }
   }, [activeSessionId, loaded, navigate, sessions, urlSessionId])
 
+
   // No more auto-create: session is created lazily on first message send
 
   // Auto-scroll on new messages
@@ -121,17 +125,17 @@ export function ChatPage() {
     window.localStorage.setItem(drawerWidthStorageKey, String(drawerWidthPercent))
   }, [drawerWidthPercent])
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (input: ChatComposerInput) => {
     // Lazy session creation: create on first message if no active session
     if (!activeSessionId) {
       const session = await newSession()
       if (!session) return
       // sendMessage will pick up the new activeSessionId on next render,
       // but we need to send immediately with the newly created session ID
-      sendMessage(text, session.id)
+      sendMessage(input, session.id)
       return
     }
-    sendMessage(text)
+    sendMessage(input)
   }, [activeSessionId, newSession, sendMessage])
 
   const handleResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
@@ -182,7 +186,7 @@ export function ChatPage() {
             ) : (
               <div className="max-w-3xl mx-auto">
                 {messages.map((msg) => (
-                  <MessageBubble key={msg.id} msg={msg} onOpenDrawer={openDrawerFromSearchRequest} />
+                <MessageBubble key={msg.id} msg={msg} onOpenDrawer={openDrawerFromSearchRequestId} />
                 ))}
                 {isLoading && <LoadingIndicator />}
                 <div ref={scrollRef} />

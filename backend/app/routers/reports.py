@@ -19,7 +19,7 @@ from ..repositories.activity_repo import log_activity
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 
-@router.get("/")
+@router.get("")
 def list_reports(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     page: int = Query(default=1, ge=1),
@@ -98,6 +98,9 @@ async def upload_report(
             "brand": report.brand,
             "season": f"{report.season} {report.year}",
             "lookCount": report.look_count,
+            "indexUrl": report.index_url,
+            "overviewUrl": report.overview_url,
+            "coverUrl": report.cover_url,
         },
     }
 

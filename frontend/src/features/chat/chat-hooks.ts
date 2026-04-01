@@ -1,8 +1,8 @@
 // Chat hooks — SSE streaming state management
 
 import { useState, useCallback, useEffect } from 'react'
-import type { ChatMessage, ContentBlock, ToolStep, DrawerData, SearchSessionState, ImageResult, ChatSession } from './chat-types'
-import { sendChatSSE, fetchSearchSession, listSessions, createSession, deleteSessionApi, getSessionMessages } from './chat-api'
+import type { ChatMessage, ContentBlock, ToolStep, DrawerData, ImageResult, ChatSession, ChatComposerInput } from './chat-types'
+import { sendChatSSE, fetchSearchSessionById, listSessions, createSession, deleteSessionApi, getSessionMessages } from './chat-api'
 import { useSessionStore } from './session-store'
 import { normalizeContentBlocks } from './content-blocks'
 
@@ -11,9 +11,10 @@ import { normalizeContentBlocks } from './content-blocks'
  */
 export function useChat(sessionId: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [streamingSessionIds, setStreamingSessionIds] = useState<string[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerData, setDrawerData] = useState<DrawerData | null>(null)
+  const isLoading = Boolean(sessionId && streamingSessionIds.includes(sessionId))
 
   // Reload session list when messages change (e.g. after sending a new message)
   const { loadSessions, markSessionExecutionStatus } = useSessionStore()
@@ -55,17 +56,21 @@ export function useChat(sessionId: string | null) {
       .catch(err => console.error('Failed to load session messages', err))
   }, [sessionId])
 
-  const sendMessage = useCallback(async (text: string, overrideSessionId?: string) => {
+  const sendMessage = useCallback(async (input: ChatComposerInput, overrideSessionId?: string) => {
     const sid = overrideSessionId || sessionId
-    if (!text.trim() || isLoading || !sid) return
+    const content = input.content.filter(block => {
+      if (block.type === 'text') return Boolean(block.text.trim())
+      return true
+    })
+    if (content.length === 0 || !sid || streamingSessionIds.includes(sid)) return
 
-    setIsLoading(true)
+    setStreamingSessionIds(current => (current.includes(sid) ? current : [...current, sid]))
     markSessionExecutionStatus(sid, 'running')
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
-      content: [{ type: 'text', text }],
+      content,
     }
     setMessages(prev => [...prev, userMsg])
 
@@ -119,7 +124,7 @@ export function useChat(sessionId: string | null) {
     }
 
     try {
-      await sendChatSSE(text, sid, history, (event) => {
+      await sendChatSSE(content, sid, history, (event) => {
         if (event.type === 'content_block_start') {
           const eventWithPayload = event as typeof event & Record<string, unknown>
           const blockType = event.block_type
@@ -206,18 +211,18 @@ export function useChat(sessionId: string | null) {
       })
     }
 
-    setIsLoading(false)
-  }, [isLoading, markSessionExecutionStatus, messages, sessionId])
+    setStreamingSessionIds(current => current.filter(id => id !== sid))
+  }, [markSessionExecutionStatus, messages, sessionId, streamingSessionIds])
 
   const openDrawer = useCallback(async (step: ToolStep) => {
-    const hasSearchRequest = !!step.searchRequest
+    const searchRequestId = step.searchRequestId
     const hasImages = step.images && step.images.length > 0
 
-    if (hasSearchRequest) {
+    if (searchRequestId) {
       setDrawerData({
         stepLabel: step.toolName,
         images: [],
-        searchRequest: step.searchRequest!,
+        searchRequestId,
         offset: 0,
         hasMore: true,
         isLoadingMore: true,
@@ -225,7 +230,7 @@ export function useChat(sessionId: string | null) {
       setDrawerOpen(true)
 
       try {
-        const data = await fetchSearchSession(step.searchRequest!, 0)
+        const data = await fetchSearchSessionById(searchRequestId, 0)
         setDrawerData(prev => prev ? {
           ...prev,
           images: data.images || [],
@@ -235,13 +240,13 @@ export function useChat(sessionId: string | null) {
           isLoadingMore: false,
         } : null)
       } catch (e) {
-        console.error('fetchSearchSession error', e)
+        console.error('load search session error', e)
       }
     } else if (hasImages) {
       setDrawerData({
         stepLabel: step.toolName,
         images: step.images!,
-        searchRequest: null,
+        searchRequestId: null,
         offset: 0,
         hasMore: false,
         isLoadingMore: false,
@@ -250,12 +255,12 @@ export function useChat(sessionId: string | null) {
     }
   }, [])
 
-  /** Open drawer directly from a SearchSessionState (used by SearchResultCard) */
-  const openDrawerFromSearchRequest = useCallback(async (searchRequest: SearchSessionState) => {
+  /** Open drawer directly from a search_request_id (used by SearchResultCard) */
+  const openDrawerFromSearchRequestId = useCallback(async (searchRequestId: string) => {
     setDrawerData({
       stepLabel: 'show_collection',
       images: [],
-      searchRequest,
+      searchRequestId,
       offset: 0,
       hasMore: true,
       isLoadingMore: true,
@@ -263,7 +268,7 @@ export function useChat(sessionId: string | null) {
     setDrawerOpen(true)
 
     try {
-      const data = await fetchSearchSession(searchRequest, 0)
+      const data = await fetchSearchSessionById(searchRequestId, 0)
       setDrawerData(prev => prev ? {
         ...prev,
         images: data.images || [],
@@ -273,16 +278,16 @@ export function useChat(sessionId: string | null) {
         isLoadingMore: false,
       } : null)
     } catch (e) {
-      console.error('fetchSearchSession error', e)
+      console.error('load search session error', e)
     }
   }, [])
 
   const loadMoreDrawerImages = useCallback(async () => {
-    if (!drawerData?.searchRequest || !drawerData.hasMore) return
+    if (!drawerData?.searchRequestId || !drawerData.hasMore) return
 
     setDrawerData(prev => prev ? { ...prev, isLoadingMore: true } : null)
     try {
-      const data = await fetchSearchSession(drawerData.searchRequest, drawerData.offset)
+      const data = await fetchSearchSessionById(drawerData.searchRequestId, drawerData.offset)
       setDrawerData(prev => prev ? {
         ...prev,
         images: [...prev.images, ...(data.images || [])],
@@ -303,7 +308,7 @@ export function useChat(sessionId: string | null) {
     setDrawerOpen,
     drawerData,
     openDrawer,
-    openDrawerFromSearchRequest,
+    openDrawerFromSearchRequestId,
     loadMoreDrawerImages,
   }
 }

@@ -88,6 +88,9 @@
   "profileTab": "个人信息",
   "dashboardTab": "数据看板",
   "articlesTab": "文章管理",
+  "galleriesTab": "图集管理",
+  "galleriesDesc": "管理平台上的所有灵感图集标题、封面与删除图集内容。",
+  "galleryList": "图集列表",
   "usersTab": "用户管理",
   "redemptionTab": "兑换码",
   "username": "用户名",
@@ -102,5 +105,6 @@
   "redeemCode": "兑换码",
   "redeemSubscription": "兑换订阅",
   "redeemHint": "输入兑换码以激活或延长订阅",
+  "deleteConfirm": "确定要删除该图集内容吗？此操作不可恢复。",
   "filingNumber": "粤ICP备2025511349号"
 }

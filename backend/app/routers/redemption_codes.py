@@ -13,7 +13,7 @@ router = APIRouter(tags=["redemption-codes"])
 admin_router = APIRouter(prefix="/admin/redemption-codes", tags=["admin-redemption-codes"])
 
 
-@admin_router.post("/", status_code=201)
+@admin_router.post("", status_code=201)
 def create_codes(
     body: GenerateCodesRequest,
     user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
@@ -22,7 +22,7 @@ def create_codes(
     return {"success": True, "data": [c.model_dump(by_alias=True) for c in codes]}
 
 
-@admin_router.get("/")
+@admin_router.get("")
 def list_codes(user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))]):
     codes = get_codes()
     return {"success": True, "data": [c.model_dump(by_alias=True) for c in codes]}

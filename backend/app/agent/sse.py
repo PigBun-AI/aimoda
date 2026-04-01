@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 
 def extract_images_from_json(text: str) -> tuple[list[dict], dict]:
@@ -35,7 +35,7 @@ def extract_images_from_json(text: str) -> tuple[list[dict], dict]:
                 "note": data.get("note", ""),
                 "total": data.get("total", 0),
                 "remaining": remaining_val,
-                "search_request": data.get("search_request"),
+                "search_request_id": data.get("search_request_id"),
             }
             items = data.get("results", data.get("sample_images", []))
         elif isinstance(data, list):
@@ -131,7 +131,7 @@ def _build_tool_result_block(
 
 async def stream_agent_response(
     agent,
-    message: str,
+    message: str | list[dict[str, Any]],
     history: list,
     thread_id: str,
     result: StreamResult | None = None,

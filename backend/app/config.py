@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     UPLOAD_TMP_DIR: str = "/tmp/fashion-report-uploads"
 
     # --- Agent / Chat ---
-    QDRANT_URL: str = "http://202.104.119.31:16333"
+    QDRANT_URL: str = "http://220.168.84.134:16333"
     QDRANT_API_KEY: str
     QDRANT_COLLECTION: str = "fashion_items"
 
@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.minimaxi.com/anthropic"
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 4096
+
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    VLM_MODEL: str = "qwen3.5-flash"
+    VLM_TEMPERATURE: float = 0.1
+    VLM_MAX_TOKENS: int = 1200
+    VLM_TIMEOUT_SECONDS: float = 45.0
 
     EMBEDDING_URL: str = "http://183.62.232.22:18730"
     EMBEDDING_MODEL: str = "Marqo/marqo-fashionSigLIP"
@@ -37,7 +44,11 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = ""
     OSS_ENDPOINT: str = "oss-cn-hangzhou.aliyuncs.com"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
     @property
     def resolved_reports_dir(self) -> Path:

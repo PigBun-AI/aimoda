@@ -47,6 +47,28 @@ def hex_to_rgb(hex_str: str) -> tuple[int, int, int]:
     return (int(hex_str[0:2], 16), int(hex_str[2:4], 16), int(hex_str[4:6], 16))
 
 
+def hex_to_hsv(hex_str: str) -> tuple[int, int, int]:
+    """Convert hex color string to HSV tuple (H: 0-360, S: 0-100, V: 0-100)."""
+    r, g, b = hex_to_rgb(hex_str)
+    r, g, b = r / 255.0, g / 255.0, b / 255.0
+    mx = max(r, g, b)
+    mn = min(r, g, b)
+    df = mx - mn
+    if mx == mn:
+        h = 0.0
+    elif mx == r:
+        h = (60 * ((g - b) / df) + 360) % 360
+    elif mx == g:
+        h = (60 * ((b - r) / df) + 120) % 360
+    elif mx == b:
+        h = (60 * ((r - g) / df) + 240) % 360
+    else:
+        h = 0.0
+    s = 0.0 if mx == 0 else (df / mx) * 100
+    v = mx * 100
+    return int(round(h)), int(round(s)), int(round(v))
+
+
 def hex_to_lab(hex_str: str) -> tuple[float, float, float]:
     """Convert hex → sRGB → XYZ → CIELAB."""
     r, g, b = hex_to_rgb(hex_str)

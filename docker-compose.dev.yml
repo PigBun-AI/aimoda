@@ -1,19 +1,4 @@
-version: '3.9'
-
-services:
-  api:
-    environment:
-      NODE_ENV: development
-    volumes:
-      - ./backend:/app
-      - db:/data
-      - reports:/reports
-    command: sh -c 'npm install && npm run dev'
-    ports:
-      - '3000:3000'
-
-  nginx:
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./frontend/dist:/usr/share/nginx/html:ro
-      - reports:/reports:ro
+# Deprecated local overlay kept for compatibility.
+# Use `docker compose --env-file env/server.dev.env -p aimoda-dev up -d --build`
+# for the server-style dev stack instead.
+services: {}

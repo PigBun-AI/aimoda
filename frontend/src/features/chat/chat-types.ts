@@ -15,19 +15,69 @@ export interface ChatSession {
   updated_at: string
 }
 
+export interface ImageSourceBase64 {
+  type: 'base64'
+  media_type: string
+  data: string
+}
+
+export interface ImageSourceUrl {
+  type: 'url'
+  url: string
+}
+
+export type ImageSource = ImageSourceBase64 | ImageSourceUrl
+
+export interface DocumentSourceFile {
+  type: 'file'
+  file_id: string
+}
+
+export interface DocumentSourceUrl {
+  type: 'url'
+  url: string
+}
+
+export type DocumentSource = DocumentSourceFile | DocumentSourceUrl
+
 // ContentBlock — Claude Code style inline blocks
 export type ContentBlock =
   | { type: 'text'; text: string }
+  | { type: 'image'; source: ImageSource; mime_type?: string; file_name?: string; alt_text?: string }
+  | { type: 'document'; source: DocumentSource; mime_type?: string; file_name?: string; title?: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; status?: 'running' | 'done' }
   | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean; images?: ImageResult[]; metadata?: Record<string, unknown> }
 
 /** Parsed data from show_collection tool result */
 export interface SearchResultData {
   action: 'show_collection'
-  search_request: SearchSessionState
   total: number
   filters_applied: string[]
   message: string
+  search_request_id: string
+  sample_images?: ImageResult[]
+}
+
+export interface FashionVisionAnalysis {
+  summary_zh: string
+  retrieval_query_en: string
+  style_keywords: string[]
+  hard_filters: {
+    category: string[]
+    color: string[]
+    fabric: string[]
+    gender: string
+    season: string[]
+  }
+  follow_up_questions_zh: string[]
+}
+
+export interface FashionVisionResultData {
+  ok: boolean
+  artifact_id?: string | null
+  image_count?: number
+  model?: string
+  analysis: FashionVisionAnalysis
 }
 
 // ChatMessage — updated to use ContentBlock[]
@@ -58,9 +108,38 @@ export interface ToolStep {
   matchLevel?: string
   images?: ImageResult[]
   searchRequest?: SearchSessionState | null
+  searchRequestId?: string | null
 }
 
 import type { ObjectArea } from './crop-utils'
+
+export interface GarmentColor {
+  name: string
+  hex: string
+  percentage: number
+}
+
+export interface GarmentDetail {
+  name: string
+  category: string
+  top_category: string // 'tops' | 'bottoms' | 'full' | 'footwear' | 'bags' | 'accessories'
+  pattern: string
+  fabric: string
+  silhouette: string
+  sleeve_length: string
+  garment_length: string
+  collar: string
+  bbox: [number, number, number, number] | null // [x1, y1, x2, y2] normalized 0-1
+  colors: GarmentColor[]
+}
+
+export interface ExtractedColor {
+  hex: string
+  color_name: string
+  percentage: number
+  type: string // 'dominant' | 'secondary' | 'accent'
+  area: string
+}
 
 export interface ImageResult {
   image_url: string
@@ -69,9 +148,11 @@ export interface ImageResult {
   year?: number | string | null
   quarter?: string | null
   season?: string | null
+  gender?: string
   score: number
-  garments: unknown[]
-  colors: unknown[]
+  garments: GarmentDetail[]
+  extracted_colors: ExtractedColor[]
+  colors: string[]
   style: string
   object_area?: ObjectArea | null
 }
@@ -87,9 +168,13 @@ export interface SearchSessionState {
 export interface DrawerData {
   stepLabel: string
   images: ImageResult[]
-  searchRequest: SearchSessionState | null
+  searchRequestId: string | null
   offset: number
   hasMore: boolean
   total?: number
   isLoadingMore: boolean
+}
+
+export interface ChatComposerInput {
+  content: ContentBlock[]
 }

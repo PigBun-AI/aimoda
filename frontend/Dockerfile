@@ -22,6 +22,11 @@ RUN rm /etc/nginx/conf.d/default.conf
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# Ensure nginx can read bundled static assets even if source files were committed
+# with restrictive local permissions (for example 600 on macOS).
+RUN find /usr/share/nginx/html -type d -exec chmod 755 {} + \
+  && find /usr/share/nginx/html -type f -exec chmod 644 {} +
+
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 

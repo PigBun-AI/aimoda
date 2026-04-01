@@ -2,13 +2,13 @@
 // Displays result count, filters, preview thumbnails, and triggers drawer
 
 import { Images, Filter, ArrowRight } from 'lucide-react'
-import type { SearchResultData, SearchSessionState, ImageResult } from './chat-types'
+import type { SearchResultData, ImageResult } from './chat-types'
 import { FashionImage } from './fashion-image'
 
 interface SearchResultCardProps {
   data: SearchResultData
   images?: ImageResult[]
-  onOpenDrawer: (searchRequest: SearchSessionState) => void
+  onOpenDrawer: (searchRequestId: string) => void
 }
 
 /** Format filter tag for display: "category=dress" → "dress" */
@@ -24,7 +24,7 @@ function formatFilterTag(filter: string): string {
 }
 
 export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCardProps) {
-  const previewImages = images?.slice(0, 4) ?? []
+  const previewImages = (images?.length ? images : data.sample_images)?.slice(0, 4) ?? []
   const hasFilters = data.filters_applied.length > 0
 
   return (
@@ -67,9 +67,9 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
         </div>
 
         <div className="flex items-center gap-1.5">
-          {data.total > 0 && (
+          {data.total > 0 && data.search_request_id && (
             <button
-              onClick={() => onOpenDrawer(data.search_request)}
+              onClick={() => onOpenDrawer(data.search_request_id)}
               className="inline-flex items-center gap-1 text-xs bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-full transition-all font-medium shadow-sm whitespace-nowrap"
             >
               查看全部
@@ -79,11 +79,11 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
         </div>
       </div>
 
-      {previewImages.length > 0 && (
-        <div
-          className="px-4 pb-4 cursor-pointer"
-          onClick={() => onOpenDrawer(data.search_request)}
-        >
+          {previewImages.length > 0 && data.search_request_id && (
+            <div
+              className="px-4 pb-4 cursor-pointer"
+              onClick={() => onOpenDrawer(data.search_request_id)}
+            >
           <div className="border border-border/60 bg-muted/25 p-2.5">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-medium text-foreground/75">结果预览</span>

@@ -1,0 +1,26 @@
+{
+  "name": "@aimoda/fashion-report-mcp",
+  "version": "1.0.0",
+  "description": "Fashion Report MCP 服务 — 报告规范查询、上传、列表管理",
+  "author": "AiModa",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "node build.cjs",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.13.9",
+    "esbuild": "^0.25.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": { "node": ">=18.0.0" }
+}

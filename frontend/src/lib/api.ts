@@ -128,6 +128,12 @@ async function request<T>(path: string, options?: RequestInit, demoFallback?: T)
     })
 
     if (!response.ok) {
+      // Auto-logout on 401: clear stale token/session and reload to trigger login
+      if (response.status === 401 && !path.includes('/api/auth/login')) {
+        clearAccessToken()
+        window.localStorage.removeItem('fashion-report-session')
+        window.location.reload()
+      }
       throw new ApiError(`Request failed with status ${response.status}`, response.status)
     }
 
@@ -212,11 +218,11 @@ export async function getReports(page = 1, limit = 12): Promise<PaginatedReports
     throw new ApiError('Failed to fetch reports', 500)
   }
 
-  // Transform backend data to include coverImageUrl
+  // Transform backend data to include coverImageUrl from OSS
   return {
-    reports: payload.data.map((report: ReportSummary) => ({
+    reports: payload.data.map((report: ReportSummary & { coverUrl?: string }) => ({
       ...report,
-      coverImageUrl: `/reports/${report.slug}/cover.jpg`,
+      coverImageUrl: report.coverUrl || `/reports/${report.slug}/cover.jpg`,
     })),
     ...payload.meta
   }
@@ -231,7 +237,10 @@ export async function getReportById(id: string): Promise<ReportDetail> {
     season: string
     year: number
     lookCount: number
-    path: string
+    indexUrl: string
+    overviewUrl: string | null
+    coverUrl: string | null
+    ossPrefix: string
     createdAt: string
     updatedAt: string
   }>(`/api/reports/${id}`)
@@ -245,9 +254,9 @@ export async function getReportById(id: string): Promise<ReportDetail> {
     season: data.season,
     status: 'published',
     updatedAt: data.updatedAt,
-    coverImageUrl: `/reports/${data.slug}/cover.jpg`,
+    coverImageUrl: data.coverUrl || `/reports/${data.slug}/cover.jpg`,
     description: `${data.brand} ${data.season} ${data.year} RTW 趋势报告，包含 ${data.lookCount} 个造型`,
-    iframeUrl: `/reports/${data.slug}/index.html`,
+    iframeUrl: data.indexUrl || `/reports/${data.slug}/index.html`,
     tags: [data.brand, data.season, String(data.year), 'RTW']
   }
 }

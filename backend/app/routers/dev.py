@@ -20,7 +20,8 @@ from pydantic import BaseModel
 
 from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
-from ..agent.tools import get_qdrant, _apply_session_filters, _format_result, _get_collection
+from ..agent.qdrant_utils import get_qdrant, format_result
+from ..agent.session_state import apply_session_filters
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 
@@ -97,13 +98,13 @@ async def dev_search_session_endpoint(req: DevSearchSessionRequest):
     client = get_qdrant()
     session = req.model_dump()
 
-    results = _apply_session_filters(client, session)
+    results = apply_session_filters(client, session)
 
     page = results[req.offset: req.offset + req.limit]
 
     formatted_page = []
     for p in page:
-        item = _format_result(p.payload, getattr(p, 'score', 0))
+        item = format_result(p.payload, getattr(p, 'score', 0))
         item.pop("garments_raw", None)
         item.pop("extracted_colors_raw", None)
         formatted_page.append(item)

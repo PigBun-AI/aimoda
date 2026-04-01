@@ -46,11 +46,11 @@ export function LoginPage() {
         <div className="max-w-lg relative z-10">
           <header className="mb-8">
             <p className="text-xs tracking-[0.3em] uppercase mb-3 text-muted-foreground">
-              World Wear Watch Daily
+              AI-Powered Fashion Intelligence
             </p>
             <h1 className="mb-6">
-              <img src="/WWWD_logo_clean.svg" alt="WWWD" className="dark:hidden" style={{ height: 'clamp(56px, 7vw, 80px)' }} />
-              <img src="/WWWD_logo_inverted.svg" alt="WWWD" className="hidden dark:block" style={{ height: 'clamp(56px, 7vw, 80px)' }} />
+              <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden" style={{ height: 'clamp(40px, 5vw, 56px)' }} />
+              <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block" style={{ height: 'clamp(40px, 5vw, 56px)' }} />
             </h1>
             <div className="w-12 h-px mb-6 bg-brand-orange opacity-40" />
             <p className="leading-relaxed text-muted-foreground text-base xl:text-lg">
@@ -74,8 +74,8 @@ export function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobile Logo */}
           <div className="lg:hidden mb-8 text-center">
-            <img src="/WWWD_logo_clean.svg" alt="WWWD" className="dark:hidden mx-auto" style={{ height: '48px' }} />
-            <img src="/WWWD_logo_inverted.svg" alt="WWWD" className="hidden dark:block mx-auto" style={{ height: '48px' }} />
+            <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden mx-auto" style={{ height: '36px' }} />
+            <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block mx-auto" style={{ height: '36px' }} />
           </div>
 
           {/* Form Header */}
@@ -147,7 +147,7 @@ export function LoginPage() {
 
           {/* Copyright */}
           <p className="mt-8 sm:mt-12 text-center text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} World Wear Watch Daily. All rights reserved.
+            &copy; {new Date().getFullYear()} aimoda. All rights reserved.
           </p>
         </div>
       </div>

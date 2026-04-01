@@ -1,4 +1,4 @@
-name: aimoda-2026
+name: ${COMPOSE_PROJECT_NAME:-aimoda-2026}
 
 services:
   api:
@@ -17,12 +17,18 @@ services:
       REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
       UPLOAD_TMP_DIR: /tmp/fashion-report-uploads
       # Agent / Chat
-      QDRANT_URL: ${QDRANT_URL:-http://202.104.119.31:16333}
+      QDRANT_URL: ${QDRANT_URL:-http://220.168.84.134:16333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-fashion_items}
       LLM_MODEL: ${LLM_MODEL:-MiniMax-M2.5-highspeed}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.minimaxi.com/anthropic}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      VLM_MODEL: ${VLM_MODEL:-qwen3.5-flash}
+      VLM_TEMPERATURE: ${VLM_TEMPERATURE:-0.1}
+      VLM_MAX_TOKENS: ${VLM_MAX_TOKENS:-1200}
+      VLM_TIMEOUT_SECONDS: ${VLM_TIMEOUT_SECONDS:-45}
       EMBEDDING_URL: ${EMBEDDING_URL:-http://183.62.232.22:18730}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-Marqo/marqo-fashionSigLIP}
       POSTGRES_DSN: postgresql://fashion:fashion@postgres:5432/fashion_chat
@@ -30,7 +36,7 @@ services:
       OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
       OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
       OSS_BUCKET_NAME: ${OSS_BUCKET_NAME:-}
-      OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-hangzhou.aliyuncs.com}
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-shenzhen.aliyuncs.com}
     volumes:
       - db:/data
       - reports:/reports
@@ -119,6 +125,90 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  style-knowledge-mcp:
+    build:
+      context: ./services/style-knowledge-mcp
+      dockerfile: Dockerfile
+    environment:
+      PORT: '18750'
+      QDRANT_URL: ${QDRANT_URL:-http://220.168.84.134:16333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-aimoda2025}
+      QDRANT_COLLECTION: style_knowledge
+      FASHION_CLIP_ENDPOINT: ${EMBEDDING_URL:-http://183.62.232.22:18730}
+      FASHION_CLIP_MODEL: ${EMBEDDING_MODEL:-Marqo/marqo-fashionSigLIP}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18750/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  inspiration-gallery-mcp:
+    build:
+      context: ./services/inspiration-gallery-mcp
+      dockerfile: Dockerfile
+    environment:
+      PORT: '18760'
+      POSTGRES_DSN: postgresql://fashion:fashion@postgres:5432/fashion_chat
+      OSS_ACCESS_KEY_ID: ${OSS_ACCESS_KEY_ID:-}
+      OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
+      OSS_BUCKET_NAME: ${OSS_BUCKET_NAME:-}
+      OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-shenzhen.aliyuncs.com}
+      OSS_REGION: ${OSS_REGION:-oss-cn-shenzhen}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18760/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  fashion-report-mcp:
+    build:
+      context: ./services/fashion-report-mcp
+      dockerfile: Dockerfile
+    environment:
+      PORT: '18770'
+      BACKEND_URL: http://api:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18770/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
   nginx:
     image: nginx:1.27-alpine
     depends_on:
@@ -127,7 +217,7 @@ services:
       frontend:
         condition: service_healthy
     ports:
-      - '38180:80'
+      - '127.0.0.1:${NGINX_PORT:-38180}:80'
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - reports:/reports:ro

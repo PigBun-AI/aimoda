@@ -74,7 +74,7 @@ async def upload_artifact(
     """Upload artifact file (image/report/table/code/etc.) to OSS."""
     allowed_types = {
         "image", "report", "table", "code",
-        "color_analysis", "trend_chart", "collection_result", "other",
+        "color_analysis", "trend_chart", "collection_result", "vision_analysis", "other",
     }
     if artifact_type not in allowed_types:
         raise HTTPException(status_code=400, detail="无效的制品类型")

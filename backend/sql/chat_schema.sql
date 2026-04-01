@@ -146,7 +146,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
     -- Artifact classification
     artifact_type   TEXT NOT NULL CHECK (artifact_type IN (
                         'image', 'report', 'table', 'code', 'color_analysis',
-                        'trend_chart', 'collection_result', 'other'
+                        'trend_chart', 'collection_result', 'vision_analysis', 'other'
                     )),
 
     -- Storage location

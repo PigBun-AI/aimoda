@@ -9,7 +9,73 @@ from slowapi.errors import RateLimitExceeded
 from .config import settings
 from .database import initialize_database
 from .exceptions import AppError
-from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss
+from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries
+
+
+def _init_pg_report_schema():
+    """Initialize PostgreSQL report tables (idempotent)."""
+    import psycopg
+    from pathlib import Path
+    sql_path = Path(__file__).parent / "sql" / "report_schema.sql"
+    if not sql_path.exists():
+        return
+    schema = sql_path.read_text(encoding="utf-8")
+    try:
+        with psycopg.connect(settings.POSTGRES_DSN) as conn:
+            conn.execute(schema)
+            conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Failed to init PG report schema: %s", e)
+
+
+def _init_pg_chat_schema():
+    """Initialize PostgreSQL chat tables (idempotent)."""
+    import psycopg
+    from pathlib import Path
+    sql_path = Path(__file__).parent / "sql" / "chat_schema.sql"
+    if not sql_path.exists():
+        return
+    schema = sql_path.read_text(encoding="utf-8")
+    try:
+        with psycopg.connect(settings.POSTGRES_DSN) as conn:
+            conn.execute(schema)
+            conn.execute("""
+                ALTER TABLE IF EXISTS artifacts
+                DROP CONSTRAINT IF EXISTS artifacts_artifact_type_check
+            """)
+            conn.execute("""
+                ALTER TABLE IF EXISTS artifacts
+                ADD CONSTRAINT artifacts_artifact_type_check
+                CHECK (artifact_type IN (
+                    'image', 'report', 'table', 'code', 'color_analysis',
+                    'trend_chart', 'collection_result', 'vision_analysis', 'other'
+                ))
+            """)
+            conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Failed to init PG chat schema: %s", e)
+        try:
+            with psycopg.connect(settings.POSTGRES_DSN) as conn:
+                conn.execute("""
+                    ALTER TABLE IF EXISTS artifacts
+                    DROP CONSTRAINT IF EXISTS artifacts_artifact_type_check
+                """)
+                conn.execute("""
+                    ALTER TABLE IF EXISTS artifacts
+                    ADD CONSTRAINT artifacts_artifact_type_check
+                    CHECK (artifact_type IN (
+                        'image', 'report', 'table', 'code', 'color_analysis',
+                        'trend_chart', 'collection_result', 'vision_analysis', 'other'
+                    ))
+                """)
+                conn.commit()
+        except Exception as repair_error:
+            logging.getLogger(__name__).warning(
+                "Failed to repair artifact_type constraint: %s",
+                repair_error,
+            )
 
 
 def get_real_ip(request: Request) -> str:
@@ -25,8 +91,10 @@ def get_real_ip(request: Request) -> str:
 
 limiter = Limiter(key_func=get_real_ip)
 
-# Initialize database on startup
-initialize_database()
+# Initialize databases on startup
+initialize_database()    # SQLite (users, sessions, subscriptions, etc.)
+_init_pg_report_schema() # PostgreSQL (reports, report_views)
+_init_pg_chat_schema()   # PostgreSQL (chat_sessions, messages, artifacts)
 
 app = FastAPI(title="Fashion Report API", version="1.0.0")
 app.state.limiter = limiter
@@ -111,6 +179,7 @@ app.include_router(redemption_codes.user_router, prefix="/api")
 app.include_router(mcp.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(oss.router, prefix="/api")
+app.include_router(galleries.router, prefix="/api")
 
 # Dev-only router (no auth) — only in non-production
 if settings.ENV != "production":

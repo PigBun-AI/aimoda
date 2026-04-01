@@ -8,16 +8,24 @@ import { useReports } from '@/features/reports/use-reports'
 
 function getSafeIframeUrl(url: string): string | null {
   try {
+    // Allow same-origin relative paths
     if (url.startsWith('/')) {
       return url
     }
 
     const parsedUrl = new URL(url, window.location.origin)
-    if (parsedUrl.origin !== window.location.origin) {
-      return null
+
+    // Allow same-origin URLs
+    if (parsedUrl.origin === window.location.origin) {
+      return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
     }
 
-    return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
+    // Allow Aliyun OSS URLs (reports stored on OSS CDN)
+    if (parsedUrl.hostname.endsWith('.aliyuncs.com')) {
+      return url
+    }
+
+    return null
   } catch {
     return null
   }

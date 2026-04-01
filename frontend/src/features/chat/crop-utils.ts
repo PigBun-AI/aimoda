@@ -11,6 +11,8 @@ const CROP_PADDING_PERCENT = 5
 /** 容器固定宽高比 (1:2) */
 const CONTAINER_RATIO = 0.5
 
+import { getOssThumbnailUrl } from './oss-image'
+
 export interface ObjectArea {
   bbox_range_percent: {
     startX_percent: number
@@ -25,7 +27,13 @@ export interface ObjectArea {
 export function calculateBackgroundCropStyle(
   objectArea?: ObjectArea | null,
   imageUrl?: string,
+  thumbnailWidth?: number,
 ): React.CSSProperties {
+  // Apply OSS thumbnail if width specified
+  const displayUrl = thumbnailWidth && imageUrl
+    ? getOssThumbnailUrl(imageUrl, thumbnailWidth)
+    : imageUrl
+
   if (
     !objectArea?.bbox_range_percent ||
     !objectArea?.image_width ||
@@ -87,7 +95,7 @@ export function calculateBackgroundCropStyle(
         : (adjustedStartY * bgHeight) / denominator
 
     return {
-      backgroundImage: imageUrl ? `url(${imageUrl})` : undefined,
+      backgroundImage: displayUrl ? `url(${displayUrl})` : undefined,
       backgroundSize: `${bgWidth}% ${bgHeight}%`,
       backgroundPosition: `${posX}% ${posY}%`,
       backgroundRepeat: 'no-repeat',

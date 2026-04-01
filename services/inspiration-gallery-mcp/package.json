@@ -1,0 +1,46 @@
+{
+  "name": "@aimoda/inspiration-gallery-mcp",
+  "version": "1.0.0",
+  "description": "灵感情报站 MCP 服务 — 管理灵感图集的创建、上传、更新、删除",
+  "keywords": [
+    "mcp",
+    "fashion",
+    "gallery",
+    "inspiration",
+    "oss"
+  ],
+  "author": "AiModa",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "node build.cjs",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@types/chroma-js": "^3.1.2",
+    "ali-oss": "^6.21.0",
+    "chroma-js": "^3.2.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.1.0",
+    "multer": "^1.4.5-lts.2",
+    "node-vibrant": "^4.0.4",
+    "pg": "^8.16.0",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.2",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.13.9",
+    "@types/pg": "^8.15.2",
+    "@types/uuid": "^10.0.0",
+    "esbuild": "^0.25.12",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

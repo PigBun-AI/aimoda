@@ -60,11 +60,11 @@ export function RegisterPage() {
             <p
               className="text-xs tracking-[0.3em] uppercase mb-3 text-muted-foreground"
             >
-              World Wear Watch Daily
+              AI-Powered Fashion Intelligence
             </p>
             <h1 className="mb-4">
-              <img src="/WWWD_logo_clean.svg" alt="WWWD" className="dark:hidden" style={{ height: 'clamp(56px, 7vw, 80px)' }} />
-              <img src="/WWWD_logo_inverted.svg" alt="WWWD" className="hidden dark:block" style={{ height: 'clamp(56px, 7vw, 80px)' }} />
+              <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden" style={{ height: 'clamp(40px, 5vw, 56px)' }} />
+              <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block" style={{ height: 'clamp(40px, 5vw, 56px)' }} />
             </h1>
             <div
               className="w-12 h-px mb-6"
@@ -88,8 +88,8 @@ export function RegisterPage() {
       >
         <div className="w-full max-w-[340px] sm:max-w-sm">
           <div className="lg:hidden mb-10 text-center">
-            <img src="/WWWD_logo_clean.svg" alt="WWWD" className="dark:hidden mx-auto h-12" />
-            <img src="/WWWD_logo_inverted.svg" alt="WWWD" className="hidden dark:block mx-auto h-12" />
+            <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden mx-auto" style={{ height: '36px' }} />
+            <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block mx-auto" style={{ height: '36px' }} />
           </div>
 
           <div className="mb-8">
@@ -177,7 +177,7 @@ export function RegisterPage() {
           </p>
 
           <p className="mt-8 text-center text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} World Wear Watch Daily. All rights reserved.
+            &copy; {new Date().getFullYear()} aimoda. All rights reserved.
           </p>
         </div>
       </div>

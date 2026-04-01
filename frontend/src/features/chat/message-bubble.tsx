@@ -2,12 +2,10 @@
 // Each block is rendered independently: text bubbles, tool cards, search results
 
 import { Fragment, useMemo, useState } from 'react'
-import { Search, Filter, X, Eye, Images, Palette, BarChart3, Info, Loader2, CheckCircle2, ChevronDown, ChevronRight } from 'lucide-react'
-import type { ChatMessage, ContentBlock, SearchResultData, SearchSessionState, ImageResult } from './chat-types'
+import { Search, Filter, X, Eye, Images, Palette, BarChart3, Info, Loader2, CheckCircle2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
+import type { ChatMessage, ContentBlock, ImageSource, SearchResultData, ImageResult, FashionVisionResultData } from './chat-types'
 import { SearchResultCard } from './search-result-card'
 import { ChatMarkdown } from './chat-markdown'
-
-// ── Tool icon/label maps ──────────────────────────────────────
 
 const toolIcons: Record<string, typeof Search> = {
   search: Search,
@@ -19,6 +17,7 @@ const toolIcons: Record<string, typeof Search> = {
   remove_filter: X,
   peek_collection: Eye,
   show_collection: Images,
+  fashion_vision: Sparkles,
 }
 
 const toolLabels: Record<string, string> = {
@@ -31,77 +30,83 @@ const toolLabels: Record<string, string> = {
   remove_filter: '移除过滤条件',
   peek_collection: '后台自查',
   show_collection: '检索结果',
+  fashion_vision: '时尚视觉分析',
 }
 
-// ── Helpers ───────────────────────────────────────────────────
-
-/** Extract plain text from a ContentBlock array */
-function extractText(blocks: ContentBlock[]): string {
-  return blocks
-    .filter(b => b.type === 'text')
-    .map(b => (b as { type: 'text'; text: string }).text)
-    .join('')
-}
-
-/** Try to parse show_collection JSON from tool_result content */
 function parseShowCollectionResult(content: string): SearchResultData | null {
   try {
     const data = JSON.parse(content)
-    if (data?.action === 'show_collection' && data?.search_request) {
+    if (data?.action === 'show_collection' && typeof data?.search_request_id === 'string') {
       return data as SearchResultData
     }
-  } catch { /* not JSON or not show_collection */ }
+  } catch {}
   return null
 }
 
-/** Extract a summary from a tool result JSON string */
+function parseFashionVisionResult(content: string): FashionVisionResultData | null {
+  try {
+    const data = JSON.parse(content)
+    if (
+      data &&
+      typeof data === 'object' &&
+      data.analysis &&
+      typeof data.analysis === 'object' &&
+      typeof data.analysis.retrieval_query_en === 'string'
+    ) {
+      return data as FashionVisionResultData
+    }
+  } catch {}
+  return null
+}
+
 function parseToolResultSummary(content: string): string {
   try {
     const data = JSON.parse(content)
     if (typeof data === 'object' && data !== null) {
-      // Common patterns
-      if (data.message) return data.message
-      if (data.status) return `${data.status}${data.total != null ? ` (${data.total})` : ''}`
-      if (data.action) return `${data.action}${data.remaining != null ? ` — ${data.remaining} 结果` : ''}`
-      if (data.error) return `错误: ${data.error}`
-      return JSON.stringify(data).slice(0, 120) + (JSON.stringify(data).length > 120 ? '...' : '')
+      if ('message' in data && typeof data.message === 'string') return data.message
+      if ('status' in data && typeof data.status === 'string') return `${data.status}${data.total != null ? ` (${String(data.total)})` : ''}`
+      if ('action' in data && typeof data.action === 'string') return `${data.action}${data.remaining != null ? ` — ${String(data.remaining)} 结果` : ''}`
+      if ('error' in data && typeof data.error === 'string') return `错误: ${data.error}`
+      const compact = JSON.stringify(data)
+      return compact.length > 120 ? `${compact.slice(0, 120)}...` : compact
     }
-  } catch { /* plain text */ }
-  return content.length > 120 ? content.slice(0, 120) + '...' : content
+  } catch {}
+  return content.length > 120 ? `${content.slice(0, 120)}...` : content
 }
 
-/** Build summary for tool_use args */
 function buildArgsSummary(name: string, args: Record<string, unknown>): string {
-  if (args.query) return `"${args.query}"`
+  if (args.query) return `"${String(args.query)}"`
   if (name === 'add_filter' || name === 'remove_filter') {
     const dim = args.dimension ? String(args.dimension) : ''
-    const val = args.value ? `="${args.value}"` : ''
-    const cat = args.category ? ` (${args.category})` : ''
+    const val = args.value ? `="${String(args.value)}"` : ''
+    const cat = args.category ? ` (${String(args.category)})` : ''
     return `${dim}${val}${cat}`
   }
   return ''
 }
 
-// ── Props ─────────────────────────────────────────────────────
+function resolveImageSrc(source: ImageSource): string {
+  if (source.type === 'url') return source.url
+  return `data:${source.media_type};base64,${source.data}`
+}
 
 interface MessageBubbleProps {
   msg: ChatMessage
-  onOpenDrawer?: (searchRequest: SearchSessionState) => void
+  onOpenDrawer?: (searchRequestId: string) => void
 }
 
 type RenderSegment =
   | { kind: 'block'; block: ContentBlock; key: string }
   | { kind: 'tool_group'; blocks: ContentBlock[]; key: string }
 
-// ── Component ─────────────────────────────────────────────────
-
 export function MessageBubble({ msg, onOpenDrawer }: MessageBubbleProps) {
   if (msg.role === 'user') {
-    const text = extractText(msg.content)
     return (
       <div className="flex justify-end mb-5 animate-in fade-in slide-in-from-bottom-1 duration-normal">
-        <div className="bg-primary text-primary-foreground rounded-bubble rounded-br-sm px-4 py-2.5 max-w-[70%] sm:max-w-[75%] shadow-sm text-sm">
-          {text}
+        <div className="max-w-[70%] sm:max-w-[75%] space-y-2">
+          {msg.content.map((block, index) => (
+            <UserBlockRenderer key={`user-block-${index}`} block={block} />
+          ))}
         </div>
       </div>
     )
@@ -109,7 +114,6 @@ export function MessageBubble({ msg, onOpenDrawer }: MessageBubbleProps) {
 
   const segments = buildRenderSegments(msg.content)
 
-  // Assistant: render each ContentBlock independently
   return (
     <div className="flex justify-start mb-5 animate-in fade-in slide-in-from-bottom-1 duration-normal">
       <div className="max-w-[85%] sm:max-w-[88%] w-full space-y-2">
@@ -127,6 +131,36 @@ export function MessageBubble({ msg, onOpenDrawer }: MessageBubbleProps) {
   )
 }
 
+function UserBlockRenderer({ block }: { block: ContentBlock }) {
+  if (block.type === 'text') {
+    return block.text ? (
+      <div className="bg-primary text-primary-foreground rounded-bubble rounded-br-sm px-4 py-2.5 shadow-sm text-sm whitespace-pre-wrap">
+        {block.text}
+      </div>
+    ) : null
+  }
+
+  if (block.type === 'image') {
+    return (
+      <img
+        src={resolveImageSrc(block.source)}
+        alt={block.alt_text || block.file_name || 'uploaded image'}
+        className="max-h-72 rounded-2xl object-cover border border-border bg-card shadow-sm ml-auto"
+      />
+    )
+  }
+
+  if (block.type === 'document') {
+    return (
+      <div className="rounded-xl border border-white/15 bg-primary text-primary-foreground/90 px-3 py-2 text-xs shadow-sm">
+        已上传文件{block.file_name ? `：${block.file_name}` : ''}
+      </div>
+    )
+  }
+
+  return null
+}
+
 function buildRenderSegments(blocks: ContentBlock[]): RenderSegment[] {
   const segments: RenderSegment[] = []
   let pendingToolBlocks: ContentBlock[] = []
@@ -137,7 +171,7 @@ function buildRenderSegments(blocks: ContentBlock[]): RenderSegment[] {
         (block): block is Extract<ContentBlock, { type: 'tool_result' }> =>
           block.type === 'tool_result' && Boolean(parseShowCollectionResult(block.content)),
       )
-      .map(block => block.tool_use_id),
+      .map((block) => block.tool_use_id),
   )
 
   const flushToolGroup = () => {
@@ -178,27 +212,35 @@ function isCollapsibleToolTrace(block: ContentBlock): boolean {
   return false
 }
 
-// ── Block Renderer ────────────────────────────────────────────
-
 function BlockRenderer({
   block,
   onOpenDrawer,
 }: {
   block: ContentBlock
-  onOpenDrawer?: (searchRequest: SearchSessionState) => void
+  onOpenDrawer?: (searchRequestId: string) => void
 }) {
-  if (block.type === 'text') {
-    return <TextBlockView block={block} />
+  if (block.type === 'text') return <TextBlockView block={block} />
+  if (block.type === 'image') {
+    return (
+      <img
+        src={resolveImageSrc(block.source)}
+        alt={block.alt_text || block.file_name || 'assistant image'}
+        className="max-h-72 rounded-2xl border border-border bg-card object-cover shadow-sm"
+      />
+    )
+  }
+  if (block.type === 'document') {
+    return (
+      <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground shadow-sm">
+        文件{block.file_name ? `：${block.file_name}` : ''}
+      </div>
+    )
   }
   if (block.type === 'tool_use') {
-    if (block.name === 'show_collection') {
-      return <ShowCollectionPendingCard />
-    }
+    if (block.name === 'show_collection') return <ShowCollectionPendingCard />
     return <ToolCallCard block={block} />
   }
-  if (block.type === 'tool_result') {
-    return <ToolResultView block={block} onOpenDrawer={onOpenDrawer} />
-  }
+  if (block.type === 'tool_result') return <ToolResultView block={block} onOpenDrawer={onOpenDrawer} />
   return null
 }
 
@@ -220,25 +262,6 @@ function ShowCollectionPendingCard() {
           <span className="text-xs text-muted-foreground">正在生成结果</span>
         </div>
       </div>
-      <div className="px-4 pb-4">
-        <div className="border border-border/60 bg-muted/25 p-2.5">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="h-3 w-16 rounded bg-muted animate-pulse" />
-            <div className="h-3 w-10 rounded bg-muted/80 animate-pulse" />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="space-y-1 min-w-0">
-                <div
-                  className="bg-muted overflow-hidden relative border border-border/60 animate-pulse"
-                  style={{ aspectRatio: '1 / 2' }}
-                />
-                <div className="h-2.5 w-12 rounded bg-muted/80 animate-pulse" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
@@ -248,16 +271,16 @@ function ToolTraceGroup({
   onOpenDrawer,
 }: {
   blocks: ContentBlock[]
-  onOpenDrawer?: (searchRequest: SearchSessionState) => void
+  onOpenDrawer?: (searchRequestId: string) => void
 }) {
   const [collapsed, setCollapsed] = useState(true)
-  const toolCount = blocks.filter(block => block.type === 'tool_use').length
+  const toolCount = blocks.filter((block) => block.type === 'tool_use').length
 
   return (
     <div className="rounded-bubble border border-border/70 bg-muted/20 overflow-hidden">
       <button
         type="button"
-        onClick={() => setCollapsed(prev => !prev)}
+        onClick={() => setCollapsed((prev) => !prev)}
         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/40 transition-colors"
       >
         <div className="flex items-center gap-2">
@@ -279,8 +302,6 @@ function ToolTraceGroup({
   )
 }
 
-// ── Text Block ────────────────────────────────────────────────
-
 function TextBlockView({ block }: { block: { type: 'text'; text: string } }) {
   if (!block.text) return null
   return (
@@ -289,8 +310,6 @@ function TextBlockView({ block }: { block: { type: 'text'; text: string } }) {
     </div>
   )
 }
-
-// ── Tool Call Card ────────────────────────────────────────────
 
 function ToolCallCard({ block }: { block: { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; status?: 'running' | 'done' } }) {
   const IconComp = toolIcons[block.name] || Search
@@ -305,44 +324,31 @@ function ToolCallCard({ block }: { block: { type: 'tool_use'; id: string; name: 
       </div>
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <span className="text-xs font-medium text-foreground/70">{label}</span>
-        {summary && (
-          <span className="text-xs text-muted-foreground truncate">{summary}</span>
-        )}
+        {summary && <span className="text-xs text-muted-foreground truncate">{summary}</span>}
       </div>
-      {isDone
-        ? <CheckCircle2 size={12} className="text-success shrink-0" />
-        : <Loader2 size={12} className="text-muted-foreground animate-spin shrink-0 opacity-50" />
-      }
+      {isDone ? <CheckCircle2 size={12} className="text-success shrink-0" /> : <Loader2 size={12} className="text-muted-foreground animate-spin shrink-0 opacity-50" />}
     </div>
   )
 }
-
-// ── Tool Result View ──────────────────────────────────────────
 
 function ToolResultView({
   block,
   onOpenDrawer,
 }: {
   block: { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean; images?: ImageResult[]; metadata?: Record<string, unknown> }
-  onOpenDrawer?: (searchRequest: SearchSessionState) => void
+  onOpenDrawer?: (searchRequestId: string) => void
 }) {
-  // Check if this is a show_collection result
-  const showCollectionData = useMemo(
-    () => parseShowCollectionResult(block.content),
-    [block.content],
-  )
+  const showCollectionData = useMemo(() => parseShowCollectionResult(block.content), [block.content])
+  const fashionVisionData = useMemo(() => parseFashionVisionResult(block.content), [block.content])
 
   if (showCollectionData && onOpenDrawer) {
-    return (
-      <SearchResultCard
-        data={showCollectionData}
-        images={block.images}
-        onOpenDrawer={onOpenDrawer}
-      />
-    )
+    return <SearchResultCard data={showCollectionData} images={block.images} onOpenDrawer={onOpenDrawer} />
   }
 
-  // Generic tool result — compact summary
+  if (fashionVisionData) {
+    return <FashionVisionCard data={fashionVisionData} />
+  }
+
   if (block.is_error) {
     return (
       <div className="py-1 px-3 ml-3 text-xs border-l-2 border-destructive/50 text-destructive">
@@ -351,10 +357,83 @@ function ToolResultView({
     )
   }
 
-  const summary = parseToolResultSummary(block.content)
   return (
     <div className="py-1 px-3 ml-3 text-xs border-l-2 border-muted-foreground/30 text-muted-foreground">
-      {summary}
+      {parseToolResultSummary(block.content)}
+    </div>
+  )
+}
+
+function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
+  const analysis = data.analysis
+  const filterEntries = [
+    ...analysis.hard_filters.category.map((value) => ({ label: '品类', value })),
+    ...analysis.hard_filters.color.map((value) => ({ label: '颜色', value })),
+    ...analysis.hard_filters.fabric.map((value) => ({ label: '面料', value })),
+    ...(analysis.hard_filters.gender ? [{ label: '性别', value: analysis.hard_filters.gender }] : []),
+    ...analysis.hard_filters.season.map((value) => ({ label: '季节', value })),
+  ]
+
+  return (
+    <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <Sparkles size={16} className="text-primary" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-foreground">时尚视觉分析</div>
+            <div className="text-xs text-muted-foreground">
+              {data.image_count ? `${data.image_count} 张图` : '图片分析'}
+              {data.model ? ` · ${data.model}` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {analysis.summary_zh && <div className="text-sm leading-6 text-foreground">{analysis.summary_zh}</div>}
+
+      {analysis.retrieval_query_en && (
+        <div className="rounded-xl bg-muted/60 px-3 py-2 border border-border/60">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Retrieval Query</div>
+          <div className="text-sm text-foreground break-words">{analysis.retrieval_query_en}</div>
+        </div>
+      )}
+
+      {analysis.style_keywords.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {analysis.style_keywords.map((keyword) => (
+            <span key={keyword} className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary">
+              {keyword}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {filterEntries.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">建议硬过滤条件</div>
+          <div className="flex flex-wrap gap-2">
+            {filterEntries.map((item, index) => (
+              <span key={`${item.label}-${item.value}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+                <span className="text-muted-foreground">{item.label}</span>
+                <span>{item.value}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {analysis.follow_up_questions_zh.length > 0 && (
+        <div className="rounded-xl border border-dashed border-border px-3 py-2">
+          <div className="text-xs font-medium text-muted-foreground mb-1">可追问</div>
+          <div className="space-y-1">
+            {analysis.follow_up_questions_zh.map((question) => (
+              <div key={question} className="text-xs text-foreground/80">{question}</div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

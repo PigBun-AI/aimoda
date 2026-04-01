@@ -1,52 +1,86 @@
-from ..database import get_db
-from ..models import ReportRecord, ReportMetadata
+"""
+Report Repository — PostgreSQL-backed CRUD for reports.
+
+Migrated from SQLite to PostgreSQL (shared fashion_chat database).
+Uses psycopg v3 (same pattern as chat_service.py).
+"""
+
+import json
+
+import psycopg
+
+from ..config import settings
+from ..models import ReportRecord
+
+
+def _get_pg_conn():
+    """Get a PostgreSQL connection."""
+    return psycopg.connect(settings.POSTGRES_DSN)
 
 
 def _map_report(row) -> ReportRecord:
+    """Map a psycopg Row to ReportRecord."""
     return ReportRecord(
-        id=row["id"],
-        slug=row["slug"],
-        title=row["title"],
-        brand=row["brand"],
-        season=row["season"],
-        year=row["year"],
-        look_count=row["look_count"],
-        path=row["path"],
-        uploaded_by=row["uploaded_by"],
-        metadata_json=row["metadata_json"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+        id=row[0],
+        slug=row[1],
+        title=row[2],
+        brand=row[3],
+        season=row[4],
+        year=row[5],
+        look_count=row[6],
+        index_url=row[7],
+        overview_url=row[8],
+        cover_url=row[9],
+        oss_prefix=row[10],
+        uploaded_by=row[11],
+        metadata_json=json.dumps(row[12]) if row[12] else None,
+        created_at=row[13].isoformat() if row[13] else "",
+        updated_at=row[14].isoformat() if row[14] else "",
     )
 
 
+_REPORT_COLUMNS = """
+    id, slug, title, brand, season, year, look_count,
+    index_url, overview_url, cover_url, oss_prefix,
+    uploaded_by, metadata_json, created_at, updated_at
+"""
+
+
 def find_report_by_slug(slug: str) -> ReportRecord | None:
-    db = get_db()
-    row = db.execute("SELECT * FROM reports WHERE slug = ?", (slug,)).fetchone()
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            f"SELECT {_REPORT_COLUMNS} FROM reports WHERE slug = %s",
+            (slug,),
+        ).fetchone()
     return _map_report(row) if row else None
 
 
 def find_report_by_id(report_id: int) -> ReportRecord | None:
-    db = get_db()
-    row = db.execute("SELECT * FROM reports WHERE id = ?", (report_id,)).fetchone()
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            f"SELECT {_REPORT_COLUMNS} FROM reports WHERE id = %s",
+            (report_id,),
+        ).fetchone()
     return _map_report(row) if row else None
 
 
 def list_reports(page: int = 1, limit: int = 12) -> tuple[list[ReportRecord], int]:
-    db = get_db()
     offset = (page - 1) * limit
-    count_row = db.execute("SELECT COUNT(*) as total FROM reports").fetchone()
-    total = count_row["total"]
-    rows = db.execute(
-        "SELECT * FROM reports ORDER BY id DESC LIMIT ? OFFSET ?", (limit, offset)
-    ).fetchall()
+    with _get_pg_conn() as conn:
+        count_row = conn.execute("SELECT COUNT(*) FROM reports").fetchone()
+        total = count_row[0] if count_row else 0
+        rows = conn.execute(
+            f"SELECT {_REPORT_COLUMNS} FROM reports ORDER BY id DESC LIMIT %s OFFSET %s",
+            (limit, offset),
+        ).fetchall()
     return [_map_report(r) for r in rows], total
 
 
 def delete_report_by_id(report_id: int) -> bool:
-    db = get_db()
-    cursor = db.execute("DELETE FROM reports WHERE id = ?", (report_id,))
-    db.commit()
-    return cursor.rowcount > 0
+    with _get_pg_conn() as conn:
+        result = conn.execute("DELETE FROM reports WHERE id = %s", (report_id,))
+        conn.commit()
+        return result.rowcount > 0
 
 
 def create_report(
@@ -56,16 +90,29 @@ def create_report(
     season: str,
     year: int,
     look_count: int,
-    path: str,
+    index_url: str,
+    overview_url: str | None,
+    cover_url: str | None,
+    oss_prefix: str,
     uploaded_by: int,
-    metadata_json: str | None,
+    metadata_json: dict | None,
 ) -> ReportRecord:
-    db = get_db()
-    cursor = db.execute(
-        """INSERT INTO reports (slug, title, brand, season, year, look_count, path, uploaded_by, metadata_json)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (slug, title, brand, season, year, look_count, path, uploaded_by, metadata_json),
-    )
-    db.commit()
-    row = db.execute("SELECT * FROM reports WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            f"""
+            INSERT INTO reports
+                (slug, title, brand, season, year, look_count,
+                 index_url, overview_url, cover_url, oss_prefix,
+                 uploaded_by, metadata_json)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING {_REPORT_COLUMNS}
+            """,
+            (
+                slug, title, brand, season, year, look_count,
+                index_url, overview_url, cover_url, oss_prefix,
+                uploaded_by,
+                psycopg.types.json.Json(metadata_json) if metadata_json else None,
+            ),
+        ).fetchone()
+        conn.commit()
     return _map_report(row)

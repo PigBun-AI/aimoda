@@ -1,4 +1,5 @@
 import { calculateBackgroundCropStyle } from './crop-utils'
+import { getOssThumbnailUrl } from './oss-image'
 import type { ImageResult } from './chat-types'
 
 interface FashionImageProps {
@@ -8,11 +9,12 @@ interface FashionImageProps {
 }
 
 export function FashionImage({ image, className, fallbackClassName }: FashionImageProps) {
-  const cropStyle = calculateBackgroundCropStyle(image.object_area, image.image_url)
+  const thumbnailUrl = getOssThumbnailUrl(image.image_url, 400)
+  const cropStyle = calculateBackgroundCropStyle(image.object_area, image.image_url, 400)
   const style: React.CSSProperties = cropStyle.backgroundSize
     ? cropStyle
     : {
-        backgroundImage: `url(${image.image_url})`,
+        backgroundImage: `url(${thumbnailUrl})`,
         backgroundRepeat: 'no-repeat',
         backgroundSize: 'cover',
         backgroundPosition: 'center',

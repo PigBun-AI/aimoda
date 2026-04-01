@@ -69,9 +69,12 @@ class ReportRecord(CamelModel):
     season: str
     year: int
     look_count: int
-    path: str
-    uploaded_by: int | None
-    metadata_json: str | None
+    index_url: str
+    overview_url: str | None = None
+    cover_url: str | None = None
+    oss_prefix: str
+    uploaded_by: int | None = None
+    metadata_json: str | None = None
     created_at: str
     updated_at: str
 

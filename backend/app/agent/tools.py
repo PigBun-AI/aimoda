@@ -1,471 +1,192 @@
 """
-Fashion Search Agent Tools — Qdrant-based search tools for LangGraph.
+Fashion Search Agent Tools — LangGraph tool definitions.
 
-Migrated from temp/agent/tools.py (v5 Database-First Architecture).
-Key changes from MVP:
-  - Qdrant connection from settings (not hardcoded localhost)
-  - Session state passed via LangGraph State (not global _session)
-  - color_utils inlined from agent.color_utils
-  - Embedding stub (raises clear error if pipeline not available)
-
-Tools:
-  1. start_collection — Begin filtering session
-  2. add_filter — Progressive filter narrowing
-  3. remove_filter — Undo a filter
-  4. peek_collection — Self-check (no display)
-  5. show_collection — Final result display
-  6. explore_colors — Color palette exploration
-  7. analyze_trends — Aggregated statistics
-  8. get_image_details — Single image detail lookup
+Tool functions for the AI agent. Infrastructure and session
+management are imported from:
+  - qdrant_utils: Qdrant client, filters, formatting, vector search
+  - session_state: Thread-based session management
+  - color_utils: Color keyword matching and Delta-E calculations
 """
 
+import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
 from langchain_core.tools import tool, InjectedToolArg
 from langchain_core.runnables import RunnableConfig
-from qdrant_client import QdrantClient
-from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny, Range
+from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny
 
-from .color_utils import (
-    COLOR_KEYWORDS,
-    hex_to_lab,
-    color_distance,
-    color_matches,
+from .qdrant_utils import (
+    get_qdrant,
+    get_collection,
+    encode_text,
+    encode_image,
+    apply_aesthetic_boost,
+    build_qdrant_filter,
+    format_result,
+    build_guidance,
+    scroll_all,
 )
+from .session_state import (
+    get_session,
+    set_session,
+    get_thread_id,
+    build_session_filter,
+    count_session,
+    apply_session_filters,
+    available_values,
+)
+from .color_utils import COLOR_KEYWORDS, color_matches
+from ..services.chat_service import create_artifact
+from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
+from .query_context import get_query_context, average_embeddings, get_session_image_blocks
 
-# ═══════════════════════════════════════════════════════════════
-#  Shared Infrastructure
-# ═══════════════════════════════════════════════════════════════
-
-_qdrant: QdrantClient | None = None
-
-
-def get_qdrant() -> QdrantClient:
-    """Get or create Qdrant client from settings."""
-    global _qdrant
-    if _qdrant is None:
-        from ..config import settings
-        _qdrant = QdrantClient(
-            url=settings.QDRANT_URL,
-            api_key=settings.QDRANT_API_KEY,
-        )
-    return _qdrant
-
-
-def _get_collection() -> str:
-    """Get the Qdrant collection name from settings."""
-    from ..config import settings
-    return settings.QDRANT_COLLECTION
-
-
-import httpx
-
-_embedding_client: httpx.Client | None = None
-
-
-def _get_embedding_client() -> httpx.Client:
-    """Get or create a reusable HTTP client for embedding requests."""
-    global _embedding_client
-    if _embedding_client is None:
-        _embedding_client = httpx.Client(timeout=30.0)
-    return _embedding_client
+# ── Backward-compatible aliases used by routers and other modules ──
+_format_result = format_result
+_get_collection = get_collection
+_encode_text = encode_text
+_encode_image = encode_image
+_apply_aesthetic_boost = apply_aesthetic_boost
+_build_qdrant_filter = build_qdrant_filter
+_build_guidance = build_guidance
+_scroll_all = scroll_all
+_get_session = get_session
+_set_session = set_session
+_build_session_filter = build_session_filter
+_count_session = count_session
+_apply_session_filters = apply_session_filters
+_available_values = available_values
 
 
-def _encode_text(text: str) -> list[float]:
-    """Encode text to embedding vector via OpenAI-compatible endpoint.
-
-    Uses Marqo/marqo-fashionSigLIP model (768-dim) at the configured
-    embedding URL. Supports both text and image inputs.
-    """
-    from ..config import settings
-    client = _get_embedding_client()
-    resp = client.post(
-        f"{settings.EMBEDDING_URL}/v1/embeddings",
-        json={"model": settings.EMBEDDING_MODEL, "input": text},
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data["data"][0]["embedding"]
+def _session_id_from_config(config: RunnableConfig | None) -> str | None:
+    if not config:
+        return None
+    thread_id = get_thread_id(config)
+    if ":" not in thread_id:
+        return None
+    return thread_id.split(":", 1)[1]
 
 
-# ── Negative prompt aesthetic boost ──
-_NEGATIVE_PROMPT = ("low quality, amateur photography, poor lighting, "
-                    "unflattering angle, blurry, bad composition, portrait, fat")
-_AESTHETIC_ALPHA = 1.0
-_neg_embedding: list[float] | None = None
-
-
-def _get_negative_embedding() -> list[float]:
-    """Get (and cache) the negative prompt embedding for aesthetic boost."""
-    global _neg_embedding
-    if _neg_embedding is None:
-        _neg_embedding = _encode_text(_NEGATIVE_PROMPT)
-    return _neg_embedding
-
-
-def _apply_aesthetic_boost(v_pos: list[float]) -> list[float]:
-    """Apply negative prompt vector arithmetic: normalize(v_pos - α * v_neg).
-
-    Pushes query embedding away from low-quality image characteristics,
-    resulting in higher-aesthetic results ranking first.
-    """
-    import math
-    v_neg = _get_negative_embedding()
-    result = [p - _AESTHETIC_ALPHA * n for p, n in zip(v_pos, v_neg)]
-    norm = math.sqrt(sum(x * x for x in result))
+def _normalize_vector(vector: list[float]) -> list[float]:
+    norm = sum(value * value for value in vector) ** 0.5
     if norm < 1e-9:
-        return result
-    return [x / norm for x in result]
+        return vector
+    return [value / norm for value in vector]
 
 
-def _build_qdrant_filter(
-    categories=None, brand=None, gender=None, top_categories=None,
-    season=None, year_min=None, image_type=None,
-    garment_tags=None,
-) -> Filter | None:
-    """Build Qdrant filter using ALL available database indexes."""
-    conditions = []
-    if brand:
-        conditions.append(FieldCondition(key="brand", match=MatchValue(value=brand.lower())))
-    if gender:
-        conditions.append(FieldCondition(key="gender", match=MatchValue(value=gender.lower())))
-    if image_type:
-        conditions.append(FieldCondition(key="image_type", match=MatchValue(value=image_type)))
-    if categories and not garment_tags:
-        conditions.append(FieldCondition(
-            key="categories", match=MatchAny(any=[c.lower() for c in categories])
-        ))
-    if top_categories:
-        conditions.append(FieldCondition(
-            key="top_categories", match=MatchAny(any=[tc.lower() for tc in top_categories])
-        ))
-    if season:
-        conditions.append(FieldCondition(
-            key="season", match=MatchAny(any=[s.lower() for s in season])
-        ))
-    if year_min:
-        conditions.append(FieldCondition(key="year", range=Range(gte=year_min)))
-    if garment_tags:
-        conditions.append(FieldCondition(
-            key="garment_tags", match=MatchAny(any=[t.lower() for t in garment_tags])
-        ))
-    return Filter(must=conditions) if conditions else None
+def _fuse_query_vectors(
+    *,
+    text_vector: list[float] | None,
+    image_vector: list[float] | None,
+) -> list[float] | None:
+    if text_vector is None and image_vector is None:
+        return None
+    if text_vector is None:
+        return _normalize_vector(image_vector or [])
+    if image_vector is None:
+        return _normalize_vector(text_vector)
+
+    # Image dominates retrieval intent; text acts as a precision hint.
+    weight_image = 0.7
+    weight_text = 0.3
+    fused = [
+        weight_image * image_value + weight_text * text_value
+        for image_value, text_value in zip(image_vector, text_vector)
+    ]
+    return _normalize_vector(fused)
 
 
-def _select_vector_type(query: str, style_keywords: list | None,
-                        has_garment_attrs: bool) -> str:
-    """Select best vector type based on query nature."""
-    has_style = style_keywords and len(style_keywords) > 0
-    if has_style and not has_garment_attrs:
-        return "fashion_clip"
-    return "tag"
-
-
-def _format_result(payload: dict, score: float = 0) -> dict:
-    garments_summary = []
-    for g in payload.get("garments", []):
-        garments_summary.append({
-            "name": g.get("name", ""),
-            "category": g.get("category", ""),
-            "pattern": g.get("pattern", ""),
-            "fabric": g.get("fabric", ""),
-            "silhouette": g.get("silhouette", ""),
-            "sleeve_length": g.get("sleeve", ""),
-            "garment_length": g.get("length", ""),
-            "collar": g.get("collar", ""),
-            "colors": [c.get("name", "") for c in g.get("colors", [])],
-        })
-
-    # Convert Qdrant person_bbox [x1,y1,x2,y2] (0-1) to aimoda-web bbox_range_percent format
-    bbox = payload.get("person_bbox")
-    object_area = None
-    if bbox and isinstance(bbox, (list, tuple)) and len(bbox) == 4:
-        try:
-            x1, y1, x2, y2 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
-            if 0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1:
-                object_area = {
-                    "bbox_range_percent": {
-                        "startX_percent": x1 * 100,
-                        "startY_percent": y1 * 100,
-                        "endX_percent": x2 * 100,
-                        "endY_percent": y2 * 100,
-                    },
-                    "image_width": 1000,
-                    "image_height": 1500,
-                }
-        except (ValueError, TypeError):
-            pass
-
+def _compact_fashion_vision_result(analysis: dict) -> dict:
+    merged = analysis.get("merged_understanding", {}) if isinstance(analysis, dict) else {}
+    hard_filters = merged.get("hard_filters", {}) if isinstance(merged, dict) else {}
     return {
-        "image_url": payload.get("image_url", ""),
-        "image_id": payload.get("image_id", ""),
-        "score": round(score, 4) if score else 0,
-        "brand": payload.get("brand", ""),
-        "style": payload.get("style", ""),
-        "gender": payload.get("gender", ""),
-        "season": payload.get("season", ""),
-        "year": payload.get("year", 0),
-        "garments": garments_summary,
-        "colors": [c.get("color_name", "") for c in payload.get("extracted_colors", [])],
-        "object_area": object_area,
+        "summary_zh": merged.get("summary_zh", ""),
+        "retrieval_query_en": merged.get("retrieval_query_en", ""),
+        "style_keywords": merged.get("style_keywords", []),
+        "hard_filters": {
+            "category": hard_filters.get("category", []),
+            "color": hard_filters.get("color", []),
+            "fabric": hard_filters.get("fabric", []),
+            "gender": hard_filters.get("gender", ""),
+            "season": hard_filters.get("season", []),
+        },
+        "follow_up_questions_zh": merged.get("follow_up_questions_zh", []),
     }
 
 
-def _build_guidance(client, base_filter_conditions: list, user_color: str | None,
-                    user_categories: list | None) -> dict:
-    """When 0 results, analyze what IS available and return structured guidance."""
-    collection = _get_collection()
-    guidance = {"reason": "No matching items found in database."}
+def _run_coro_sync(coro):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
 
-    if user_categories:
-        cat_filter = Filter(must=[
-            FieldCondition(key="categories", match=MatchAny(any=[c.lower() for c in user_categories]))
-        ])
-        pts = _scroll_all(client, collection, scroll_filter=cat_filter)
-        color_counter = {}
-        for p in pts:
-            for fam in p.payload.get("color_families", []):
-                color_counter[fam] = color_counter.get(fam, 0) + 1
-        available = sorted(color_counter.items(), key=lambda x: -x[1])[:10]
-        guidance["available_colors_for_category"] = [
-            {"color": c, "count": n} for c, n in available
-        ]
-
-    if user_color:
-        color_filter = Filter(must=[
-            FieldCondition(key="color_families", match=MatchAny(any=[user_color.lower()]))
-        ])
-        pts = _scroll_all(client, collection, scroll_filter=color_filter)
-        cat_counter = {}
-        for p in pts:
-            for cat in p.payload.get("categories", []):
-                cat_counter[cat] = cat_counter.get(cat, 0) + 1
-        available = sorted(cat_counter.items(), key=lambda x: -x[1])[:10]
-        guidance["available_categories_for_color"] = [
-            {"category": c, "count": n} for c, n in available
-        ]
-
-    return guidance
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
 
 
-# ═══════════════════════════════════════════════════════════════
-#  Collection Filtering — Progressive "filter panel" paradigm
-#  Session state is keyed by LangGraph thread_id so concurrent
-#  users never collide.  Tools receive the thread_id via
-#  RunnableConfig (injected automatically by LangGraph).
-# ═══════════════════════════════════════════════════════════════
+@tool
+def fashion_vision(
+    user_request: str = "",
+    config: Annotated[RunnableConfig, InjectedToolArg] = None,
+) -> str:
+    """Analyze the session's latest uploaded image(s) with a fashion-focused VLM.
 
-_sessions: dict[str, dict] = {}   # thread_id → session state
-
-_EMPTY_SESSION: dict = {
-    "query": "",
-    "vector_type": "tag",
-    "q_emb": None,
-    "filters": [],
-    "active": False,
-}
-
-MAX_SCROLL = 2000   # safety cap for paginated scroll
-SCROLL_PAGE = 500   # points per scroll page
-
-
-def _get_thread_id(config: RunnableConfig) -> str:
-    """Extract thread_id from LangGraph RunnableConfig."""
-    return config.get("configurable", {}).get("thread_id", "__default__")
-
-
-def _get_session(config: RunnableConfig) -> dict:
-    """Get the session dict for the current thread."""
-    tid = _get_thread_id(config)
-    return _sessions.get(tid, dict(_EMPTY_SESSION))
-
-
-def _set_session(config: RunnableConfig, session: dict) -> None:
-    """Store the session dict for the current thread."""
-    tid = _get_thread_id(config)
-    _sessions[tid] = session
-
-
-def _scroll_all(client, collection: str, scroll_filter=None,
-                max_results: int = MAX_SCROLL) -> list:
-    """Paginated scroll that fetches up to *max_results* points.
-
-    Uses Qdrant's offset-based pagination (next page offset returned
-    from each scroll call) so we are not limited to a single page.
+    Use this whenever the user's request depends on understanding uploaded images.
+    The tool returns compact structured JSON optimized for retrieval planning.
     """
-    all_pts: list = []
-    next_offset = None
-    while len(all_pts) < max_results:
-        batch_size = min(SCROLL_PAGE, max_results - len(all_pts))
-        pts, next_offset = client.scroll(
-            collection,
-            scroll_filter=scroll_filter,
-            limit=batch_size,
-            offset=next_offset,
-            with_payload=True,
-            with_vectors=False,
+    thread_id = get_thread_id(config)
+    image_blocks = get_session_image_blocks(thread_id)
+    if not image_blocks:
+        return json.dumps({
+            "ok": False,
+            "error": "No uploaded images found in the current session.",
+        }, ensure_ascii=False)
+
+    try:
+        analysis = _run_coro_sync(analyze_fashion_images(image_blocks, user_request=user_request))
+    except FashionVisionError as exc:
+        return json.dumps({
+            "ok": False,
+            "error": str(exc),
+        }, ensure_ascii=False)
+    except Exception as exc:
+        return json.dumps({
+            "ok": False,
+            "error": f"fashion_vision failed: {exc}",
+        }, ensure_ascii=False)
+
+    session_id = _session_id_from_config(config)
+    artifact_id = None
+    if session_id:
+        artifact = create_artifact(
+            session_id=session_id,
+            artifact_type="vision_analysis",
+            storage_type="database",
+            content=json.dumps(analysis, ensure_ascii=False),
+            metadata={
+                "kind": "vision_analysis",
+                "tool": "fashion_vision",
+                "source_image_count": len(image_blocks),
+                "model": analysis.get("model", ""),
+            },
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
         )
-        all_pts.extend(pts)
-        if next_offset is None or len(pts) < batch_size:
-            break  # no more pages
-    return all_pts
+        artifact_id = artifact["id"]
+
+    return json.dumps({
+        "ok": True,
+        "artifact_id": artifact_id,
+        "image_count": len(image_blocks),
+        "model": analysis.get("model", ""),
+        "analysis": _compact_fashion_vision_result(analysis),
+    }, ensure_ascii=False)
 
 
-def _build_session_filter(session):
-    """Build Qdrant filter from session filters. Returns (filter, category_values)."""
-    must_conditions = []
-    must_not_conditions = []
-
-    OUTER_LAYERS = {"jacket", "coat", "trench coat", "blazer", "cardigan",
-                    "vest", "poncho", "cape", "parka", "windbreaker"}
-    INNER_LAYERS = {"dress", "shirt", "t-shirt", "sweater", "blouse", "top",
-                    "turtleneck sweater", "polo shirt", "tank top", "camisole",
-                    "hoodie", "crop top"}
-
-    category_values = set()
-
-    for f in session["filters"]:
-        if f["type"] == "category":
-            category_values.add(f["value"].lower())
-            must_conditions.append(
-                FieldCondition(key="categories", match=MatchAny(any=[f["value"].lower()]))
-            )
-        elif f["type"] == "garment_tag":
-            must_conditions.append(
-                FieldCondition(key="garment_tags", match=MatchAny(any=[f["value"].lower()]))
-            )
-        elif f["type"] == "garment_attr":
-            must_conditions.append(
-                FieldCondition(key=f"garments[].{f['field']}",
-                               match=MatchValue(value=f["value"].lower()))
-            )
-        elif f["type"] == "meta":
-            key = f["key"]
-            val = f["value"]
-            if key == "season":
-                must_conditions.append(FieldCondition(key="season", match=MatchAny(any=[val.lower()])))
-            elif key == "year_min":
-                must_conditions.append(FieldCondition(key="year", range=Range(gte=int(val))))
-            else:
-                must_conditions.append(FieldCondition(key=key, match=MatchValue(value=val.lower())))
-
-    has_inner = category_values & INNER_LAYERS
-    has_outer = category_values & OUTER_LAYERS
-    if has_inner and not has_outer:
-        for outer in OUTER_LAYERS:
-            must_not_conditions.append(
-                FieldCondition(key="categories", match=MatchAny(any=[outer]))
-            )
-
-    qdrant_filter = Filter(
-        must=must_conditions if must_conditions else None,
-        must_not=must_not_conditions if must_not_conditions else None,
-    ) if must_conditions or must_not_conditions else None
-
-    return qdrant_filter
-
-
-def _count_session(client, session) -> int:
-    """Count matching images using Qdrant count() — fast, no payload transfer."""
-    collection = _get_collection()
-    qdrant_filter = _build_session_filter(session)
-    result = client.count(collection_name=collection, count_filter=qdrant_filter, exact=True)
-    return result.count
-
-
-def _apply_session_filters(client, session):
-    """Apply all current filters and return actual results. Use only when data is needed."""
-    collection = _get_collection()
-    qdrant_filter = _build_session_filter(session)
-
-    if session["q_emb"] is not None:
-        results = client.query_points(
-            collection_name=collection,
-            query=session["q_emb"],
-            using=session["vector_type"],
-            query_filter=qdrant_filter,
-            limit=200,     # Only used by peek_collection, no need for full dataset
-            with_payload=True,
-        )
-        return [p for p in results.points]
-    else:
-        return _scroll_all(client, collection, scroll_filter=qdrant_filter)
-
-
-def _available_values(client, dimension, category=None, current_filters=None):
-    """Find what values are available for a dimension given current filters."""
-    collection = _get_collection()
-    must_conditions = []
-    if current_filters:
-        for f in current_filters:
-            if f["type"] == "category":
-                must_conditions.append(
-                    FieldCondition(key="categories", match=MatchAny(any=[f["value"].lower()]))
-                )
-            elif f["type"] == "garment_tag":
-                must_conditions.append(
-                    FieldCondition(key="garment_tags", match=MatchAny(any=[f["value"].lower()]))
-                )
-            elif f["type"] == "garment_attr":
-                must_conditions.append(
-                    FieldCondition(key=f"garments[].{f['field']}",
-                                   match=MatchValue(value=f["value"].lower()))
-                )
-            elif f["type"] == "meta":
-                key = f["key"]
-                val = f["value"]
-                if key == "season":
-                    must_conditions.append(FieldCondition(key="season", match=MatchAny(any=[val.lower()])))
-                elif key == "year_min":
-                    must_conditions.append(FieldCondition(key="year", range=Range(gte=int(val))))
-                else:
-                    must_conditions.append(FieldCondition(key=key, match=MatchValue(value=val.lower())))
-
-    scroll_filter = Filter(must=must_conditions) if must_conditions else None
-    pts = _scroll_all(client, collection, scroll_filter=scroll_filter)
-
-    from collections import Counter
-    counter = Counter()
-
-    # Dimensions indexed in garment_tags: category:color, category:fabric, category:pattern, category:silhouette
-    GARMENT_TAG_DIMS = {"color", "fabric", "pattern", "silhouette"}
-    # Dimensions only in garments[] nested objects (not in garment_tags)
-    GARMENT_NESTED_DIMS = {"sleeve_length", "garment_length", "collar"}
-    # Map user-facing dimension names to actual Qdrant field names
-    DIM_TO_FIELD = {"sleeve_length": "sleeve", "garment_length": "length", "collar": "collar"}
-
-    if dimension in GARMENT_TAG_DIMS:
-        # Use garment_tags (category:value format)
-        prefix = f"{category}:" if category else ""
-        for p in pts:
-            for tag in p.payload.get("garment_tags", []):
-                if prefix and tag.startswith(prefix):
-                    counter[tag.split(":")[1]] += 1
-    elif dimension in GARMENT_NESTED_DIMS:
-        # Scan garments[] sub-objects with actual Qdrant field name
-        field = DIM_TO_FIELD[dimension]
-        for p in pts:
-            for g in p.payload.get("garments", []):
-                if category and g.get("category", "").lower() != category.lower():
-                    continue
-                v = g.get(field, "")
-                if v:
-                    counter[v] += 1
-    elif dimension == "category":
-        for p in pts:
-            for cat in p.payload.get("categories", []):
-                counter[cat] += 1
-    else:
-        # Image-level dimension
-        for p in pts:
-            v = p.payload.get(dimension, "")
-            if v:
-                counter[str(v)] += 1
-
-    return [{"value": v, "count": c} for v, c in counter.most_common(10)]
-
-
-# ── Tool definitions ──
+# ═══════════════════════════════════════════════════════════════
+#  Tool: start_collection
+# ═══════════════════════════════════════════════════════════════
 
 @tool
 def start_collection(
@@ -483,34 +204,41 @@ def start_collection(
     """
     client = get_qdrant()
 
-    if query:
-        q_emb = _encode_text(query)
-        q_emb = _apply_aesthetic_boost(q_emb)
-        session = {
-            "query": query,
-            "vector_type": "fashion_clip",
-            "q_emb": q_emb,
-            "filters": [],
-            "active": True,
-        }
-    else:
-        session = {
-            "query": "",
-            "vector_type": "fashion_clip",
-            "q_emb": None,
-            "filters": [],
-            "active": True,
-        }
+    thread_id = get_thread_id(config)
+    query_context = get_query_context(thread_id) or {}
+    image_vectors = query_context.get("image_embeddings", [])
+    image_vector = average_embeddings(image_vectors) if image_vectors else None
 
-    _set_session(config, session)
-    count = _count_session(client, session)
+    text_vector = encode_text(query) if query else None
+    fused_vector = _fuse_query_vectors(text_vector=text_vector, image_vector=image_vector)
+    if fused_vector is not None:
+        fused_vector = apply_aesthetic_boost(fused_vector)
+
+    session = {
+        "query": query,
+        "vector_type": "fashion_clip",
+        "q_emb": fused_vector,
+        "filters": [],
+        "active": True,
+    }
+
+    set_session(config, session)
+    count = count_session(client, session)
     return json.dumps({
         "status": "collection_started",
         "total": count,
         "query": query or "(all images)",
-        "message": f"Collection started with {count} images. Use add_filter to narrow down.",
+        "message": (
+            f"Collection started with {count} images. Use add_filter to narrow down."
+            if not image_vectors
+            else f"Collection started with {count} images using {len(image_vectors)} uploaded image(s). Use add_filter to narrow down."
+        ),
     })
 
+
+# ═══════════════════════════════════════════════════════════════
+#  Tool: add_filter
+# ═══════════════════════════════════════════════════════════════
 
 @tool
 def add_filter(
@@ -529,24 +257,20 @@ def add_filter(
 
     Returns: remaining count. If 0, suggests available values — DO NOT add this filter.
     """
-    session = _get_session(config)
+    session = get_session(config)
     if not session.get("active"):
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
 
-    # garment_tags indexes: category:color, category:fabric, category:pattern, category:silhouette
     GARMENT_TAG_DIMS = {"color", "fabric", "pattern", "silhouette"}
-    # Only sleeve/length/collar need nested garments[].field queries
     GARMENT_NESTED_DIMS = {"sleeve_length", "sleeve", "garment_length", "length", "collar"}
     meta_dims = {"brand", "gender", "season", "year_min", "image_type"}
 
-    # Map user-facing dimension names to actual Qdrant field names
     DIM_TO_FIELD = {"sleeve_length": "sleeve", "sleeve": "sleeve",
                     "garment_length": "length", "length": "length",
                     "collar": "collar"}
 
-    # Normalize dimension aliases for display key
     dim_normalized = dimension
     if dimension == "sleeve":
         dim_normalized = "sleeve_length"
@@ -556,11 +280,9 @@ def add_filter(
     if dimension == "category":
         entry = {"type": "category", "key": "category", "value": value}
     elif dimension in GARMENT_TAG_DIMS and category:
-        # Color, fabric, pattern, silhouette — all indexed in garment_tags as category:value
         tag_value = f"{category.lower()}:{value.lower()}"
         entry = {"type": "garment_tag", "key": f"{category}:{dimension}", "value": tag_value}
     elif dimension in GARMENT_NESTED_DIMS and category:
-        # sleeve, length, collar — use Qdrant nested garments[].field syntax
         field = DIM_TO_FIELD[dimension]
         entry = {"type": "garment_attr", "key": f"{category}:{dim_normalized}",
                  "field": field, "value": value}
@@ -577,11 +299,11 @@ def add_filter(
     test_filters = session["filters"] + [entry]
     test_session = dict(session)
     test_session["filters"] = test_filters
-    count = _count_session(client, test_session)
+    count = count_session(client, test_session)
 
     if count > 0:
         session["filters"].append(entry)
-        _set_session(config, session)
+        set_session(config, session)
         filter_summary = []
         for f in session["filters"]:
             if f["type"] == "category":
@@ -599,7 +321,7 @@ def add_filter(
             "message": f"Added {dimension}={value}. {count} images remaining.",
         })
     else:
-        available = _available_values(client, dimension, category, session["filters"])
+        available = available_values(client, dimension, category, session["filters"])
         return json.dumps({
             "action": "filter_rejected",
             "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
@@ -610,6 +332,10 @@ def add_filter(
         })
 
 
+# ═══════════════════════════════════════════════════════════════
+#  Tool: remove_filter
+# ═══════════════════════════════════════════════════════════════
+
 @tool
 def remove_filter(
     dimension: str,
@@ -617,7 +343,7 @@ def remove_filter(
     config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
     """Remove a previously added filter. Undoes the narrowing for that dimension."""
-    session = _get_session(config)
+    session = get_session(config)
     if not session.get("active"):
         return json.dumps({"error": "No active collection."})
 
@@ -640,8 +366,8 @@ def remove_filter(
             new_filters.append(f)
 
     session["filters"] = new_filters
-    _set_session(config, session)
-    count = _count_session(client, session)
+    set_session(config, session)
+    count = count_session(client, session)
 
     return json.dumps({
         "action": "filter_removed",
@@ -651,6 +377,10 @@ def remove_filter(
     })
 
 
+# ═══════════════════════════════════════════════════════════════
+#  Tool: peek_collection
+# ═══════════════════════════════════════════════════════════════
+
 @tool
 def peek_collection(
     limit: int = 15,
@@ -659,12 +389,12 @@ def peek_collection(
     """Secretly preview the current filtered collection to self-check.
     This does NOT display images to the user. Only returns text metadata for you to review.
     """
-    session = _get_session(config)
+    session = get_session(config)
     if not session.get("active"):
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
-    results = _apply_session_filters(client, session)
+    results = apply_session_filters(client, session)
 
     peek_results = []
     for p in results[:limit]:
@@ -697,6 +427,10 @@ def peek_collection(
     }, ensure_ascii=False)
 
 
+# ═══════════════════════════════════════════════════════════════
+#  Tool: show_collection
+# ═══════════════════════════════════════════════════════════════
+
 @tool
 def show_collection(
     config: Annotated[RunnableConfig, InjectedToolArg] = None,
@@ -704,12 +438,13 @@ def show_collection(
     """Get the final collection and send it to the frontend for display.
     Call this ONLY when you are completely finished filtering.
     """
-    session = _get_session(config)
+    session = get_session(config)
     if not session.get("active"):
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
-    count = _count_session(client, session)
+    results = apply_session_filters(client, session)
+    count = len(results)
 
     filter_summary = []
     for f in session["filters"]:
@@ -721,10 +456,11 @@ def show_collection(
             filter_summary.append(f"{f['key']}={f['value']}")
 
     q_emb_raw = session.get("q_emb")
-    if q_emb_raw is not None:
-        q_emb_list = q_emb_raw.tolist() if hasattr(q_emb_raw, 'tolist') else list(q_emb_raw)
-    else:
-        q_emb_list = None
+    q_emb_list = (
+        q_emb_raw.tolist() if hasattr(q_emb_raw, "tolist")
+        else list(q_emb_raw) if q_emb_raw is not None
+        else None
+    )
 
     serializable_session = {
         "query": session.get("query", ""),
@@ -734,17 +470,39 @@ def show_collection(
         "active": session.get("active", True),
     }
 
+    sample_images = []
+    for point in results[:8]:
+        item = format_result(point.payload, getattr(point, "score", 0))
+        sample_images.append(item)
+
+    search_request_id = None
+    session_id = _session_id_from_config(config)
+    if session_id:
+        artifact = create_artifact(
+            session_id=session_id,
+            artifact_type="collection_result",
+            storage_type="database",
+            metadata={
+                "search_session": serializable_session,
+                "total": count,
+                "filters_applied": filter_summary,
+            },
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        search_request_id = artifact["id"]
+
     return json.dumps({
         "action": "show_collection",
-        "search_request": serializable_session,
+        "search_request_id": search_request_id,
         "total": count,
         "filters_applied": filter_summary,
         "message": f"Sent query to UI to display {count} images. Filters applied: {len(filter_summary)}.",
+        "sample_images": sample_images,
     }, ensure_ascii=False)
 
 
 # ═══════════════════════════════════════════════════════════════
-#  Tool: explore_colors — Color palette exploration
+#  Tool: explore_colors
 # ═══════════════════════════════════════════════════════════════
 
 @tool
@@ -760,10 +518,10 @@ def explore_colors(
         categories: Optional garment type filter
         brand: Optional brand filter
     """
-    collection = _get_collection()
+    collection = get_collection()
     client = get_qdrant()
-    qdrant_filter = _build_qdrant_filter(categories=categories, brand=brand)
-    pts = _scroll_all(client, collection, scroll_filter=qdrant_filter)
+    qdrant_filter = build_qdrant_filter(categories=categories, brand=brand)
+    pts = scroll_all(client, collection, scroll_filter=qdrant_filter)
 
     refs = COLOR_KEYWORDS.get(color.lower())
     if not refs:
@@ -808,7 +566,7 @@ def explore_colors(
 
 
 # ═══════════════════════════════════════════════════════════════
-#  Tool: analyze_trends — Aggregated statistics
+#  Tool: analyze_trends
 # ═══════════════════════════════════════════════════════════════
 
 @tool
@@ -822,7 +580,8 @@ def analyze_trends(
     brand: Optional[str] = None,
     season: Optional[list[str]] = None,
     year_min: Optional[int] = None,
-    top_n: int = 15,
+    top_n: int = 30,
+    search: Optional[str] = None,
 ) -> str:
     """Analyze TRENDS and statistics. Counts and ranks — does NOT search images.
 
@@ -832,12 +591,14 @@ def analyze_trends(
                           "sleeve_length", "garment_length", "collar"
             Image-level:   "brand", "style", "category", "season", "year", "gender"
         categories, fabric, color, pattern, silhouette, brand, season, year_min: Optional filters
-        top_n: default 15
+        top_n: How many top values to return (default 30, increase for rare labels)
+        search: Optional fuzzy search term — only show values containing this text.
+            Example: search="hound" will match "houndstooth", "hound's tooth", etc.
     """
-    collection = _get_collection()
+    collection = get_collection()
     client = get_qdrant()
 
-    qdrant_filter = _build_qdrant_filter(categories=categories, brand=brand, season=season, year_min=year_min)
+    qdrant_filter = build_qdrant_filter(categories=categories, brand=brand, season=season, year_min=year_min)
 
     tag_conditions = []
     if categories:
@@ -859,12 +620,10 @@ def analyze_trends(
         else:
             qdrant_filter = Filter(must=[cond])
 
-    pts = _scroll_all(client, collection, scroll_filter=qdrant_filter)
+    pts = scroll_all(client, collection, scroll_filter=qdrant_filter)
 
-    # ── Image-level dimensions ──
     IMAGE_DIMS = {"brand", "style", "gender"}
     GARMENT_SIMPLE_DIMS = {"fabric", "pattern", "silhouette", "collar"}
-    # Map user-facing names to actual Qdrant field names for nested fields
     GARMENT_NESTED_MAP = {"sleeve_length": "sleeve", "garment_length": "length"}
 
     counter: dict[str, int] = {}
@@ -907,11 +666,17 @@ def analyze_trends(
                 if v:
                     counter[v] = counter.get(v, 0) + 1
 
+    if search:
+        search_lower = search.lower()
+        counter = {k: v for k, v in counter.items() if search_lower in k.lower()}
+
     ranked = sorted(counter.items(), key=lambda x: -x[1])[:top_n]
     total = max(sum(counter.values()), 1)
     return json.dumps({
         "dimension": dimension,
         "total_items_analyzed": len(pts),
+        "total_unique_values": len(counter),
+        "search": search,
         "ranking": [{"name": n, "count": c, "percentage": f"{c/total*100:.1f}%"} for n, c in ranked],
     }, ensure_ascii=False)
 
@@ -923,7 +688,7 @@ def analyze_trends(
 @tool
 def get_image_details(image_id: str) -> str:
     """Get full details of a specific image by its ID."""
-    collection = _get_collection()
+    collection = get_collection()
     client = get_qdrant()
     results = client.scroll(
         collection,
@@ -937,6 +702,7 @@ def get_image_details(image_id: str) -> str:
 
 # ── Export ──
 ALL_TOOLS = [
+    fashion_vision,
     start_collection, add_filter, remove_filter, peek_collection, show_collection,
     explore_colors, analyze_trends, get_image_details,
 ]

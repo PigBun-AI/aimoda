@@ -19,6 +19,7 @@ import {
   PencilLine,
   Pin,
   PinOff,
+  Sparkles,
   Sun,
   Trash2,
   X,
@@ -95,9 +96,22 @@ export function AppShell() {
 
   const hasRunningSession = chatSessions.some(session => session.execution_status === 'running')
 
+  useEffect(() => {
+    if (notifications.length === 0) return
+
+    const timers = notifications.map(item => window.setTimeout(() => {
+      dismissSessionNotification(item.id)
+    }, 5000))
+
+    return () => {
+      timers.forEach(timer => window.clearTimeout(timer))
+    }
+  }, [dismissSessionNotification, notifications])
+
   const navigation = [
     { to: '/chat', label: t('common:aiAssistant'), icon: MessageCircle },
     { to: '/reports', label: t('reports:title'), icon: LayoutDashboard },
+    { to: '/inspiration', label: t('common:inspiration', '灵感情报站'), icon: Sparkles },
   ]
 
   useEffect(() => {
