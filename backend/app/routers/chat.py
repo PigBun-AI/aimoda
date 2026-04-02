@@ -61,8 +61,10 @@ from ..agent.harness import (
 from ..agent.query_context import (
     set_query_context,
     remember_session_images,
-    get_session_image_context,
+    remember_session_style,
     get_session_image_blocks,
+    get_session_query_context,
+    merge_query_contexts,
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -210,6 +212,21 @@ def _extract_category_hints_from_payload(payload: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys([hint for hint in hints if hint]))
 
 
+def _extract_style_hints_from_payload(payload: dict[str, Any]) -> tuple[str, str]:
+    primary_style = payload.get("primary_style")
+    retrieval_plan = payload.get("retrieval_plan")
+
+    style_name = ""
+    if isinstance(primary_style, dict):
+        style_name = str(primary_style.get("style_name", "")).strip()
+
+    retrieval_query = ""
+    if isinstance(retrieval_plan, dict):
+        retrieval_query = str(retrieval_plan.get("retrieval_query_en", "")).strip()
+
+    return style_name, retrieval_query
+
+
 async def _restore_agent_session_from_history(
     thread_id: str,
     history: list[dict[str, Any]],
@@ -246,6 +263,19 @@ async def _restore_agent_session_from_history(
                     thread_id=thread_id,
                     explicit_category=category_hints[0],
                 )
+            style_name, retrieval_query = _extract_style_hints_from_payload(payload)
+            if style_name or retrieval_query:
+                update_session_semantics(
+                    thread_id=thread_id,
+                    explicit_style_name=style_name or None,
+                    style_retrieval_query=retrieval_query or None,
+                )
+                if retrieval_query:
+                    remember_session_style(
+                        thread_id,
+                        style_retrieval_query=retrieval_query,
+                        style_name=style_name,
+                    )
 
             if payload.get("action") != "show_collection":
                 continue
@@ -303,6 +333,16 @@ def _restore_agent_session_from_runtime_state(
             query_text=str(session.get("query", "")),
             session_filters=session.get("filters", []),
         )
+
+    if isinstance(semantics, dict):
+        style_retrieval_query = str(semantics.get("style_retrieval_query", "")).strip()
+        style_name = str(semantics.get("primary_style_name", "")).strip()
+        if style_retrieval_query:
+            remember_session_style(
+                thread_id,
+                style_retrieval_query=style_retrieval_query,
+                style_name=style_name,
+            )
 
     return session
 
@@ -510,7 +550,10 @@ async def chat_endpoint(
         fallback_image_count=len(fallback_image_blocks),
         turn_playbook=build_turn_playbook(turn_context),
     )
-    query_context = current_query_context or get_session_image_context(thread_id)
+    query_context = merge_query_contexts(
+        get_session_query_context(thread_id),
+        current_query_context,
+    )
     set_query_context(thread_id, query_context)
 
     # Touch session + auto-title (run sync DB ops in thread pool)
@@ -1051,7 +1094,10 @@ async def websocket_chat(websocket: WebSocket):
                     fallback_image_count=len(fallback_image_blocks),
                     turn_playbook=build_turn_playbook(turn_context),
                 )
-                query_context = current_query_context or get_session_image_context(thread_id)
+                query_context = merge_query_contexts(
+                    get_session_query_context(thread_id),
+                    current_query_context,
+                )
                 set_query_context(thread_id, query_context)
                 history = msg.get("history", [])
                 await asyncio.to_thread(auto_title_session, session_id, _extract_text_from_blocks(raw_content_blocks))

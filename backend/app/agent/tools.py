@@ -48,6 +48,7 @@ from ..services.chat_service import create_artifact, set_session_agent_runtime
 from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
 from ..services.style_knowledge_service import search_style_knowledge
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
+from .query_context import remember_session_style, set_query_context, merge_query_contexts
 from ..config import settings
 
 # ── Backward-compatible aliases used by routers and other modules ──
@@ -187,6 +188,32 @@ def _persist_agent_runtime_state(
         return
 
 
+def _persist_runtime_semantics(
+    *,
+    config: RunnableConfig | None,
+    thread_id: str,
+) -> None:
+    session_id = _session_id_from_config(config)
+    if not session_id:
+        return
+
+    session = get_session(config or {"configurable": {"thread_id": thread_id}})
+    try:
+        set_session_agent_runtime(
+            session_id,
+            {
+                "search_session": _serialize_search_session(session),
+                "semantics": update_session_semantics(
+                    thread_id=thread_id,
+                    query_text=str(session.get("query", "")),
+                    session_filters=session.get("filters", []),
+                ),
+            },
+        )
+    except Exception:
+        return
+
+
 def _normalize_vector(vector: list[float]) -> list[float]:
     norm = sum(value * value for value in vector) ** 0.5
     if norm < 1e-9:
@@ -197,22 +224,38 @@ def _normalize_vector(vector: list[float]) -> list[float]:
 def _fuse_query_vectors(
     *,
     text_vector: list[float] | None,
+    style_vector: list[float] | None = None,
     image_vector: list[float] | None,
 ) -> list[float] | None:
-    if text_vector is None and image_vector is None:
+    vectors = {
+        "text": text_vector,
+        "style": style_vector,
+        "image": image_vector,
+    }
+    available = {name: vector for name, vector in vectors.items() if vector is not None}
+    if not available:
         return None
-    if text_vector is None:
-        return _normalize_vector(image_vector or [])
-    if image_vector is None:
-        return _normalize_vector(text_vector)
+    if len(available) == 1:
+        return _normalize_vector(next(iter(available.values())) or [])
 
-    # Image dominates retrieval intent; text acts as a precision hint.
-    weight_image = 0.7
-    weight_text = 0.3
-    fused = [
-        weight_image * image_value + weight_text * text_value
-        for image_value, text_value in zip(image_vector, text_vector)
-    ]
+    if image_vector is not None and style_vector is not None and text_vector is not None:
+        weights = {"image": 0.5, "style": 0.3, "text": 0.2}
+    elif style_vector is not None and text_vector is not None:
+        weights = {"style": 0.65, "text": 0.35}
+    elif image_vector is not None and style_vector is not None:
+        weights = {"image": 0.65, "style": 0.35}
+    elif image_vector is not None and text_vector is not None:
+        weights = {"image": 0.7, "text": 0.3}
+    else:
+        weights = {name: 1.0 / len(available) for name in available}
+
+    reference = next(iter(available.values()))
+    fused = [0.0] * len(reference)
+    for name, vector in available.items():
+        assert vector is not None
+        weight = weights.get(name, 0.0)
+        for index, value in enumerate(vector):
+            fused[index] += weight * value
     return _normalize_vector(fused)
 
 
@@ -311,6 +354,7 @@ def fashion_vision(
 def search_style(
     query: str,
     limit: int = 3,
+    config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
     """Search the abstract fashion style library and return retrieval-ready cues.
 
@@ -340,6 +384,37 @@ def search_style(
             ),
         }, ensure_ascii=False)
 
+    if payload.get("status") == "ok" and config:
+        thread_id = get_thread_id(config)
+        primary_style = payload.get("primary_style", {}) if isinstance(payload.get("primary_style"), dict) else {}
+        retrieval_plan = payload.get("retrieval_plan", {}) if isinstance(payload.get("retrieval_plan"), dict) else {}
+        style_retrieval_query = str(retrieval_plan.get("retrieval_query_en", "")).strip()
+        style_name = str(primary_style.get("style_name", "")).strip()
+
+        if style_retrieval_query:
+            remember_session_style(
+                thread_id,
+                style_retrieval_query=style_retrieval_query,
+                style_name=style_name,
+            )
+            set_query_context(
+                thread_id,
+                merge_query_contexts(
+                    get_query_context(thread_id),
+                    {
+                        "style_retrieval_query": style_retrieval_query,
+                        "style_name": style_name,
+                    },
+                ),
+            )
+
+        update_session_semantics(
+            thread_id=thread_id,
+            explicit_style_name=style_name or None,
+            style_retrieval_query=style_retrieval_query or None,
+        )
+        _persist_runtime_semantics(config=config, thread_id=thread_id)
+
     return json.dumps(payload, ensure_ascii=False)
 
 
@@ -367,14 +442,22 @@ def start_collection(
     query_context = get_query_context(thread_id) or {}
     image_vectors = query_context.get("image_embeddings", [])
     image_vector = average_embeddings(image_vectors) if image_vectors else None
+    style_retrieval_query = str(query_context.get("style_retrieval_query", "")).strip()
 
     text_vector = encode_text(query) if query else None
-    fused_vector = _fuse_query_vectors(text_vector=text_vector, image_vector=image_vector)
+    style_vector = encode_text(style_retrieval_query) if style_retrieval_query else None
+    fused_vector = _fuse_query_vectors(
+        text_vector=text_vector,
+        style_vector=style_vector,
+        image_vector=image_vector,
+    )
     if fused_vector is not None:
         fused_vector = apply_aesthetic_boost(fused_vector)
 
+    effective_query = query or style_retrieval_query
+
     session = {
-        "query": query,
+        "query": effective_query,
         "vector_type": "fashion_clip",
         "q_emb": fused_vector,
         "filters": [],
@@ -387,11 +470,23 @@ def start_collection(
     return json.dumps({
         "status": "collection_started",
         "total": count,
-        "query": query or "(all images)",
+        "query": effective_query or "(all images)",
+        "style_retrieval_query": style_retrieval_query or None,
         "message": (
             f"Collection started with {count} images. Use add_filter to narrow down."
-            if not image_vectors
-            else f"Collection started with {count} images using {len(image_vectors)} uploaded image(s). Use add_filter to narrow down."
+            if not image_vectors and not style_retrieval_query
+            else (
+                f"Collection started with {count} images using {len(image_vectors)} uploaded image(s). Use add_filter to narrow down."
+                if image_vectors and not style_retrieval_query
+                else (
+                    f"Collection started with {count} images using style knowledge grounding. Use add_filter to narrow down."
+                    if style_retrieval_query and not image_vectors
+                    else (
+                        f"Collection started with {count} images using {len(image_vectors)} uploaded image(s) and style knowledge grounding. "
+                        "Use add_filter to narrow down."
+                    )
+                )
+            )
         ),
     })
 

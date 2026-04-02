@@ -3,7 +3,15 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Search, Filter, X, Eye, Images, Palette, BarChart3, Info, Loader2, CheckCircle2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
-import type { ChatMessage, ContentBlock, ImageSource, SearchResultData, ImageResult, FashionVisionResultData } from './chat-types'
+import type {
+  ChatMessage,
+  ContentBlock,
+  ImageSource,
+  SearchResultData,
+  ImageResult,
+  FashionVisionResultData,
+  StyleKnowledgeResultData,
+} from './chat-types'
 import { SearchResultCard } from './search-result-card'
 import { ChatMarkdown } from './chat-markdown'
 
@@ -56,6 +64,18 @@ function parseFashionVisionResult(content: string): FashionVisionResultData | nu
       typeof data.analysis.retrieval_query_en === 'string'
     ) {
       return data as FashionVisionResultData
+    }
+  } catch {}
+  return null
+}
+
+function parseStyleKnowledgeResult(content: string): StyleKnowledgeResultData | null {
+  try {
+    const data = JSON.parse(content)
+    if (!data || typeof data !== 'object') return null
+    if (typeof data.status !== 'string') return null
+    if ('primary_style' in data || 'retrieval_plan' in data || 'fallback_suggestion' in data) {
+      return data as StyleKnowledgeResultData
     }
   } catch {}
   return null
@@ -388,6 +408,7 @@ function ToolResultView({
 }) {
   const showCollectionData = useMemo(() => parseShowCollectionResult(block.content), [block.content])
   const fashionVisionData = useMemo(() => parseFashionVisionResult(block.content), [block.content])
+  const styleKnowledgeData = useMemo(() => parseStyleKnowledgeResult(block.content), [block.content])
   const isError = block.is_error ?? hasToolResultError(block.content)
 
   if (showCollectionData && onOpenDrawer) {
@@ -396,6 +417,10 @@ function ToolResultView({
 
   if (fashionVisionData) {
     return <FashionVisionCard data={fashionVisionData} />
+  }
+
+  if (styleKnowledgeData) {
+    return <StyleKnowledgeCard data={styleKnowledgeData} />
   }
 
   if (isError) {
@@ -481,6 +506,122 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
               <div key={question} className="text-xs text-foreground/80">{question}</div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
+  const primaryStyle = data.primary_style
+  const styleFeatures = data.style_features
+  const retrievalPlan = data.retrieval_plan
+  const suggestedFilters = Object.entries(retrievalPlan?.suggested_filters ?? {})
+  const alternatives = data.alternatives ?? []
+  const featureGroups = [
+    { label: '色盘', values: styleFeatures?.palette ?? [] },
+    { label: '廓形', values: styleFeatures?.silhouette ?? [] },
+    { label: '面料', values: styleFeatures?.fabric ?? [] },
+    { label: '细节', values: styleFeatures?.details ?? [] },
+  ].filter((group) => group.values.length > 0)
+
+  return (
+    <div className="rounded-2xl border border-border bg-card px-4 py-4 shadow-sm space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <Sparkles size={16} className="text-primary" />
+          </div>
+          <div>
+            <div className="text-sm font-medium text-foreground">风格库检索</div>
+            <div className="text-xs text-muted-foreground">
+              {data.query ? `查询：${data.query}` : '抽象风格检索'}
+              {data.search_stage ? ` · ${data.search_stage}` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {data.message && <div className="text-sm leading-6 text-foreground">{data.message}</div>}
+
+      {primaryStyle?.style_name && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary">
+            {primaryStyle.style_name}
+          </span>
+          {primaryStyle.category && (
+            <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
+              {primaryStyle.category}
+            </span>
+          )}
+          {primaryStyle.match_type && (
+            <span className="text-xs text-muted-foreground">匹配方式：{primaryStyle.match_type}</span>
+          )}
+        </div>
+      )}
+
+      {retrievalPlan?.retrieval_query_en && (
+        <div className="rounded-xl bg-muted/60 px-3 py-2 border border-border/60">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Retrieval Query</div>
+          <div className="text-sm text-foreground break-words">{retrievalPlan.retrieval_query_en}</div>
+        </div>
+      )}
+
+      {featureGroups.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">风格特征</div>
+          <div className="flex flex-wrap gap-2">
+            {featureGroups.flatMap((group) =>
+              group.values.map((value) => (
+                <span
+                  key={`${group.label}-${value}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground"
+                >
+                  <span className="text-muted-foreground">{group.label}</span>
+                  <span>{value}</span>
+                </span>
+              )),
+            )}
+          </div>
+        </div>
+      )}
+
+      {suggestedFilters.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-muted-foreground">建议过滤条件</div>
+          <div className="flex flex-wrap gap-2">
+            {suggestedFilters.flatMap(([key, rawValue]) => {
+              const values = Array.isArray(rawValue) ? rawValue : [rawValue]
+              return values.map((value) => (
+                <span
+                  key={`${key}-${String(value)}`}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary"
+                >
+                  <span className="text-primary/70">{key}</span>
+                  <span>{String(value)}</span>
+                </span>
+              ))
+            })}
+          </div>
+        </div>
+      )}
+
+      {alternatives.length > 0 && (
+        <div className="rounded-xl border border-dashed border-border px-3 py-2">
+          <div className="text-xs font-medium text-muted-foreground mb-1">相近风格</div>
+          <div className="flex flex-wrap gap-2">
+            {alternatives.map((item) => (
+              <span key={`${item.style_name}-${item.match_type ?? 'alt'}`} className="text-xs text-foreground/80">
+                {item.style_name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {data.fallback_suggestion && (
+        <div className="rounded-xl border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+          {data.fallback_suggestion}
         </div>
       )}
     </div>

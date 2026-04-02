@@ -17,6 +17,7 @@ def clear_runtime_state():
     query_context._contexts.clear()
     query_context._session_image_contexts.clear()
     query_context._session_image_blocks.clear()
+    query_context._session_style_contexts.clear()
     session_state._sessions.clear()
     yield
     harness._turn_contexts.clear()
@@ -24,6 +25,7 @@ def clear_runtime_state():
     query_context._contexts.clear()
     query_context._session_image_contexts.clear()
     query_context._session_image_blocks.clear()
+    query_context._session_style_contexts.clear()
     session_state._sessions.clear()
 
 
@@ -134,3 +136,19 @@ def test_search_style_tool_returns_retrieval_plan(monkeypatch):
     assert payload["status"] == "ok"
     assert payload["primary_style"]["style_name"] == "quiet luxury"
     assert payload["retrieval_plan"]["retrieval_query_en"] == "understated elegance, palette: camel"
+
+
+def test_search_style_tool_persists_style_session_context(monkeypatch):
+    config = {"configurable": {"thread_id": "user-9:session-9"}}
+    monkeypatch.setattr(tools, "search_style_knowledge", lambda query, limit=3: {
+        "status": "ok",
+        "primary_style": {"style_name": "quiet luxury"},
+        "retrieval_plan": {"retrieval_query_en": "understated elegance, palette: camel"},
+    })
+    monkeypatch.setattr(tools, "set_session_agent_runtime", lambda *args, **kwargs: None)
+
+    payload = json.loads(tools.search_style.func("老钱风", limit=3, config=config))
+
+    assert payload["status"] == "ok"
+    assert query_context.get_session_style_context("user-9:session-9")["style_name"] == "quiet luxury"
+    assert harness.get_session_semantics("user-9:session-9")["primary_style_name"] == "quiet luxury"

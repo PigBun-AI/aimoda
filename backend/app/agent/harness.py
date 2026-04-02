@@ -112,6 +112,8 @@ def update_session_semantics(
     query_text: str = "",
     session_filters: list[dict] | None = None,
     explicit_category: str | None = None,
+    explicit_style_name: str | None = None,
+    style_retrieval_query: str | None = None,
 ) -> dict[str, str]:
     current = dict(_session_semantics.get(thread_id, {}))
 
@@ -124,6 +126,10 @@ def update_session_semantics(
 
     if len(candidate_categories) == 1:
         current["primary_category"] = candidate_categories[0]
+    if explicit_style_name and explicit_style_name.strip():
+        current["primary_style_name"] = explicit_style_name.strip()
+    if style_retrieval_query and style_retrieval_query.strip():
+        current["style_retrieval_query"] = style_retrieval_query.strip()
     if query_text.strip():
         current["last_query_text"] = query_text.strip()
 

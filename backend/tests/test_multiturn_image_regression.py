@@ -19,6 +19,7 @@ def clear_in_memory_state():
     query_context._contexts.clear()
     query_context._session_image_contexts.clear()
     query_context._session_image_blocks.clear()
+    query_context._session_style_contexts.clear()
     session_state._sessions.clear()
     yield
     harness._turn_contexts.clear()
@@ -26,6 +27,7 @@ def clear_in_memory_state():
     query_context._contexts.clear()
     query_context._session_image_contexts.clear()
     query_context._session_image_blocks.clear()
+    query_context._session_style_contexts.clear()
     session_state._sessions.clear()
 
 
@@ -84,3 +86,37 @@ def test_followup_text_turn_gets_recent_image_hint():
     assert "最近一次上传的 1 张图片仍可用于当前这轮检索" in agent_input
     assert "start_collection(query=用户补充条件或空字符串)" in agent_input
     assert "继续找更正式一点的" in agent_input
+
+
+def test_start_collection_fuses_style_query_with_text(monkeypatch):
+    thread_id = "user-3:session-3"
+    config = {"configurable": {"thread_id": thread_id}}
+
+    query_context.remember_session_style(
+        thread_id,
+        style_retrieval_query="understated elegance, palette: camel, fabric: wool",
+        style_name="quiet luxury",
+    )
+    query_context.set_query_context(thread_id, query_context.get_session_query_context(thread_id))
+
+    monkeypatch.setattr(tools, "get_qdrant", lambda: object())
+
+    def fake_encode_text(text: str):
+        if "understated elegance" in text:
+            return [1.0, 0.0, 0.0]
+        if text == "dress":
+            return [0.0, 1.0, 0.0]
+        return [0.0, 0.0, 1.0]
+
+    monkeypatch.setattr(tools, "encode_text", fake_encode_text)
+    monkeypatch.setattr(tools, "apply_aesthetic_boost", lambda vector: vector)
+    monkeypatch.setattr(tools, "count_session", lambda client, session: 11)
+
+    result = json.loads(tools.start_collection.func("dress", config=config))
+    session = session_state.get_session(config)
+
+    assert result["status"] == "collection_started"
+    assert result["style_retrieval_query"] == "understated elegance, palette: camel, fabric: wool"
+    assert "style knowledge grounding" in result["message"]
+    assert session["query"] == "dress"
+    assert session["q_emb"] == pytest.approx([0.880471, 0.4741, 0.0], rel=1e-6)

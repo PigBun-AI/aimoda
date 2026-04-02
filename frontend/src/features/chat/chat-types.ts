@@ -80,6 +80,46 @@ export interface FashionVisionResultData {
   analysis: FashionVisionAnalysis
 }
 
+export interface StyleKnowledgePrimaryStyle {
+  style_name: string
+  aliases?: string[]
+  category?: string
+  confidence?: number
+  match_type?: string
+  score?: number
+}
+
+export interface StyleKnowledgeFeatures {
+  visual_description_en?: string
+  palette: string[]
+  silhouette: string[]
+  fabric: string[]
+  details: string[]
+  reference_brands: string[]
+  season_relevance: string[]
+  gender?: string
+}
+
+export interface StyleKnowledgeRetrievalPlan {
+  retrieval_query_en?: string
+  semantic_boost_terms?: string[]
+  suggested_filters?: Record<string, string[] | string>
+  soft_constraints?: Record<string, string[] | string>
+}
+
+export interface StyleKnowledgeResultData {
+  status: 'ok' | 'not_found' | 'invalid_query' | 'error'
+  query: string
+  message?: string
+  search_stage?: string
+  primary_style?: StyleKnowledgePrimaryStyle
+  alternatives?: StyleKnowledgePrimaryStyle[]
+  style_features?: StyleKnowledgeFeatures
+  retrieval_plan?: StyleKnowledgeRetrievalPlan
+  fallback_suggestion?: string | null
+  error?: string
+}
+
 // ChatMessage — updated to use ContentBlock[]
 export interface ChatMessage {
   id: string
