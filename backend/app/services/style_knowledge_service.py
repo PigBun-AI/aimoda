@@ -118,9 +118,12 @@ def build_style_retrieval_plan(style: dict[str, Any], *, user_query: str) -> dic
             "recommended_next_step": "start_collection",
             "recommended_strategy": (
                 "Use retrieval_query_en as the semantic retrieval base, then apply only high-confidence concrete "
-                "filters such as fabric, silhouette, season, or gender if the user needs more precision."
+                "filters such as fabric, silhouette, season, or gender if the user needs more precision. "
+                "If no single garment category is resolved yet, keep palette/fabric cues inside retrieval_query_en "
+                "instead of calling add_filter(...) immediately."
             ),
             "avoid_as_hard_filters": ["palette", "reference_brands", "style_name"],
+            "category_required_filter_dimensions": ["color", "fabric", "pattern", "silhouette", "collar", "sleeve_length"],
             "query_context": user_query,
         },
     }

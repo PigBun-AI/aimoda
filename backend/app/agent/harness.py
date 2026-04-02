@@ -238,6 +238,8 @@ def build_turn_playbook(context: TurnContext) -> str:
             "style_discovery_tool=search_style",
             "image_understanding_tool=fashion_vision",
             "plan_order=fashion_vision -> start_collection -> add_filter -> show_collection",
+            "category_bound_filters_without_single_category=forbidden",
+            "unresolved_image_category_prefers_semantic_query=true",
         ]
     else:
         lines = [

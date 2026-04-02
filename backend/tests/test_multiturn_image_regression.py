@@ -88,6 +88,18 @@ def test_followup_text_turn_gets_recent_image_hint():
     assert "继续找更正式一点的" in agent_input
 
 
+def test_image_turn_playbook_prefers_semantic_query_before_category_bound_filters():
+    turn_context = harness.build_turn_context(
+        query_text="按这张图的感觉，更偏静奢一点",
+        has_images=True,
+    )
+
+    playbook = harness.build_turn_playbook(turn_context)
+
+    assert "category_bound_filters_without_single_category=forbidden" in playbook
+    assert "unresolved_image_category_prefers_semantic_query=true" in playbook
+
+
 def test_start_collection_fuses_style_query_with_text(monkeypatch):
     thread_id = "user-3:session-3"
     config = {"configurable": {"thread_id": thread_id}}
