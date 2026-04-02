@@ -36,6 +36,8 @@ class Settings(BaseSettings):
 
     EMBEDDING_URL: str = "http://183.62.232.22:18730"
     EMBEDDING_MODEL: str = "Marqo/marqo-fashionSigLIP"
+    STYLE_KNOWLEDGE_COLLECTION: str = "style_knowledge"
+    STYLE_KNOWLEDGE_SEMANTIC_SCORE_THRESHOLD: float = 0.5
 
     POSTGRES_DSN: str = "postgresql://fashion:fashion@postgres:5432/fashion_chat"
     REDIS_DSN: str = "redis://redis:6379/0"

@@ -229,6 +229,7 @@ def build_turn_playbook(context: TurnContext) -> str:
             "skill=multimodal_retrieval",
             "state_changing_tools_serial_only=true",
             "same_failed_call_retry=forbidden",
+            "style_discovery_tool=search_style",
             "image_understanding_tool=fashion_vision",
             "plan_order=fashion_vision -> start_collection -> add_filter -> show_collection",
         ]
@@ -238,6 +239,7 @@ def build_turn_playbook(context: TurnContext) -> str:
             "skill=text_retrieval",
             "state_changing_tools_serial_only=true",
             "same_failed_call_retry=forbidden",
+            "style_discovery_tool=search_style",
             "garment_attribute_requires_category=true",
             "plan_order=start_collection -> add_filter -> show_collection",
         ]
@@ -248,6 +250,7 @@ def build_turn_playbook(context: TurnContext) -> str:
         lines.append("restart_collection_only_if_current_pool_is_off_target=true")
 
     lines.append("abstract_style_requires_translation=true")
+    lines.append("abstract_style_prefers_search_style_tool=true")
     lines.append("unsupported_filter_dimensions=style,mood,vibe")
 
     if primary_category:

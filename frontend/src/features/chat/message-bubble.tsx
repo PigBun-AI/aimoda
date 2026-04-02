@@ -9,6 +9,7 @@ import { ChatMarkdown } from './chat-markdown'
 
 const toolIcons: Record<string, typeof Search> = {
   search: Search,
+  search_style: Sparkles,
   explore_colors: Palette,
   analyze_trends: BarChart3,
   get_image_details: Info,
@@ -22,6 +23,7 @@ const toolIcons: Record<string, typeof Search> = {
 
 const toolLabels: Record<string, string> = {
   search: '智能检索',
+  search_style: '风格库检索',
   explore_colors: '色彩探索',
   analyze_trends: '趋势分析',
   get_image_details: '查看详情',

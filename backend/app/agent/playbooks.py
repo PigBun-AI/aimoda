@@ -17,6 +17,7 @@ Help the user reach a satisfying image set quickly by iteratively narrowing or b
 4. Adjust the plan instead of repeating the same failed move.
 
 ## Tool Roles
+- `search_style(query)` translates abstract style intent into retrieval-ready visual cues.
 - `start_collection(query)` creates the working pool.
 - `add_filter(...)` narrows the current pool.
 - `remove_filter(...)` relaxes an existing filter.
@@ -40,5 +41,5 @@ Help the user reach a satisfying image set quickly by iteratively narrowing or b
 - Simple text queries: start with the main category or the semantic query, then add the most valuable filter one by one.
 - Complex or ambiguous queries: use `analyze_trends(...)` before guessing rare values.
 - Image-driven queries: use `fashion_vision(...)` before applying text filters.
-- Abstract style requests: convert the style into concrete visual descriptions before retrieval.
+- Abstract style requests: use `search_style(...)` first, then retrieve with its `retrieval_query_en` before adding concrete filters.
 """

@@ -46,6 +46,7 @@ from .harness import (
 from .color_utils import COLOR_KEYWORDS, color_matches
 from ..services.chat_service import create_artifact, set_session_agent_runtime
 from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
+from ..services.style_knowledge_service import search_style_knowledge
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
 from ..config import settings
 
@@ -303,6 +304,46 @@ def fashion_vision(
 
 
 # ═══════════════════════════════════════════════════════════════
+#  Tool: search_style
+# ═══════════════════════════════════════════════════════════════
+
+@tool
+def search_style(
+    query: str,
+    limit: int = 3,
+) -> str:
+    """Search the abstract fashion style library and return retrieval-ready cues.
+
+    Use this when the user asks for an abstract style such as 老钱风、法式、极简、
+    通勤、Y2K、静奢、甜酷、知识分子等. The tool returns:
+    - canonical style match
+    - compact style features
+    - retrieval_query_en for semantic search
+    - suggested concrete filters with lower failure risk
+
+    Typical next step:
+    1. call search_style(query)
+    2. use retrieval_plan.retrieval_query_en to call start_collection(...)
+    3. only then add high-confidence concrete filters if needed
+    """
+    try:
+        payload = search_style_knowledge(query, limit=max(1, min(limit, 5)))
+    except Exception as exc:
+        return json.dumps({
+            "status": "error",
+            "query": query,
+            "error": f"search_style failed: {exc}",
+            "retry_same_call": False,
+            "suggested_strategy": (
+                "Translate the style goal into a visual English retrieval query manually, "
+                "then call start_collection(query=...)."
+            ),
+        }, ensure_ascii=False)
+
+    return json.dumps(payload, ensure_ascii=False)
+
+
+# ═══════════════════════════════════════════════════════════════
 #  Tool: start_collection
 # ═══════════════════════════════════════════════════════════════
 
@@ -441,14 +482,13 @@ def add_filter(
             ),
             error_type="unsupported_dimension",
             suggested_strategy=(
-                "Use start_collection with an enriched query, or add/remove concrete garment filters "
-                "such as category, color, silhouette, collar, fabric, or pattern."
+                "Call search_style first for abstract style goals, then use its retrieval_query_en to "
+                "start a semantic collection before adding concrete garment filters."
             ),
-            suggested_next_actions=_build_recovery_actions(
-                dimension=dimension,
-                value=value,
-                category=inferred_category,
-            ),
+            suggested_next_actions=[
+                f'search_style("{value}")',
+                'start_collection("<style-enriched semantic query>")',
+            ],
         )
 
     if dimension == "category":
@@ -924,6 +964,7 @@ def get_image_details(image_id: str) -> str:
 
 # ── Export ──
 ALL_TOOLS = [
+    search_style,
     fashion_vision,
     start_collection, add_filter, remove_filter, peek_collection, show_collection,
     explore_colors, analyze_trends, get_image_details,

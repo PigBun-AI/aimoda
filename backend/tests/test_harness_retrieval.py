@@ -93,3 +93,44 @@ def test_add_filter_rejects_abstract_style_dimension(monkeypatch):
     assert payload["error_type"] == "unsupported_dimension"
     assert payload["retry_same_call"] is False
     assert "richer query" in payload["error"]
+
+
+def test_search_style_tool_returns_retrieval_plan(monkeypatch):
+    monkeypatch.setattr(tools, "search_style_knowledge", lambda query, limit=3: {
+        "status": "ok",
+        "query": query,
+        "search_stage": "exact",
+        "message": "Found a style match.",
+        "primary_style": {
+            "style_name": "quiet luxury",
+            "aliases": ["老钱风"],
+            "category": "luxury",
+            "confidence": 0.91,
+            "match_type": "alias_exact",
+        },
+        "alternatives": [],
+        "style_features": {
+            "visual_description_en": "understated elegance",
+            "palette": ["camel"],
+            "silhouette": ["soft tailoring"],
+            "fabric": ["wool"],
+            "details": ["minimal trims"],
+            "reference_brands": ["Loro Piana"],
+            "season_relevance": ["fall"],
+            "gender": "women",
+        },
+        "retrieval_plan": {
+            "retrieval_query_en": "understated elegance, palette: camel",
+            "semantic_boost_terms": ["soft tailoring", "wool"],
+            "suggested_filters": {"fabric": ["wool"]},
+            "soft_constraints": {"palette": ["camel"]},
+            "agent_guidance": {"recommended_next_step": "start_collection"},
+        },
+        "fallback_suggestion": None,
+    })
+
+    payload = json.loads(tools.search_style.func("老钱风", limit=3))
+
+    assert payload["status"] == "ok"
+    assert payload["primary_style"]["style_name"] == "quiet luxury"
+    assert payload["retrieval_plan"]["retrieval_query_en"] == "understated elegance, palette: camel"
