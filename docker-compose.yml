@@ -20,7 +20,7 @@ services:
       QDRANT_URL: ${QDRANT_URL:-http://220.168.84.134:16333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-fashion_items}
-      LLM_MODEL: ${LLM_MODEL:-MiniMax-M2.5-highspeed}
+      LLM_MODEL: ${LLM_MODEL:-MiniMax-M2.7-highspeed}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.minimaxi.com/anthropic}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
