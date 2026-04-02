@@ -37,6 +37,7 @@ from .session_state import (
     apply_session_filters,
     available_values,
 )
+from .harness import infer_active_category
 from .color_utils import COLOR_KEYWORDS, color_matches
 from ..services.chat_service import create_artifact
 from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
@@ -57,6 +58,28 @@ _build_session_filter = build_session_filter
 _count_session = count_session
 _apply_session_filters = apply_session_filters
 _available_values = available_values
+
+
+def _structured_filter_error(
+    *,
+    dimension: str,
+    value: str,
+    reason: str,
+    inferred_category: str | None = None,
+) -> str:
+    payload = {
+        "error": reason,
+        "error_type": "invalid_filter_request",
+        "dimension": dimension,
+        "value": value,
+        "retry_same_call": False,
+    }
+    if inferred_category:
+        payload["resolved_category_hint"] = inferred_category
+        payload["suggested_next_call"] = (
+            f'add_filter("{dimension}", "{value}", category="{inferred_category}")'
+        )
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _session_id_from_config(config: RunnableConfig | None) -> str | None:
@@ -262,6 +285,7 @@ def add_filter(
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
+    thread_id = get_thread_id(config)
 
     GARMENT_TAG_DIMS = {"color", "fabric", "pattern", "silhouette"}
     GARMENT_NESTED_DIMS = {"sleeve_length", "sleeve", "garment_length", "length", "collar"}
@@ -277,6 +301,15 @@ def add_filter(
     elif dimension == "length":
         dim_normalized = "garment_length"
 
+    inferred_category = None
+    if not category and dimension in (GARMENT_TAG_DIMS | GARMENT_NESTED_DIMS):
+        inferred_category = infer_active_category(
+            thread_id=thread_id,
+            session_filters=session.get("filters", []),
+        )
+        if inferred_category:
+            category = inferred_category
+
     if dimension == "category":
         entry = {"type": "category", "key": "category", "value": value}
     elif dimension in GARMENT_TAG_DIMS and category:
@@ -290,10 +323,15 @@ def add_filter(
         entry = {"type": "meta", "key": dimension, "value": value}
     else:
         if dimension in (GARMENT_TAG_DIMS | GARMENT_NESTED_DIMS):
-            return json.dumps({
-                "error": f"For '{dimension}' filter, specify which garment category. "
-                         f'Example: add_filter("{dimension}", "{value}", category="dress")',
-            })
+            return _structured_filter_error(
+                dimension=dimension,
+                value=value,
+                reason=(
+                    f"For '{dimension}' filter, specify which garment category. "
+                    f'Example: add_filter("{dimension}", "{value}", category="dress")'
+                ),
+                inferred_category=inferred_category,
+            )
         return json.dumps({"error": f"Unknown dimension: {dimension}"})
 
     test_filters = session["filters"] + [entry]
@@ -319,6 +357,7 @@ def add_filter(
             "remaining": count,
             "active_filters": filter_summary,
             "message": f"Added {dimension}={value}. {count} images remaining.",
+            "resolved_category": inferred_category,
         })
     else:
         available = available_values(client, dimension, category, session["filters"])

@@ -44,6 +44,12 @@ from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
 from ..agent.qdrant_utils import get_qdrant, format_result, get_collection, encode_image
 from ..agent.session_state import apply_session_filters
+from ..agent.harness import (
+    build_turn_context,
+    build_turn_playbook,
+    set_turn_context,
+    clear_turn_context,
+)
 from ..agent.query_context import (
     set_query_context,
     remember_session_images,
@@ -273,9 +279,11 @@ def _compose_agent_input(
     blocks: list[dict[str, Any]],
     *,
     fallback_image_count: int = 0,
+    turn_playbook: str = "",
 ) -> str:
     image_count = len(_extract_image_blocks(blocks))
     text = _extract_text_from_blocks(blocks)
+    prefix = f"{turn_playbook}\n\n" if turn_playbook else ""
 
     if image_count > 0:
         hint = (
@@ -283,7 +291,8 @@ def _compose_agent_input(
             "检索工具可直接使用这些图片的向量进行搜索。"
             "不要说用户没有上传图片。若无额外文字约束，可直接调用 start_collection(\"\")。]"
         )
-        return f"{text}\n\n{hint}" if text else hint
+        body = f"{text}\n\n{hint}" if text else hint
+        return f"{prefix}{body}" if prefix else body
 
     if fallback_image_count > 0:
         hint = (
@@ -291,9 +300,10 @@ def _compose_agent_input(
             "检索工具可直接使用这些已上传图片的向量。"
             "不要说用户没有上传图片。若用户要求继续基于上一张图检索，可直接调用 start_collection(query=用户补充条件或空字符串)。]"
         )
-        return f"{text}\n\n{hint}" if text else hint
+        body = f"{text}\n\n{hint}" if text else hint
+        return f"{prefix}{body}" if prefix else body
 
-    return text
+    return f"{prefix}{text}" if prefix else text
 
 
 # ── Chat endpoints ──
@@ -333,6 +343,7 @@ async def chat_endpoint(
     )
 
     image_blocks = _extract_image_blocks(raw_content_blocks)
+    query_text = _extract_text_from_blocks(raw_content_blocks)
     current_query_context = await _build_query_context(raw_content_blocks)
     if current_query_context and image_blocks:
         remember_session_images(
@@ -341,9 +352,15 @@ async def chat_endpoint(
             context=current_query_context,
         )
     fallback_image_blocks = [] if image_blocks else get_session_image_blocks(thread_id)
+    turn_context = build_turn_context(
+        query_text=query_text,
+        has_images=bool(image_blocks or fallback_image_blocks),
+    )
+    set_turn_context(thread_id, turn_context)
     agent_input = _compose_agent_input(
         raw_content_blocks,
         fallback_image_count=len(fallback_image_blocks),
+        turn_playbook=build_turn_playbook(turn_context),
     )
     query_context = current_query_context or get_session_image_context(thread_id)
     set_query_context(thread_id, query_context)
@@ -400,6 +417,7 @@ async def chat_endpoint(
             yield sse_event({"type": "error", "message": "Agent stream failed. Check server logs."})
         finally:
             set_query_context(thread_id, None)
+            clear_turn_context(thread_id)
 
     return StreamingResponse(
         _generate(),
