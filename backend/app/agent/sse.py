@@ -394,23 +394,28 @@ async def stream_agent_response(
                         if blk.get("type") == "tool_use":
                             blk["status"] = "done"
 
-            # ── Tool result (after tool execution) ─────────────────────────────
-            elif kind == "on_tool_end":
+            # ── Tool result (after tool execution or error) ────────────────────
+            elif kind in ("on_tool_end", "on_tool_error"):
                 tool_name = event.get("name", "")
                 run_id = event.get("run_id", "")
                 raw_call_id = str(run_id)[:36] if run_id else active_tool_use_id
                 # Resolve run_id -> streaming call_id if applicable
                 call_id = run_id_to_call_id.get(raw_call_id, raw_call_id)
-                output = event.get("data", {}).get("output", "")
 
-                # Extract content from ToolMessage objects
-                # LangGraph returns ToolMessage with .content attribute, not a plain string
-                if hasattr(output, "content"):
-                    content = output.content if isinstance(output.content, str) else str(output.content)
-                elif isinstance(output, str):
-                    content = output
+                if kind == "on_tool_end":
+                    output = event.get("data", {}).get("output", "")
+                    # Extract content from ToolMessage objects
+                    # LangGraph returns ToolMessage with .content attribute, not a plain string
+                    if hasattr(output, "content"):
+                        content = output.content if isinstance(output.content, str) else str(output.content)
+                    elif isinstance(output, str):
+                        content = output
+                    else:
+                        content = str(output)
                 else:
-                    content = str(output)
+                    error_obj = event.get("data", {}).get("error", "Unknown error")
+                    # Format standard error JSON to display gracefully on the UI 
+                    content = json.dumps({"error": f"Tool execution failed: {error_obj}"}, ensure_ascii=False)
 
                 # Close the corresponding tool_use block before sending tool_result.
                 call_block_index = tool_call_index_map.get(call_id)

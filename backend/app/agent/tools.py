@@ -37,11 +37,16 @@ from .session_state import (
     apply_session_filters,
     available_values,
 )
-from .harness import infer_active_category
+from .harness import (
+    infer_active_category,
+    note_invalid_filter_attempt,
+    clear_invalid_filter_attempt,
+)
 from .color_utils import COLOR_KEYWORDS, color_matches
 from ..services.chat_service import create_artifact
 from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
+from ..config import settings
 
 # ── Backward-compatible aliases used by routers and other modules ──
 _format_result = format_result
@@ -66,14 +71,19 @@ def _structured_filter_error(
     value: str,
     reason: str,
     inferred_category: str | None = None,
+    error_type: str = "invalid_filter_request",
+    blocked_by_harness: bool = False,
 ) -> str:
     payload = {
         "error": reason,
-        "error_type": "invalid_filter_request",
+        "message": reason,
+        "error_type": error_type,
         "dimension": dimension,
         "value": value,
         "retry_same_call": False,
     }
+    if blocked_by_harness:
+        payload["blocked_by_harness"] = True
     if inferred_category:
         payload["resolved_category_hint"] = inferred_category
         payload["suggested_next_call"] = (
@@ -275,7 +285,9 @@ def add_filter(
     CRITICAL RULE FOR CATEGORY ARGUMENT:
     - If dimension="category", DO NOT pass the `category` argument.
     - If dimension is a garment attribute (color, fabric, pattern, silhouette, sleeve_length, garment_length, collar),
-      you MUST pass the `category` argument.
+      you normally MUST pass the `category` argument.
+    - Runtime harness exception: if the current turn or session already implies exactly one category,
+      the system may auto-bind the garment attribute to that category.
     - If dimension is an image attribute (brand, gender, season, year_min, image_type), DO NOT pass `category`.
 
     Returns: remaining count. If 0, suggests available values — DO NOT add this filter.
@@ -302,7 +314,11 @@ def add_filter(
         dim_normalized = "garment_length"
 
     inferred_category = None
-    if not category and dimension in (GARMENT_TAG_DIMS | GARMENT_NESTED_DIMS):
+    if (
+        settings.AGENT_RUNTIME_HARNESS_ENABLED
+        and not category
+        and dimension in (GARMENT_TAG_DIMS | GARMENT_NESTED_DIMS)
+    ):
         inferred_category = infer_active_category(
             thread_id=thread_id,
             session_filters=session.get("filters", []),
@@ -323,6 +339,27 @@ def add_filter(
         entry = {"type": "meta", "key": dimension, "value": value}
     else:
         if dimension in (GARMENT_TAG_DIMS | GARMENT_NESTED_DIMS):
+            attempts = note_invalid_filter_attempt(
+                thread_id=thread_id,
+                dimension=dimension,
+                value=value,
+                category=category,
+            )
+            if (
+                settings.AGENT_RUNTIME_HARNESS_ENABLED
+                and attempts > settings.AGENT_RUNTIME_HARNESS_MAX_SAME_ERROR_RETRIES
+            ):
+                return _structured_filter_error(
+                    dimension=dimension,
+                    value=value,
+                    reason=(
+                        f"Repeated invalid '{dimension}' request blocked by runtime harness. "
+                        "Resolve the garment category first, then continue filtering."
+                    ),
+                    inferred_category=inferred_category,
+                    error_type="retry_blocked",
+                    blocked_by_harness=True,
+                )
             return _structured_filter_error(
                 dimension=dimension,
                 value=value,
@@ -340,6 +377,12 @@ def add_filter(
     count = count_session(client, test_session)
 
     if count > 0:
+        clear_invalid_filter_attempt(
+            thread_id=thread_id,
+            dimension=dimension,
+            value=value,
+            category=category,
+        )
         session["filters"].append(entry)
         set_session(config, session)
         filter_summary = []

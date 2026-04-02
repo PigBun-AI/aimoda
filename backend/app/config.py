@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://api.minimaxi.com/anthropic"
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 4096
+    AGENT_RUNTIME_HARNESS_ENABLED: bool = True
+    AGENT_RUNTIME_HARNESS_MAX_SAME_ERROR_RETRIES: int = 1
 
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"

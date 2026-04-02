@@ -15,6 +15,7 @@ class TurnContext(TypedDict, total=False):
     has_images: bool
     inferred_categories: list[str]
     active_skill: str
+    invalid_filter_attempts: dict[str, int]
 
 
 _turn_contexts: dict[str, TurnContext] = {}
@@ -58,6 +59,7 @@ def build_turn_context(
         "has_images": has_images,
         "inferred_categories": inferred_categories,
         "active_skill": "multimodal_retrieval" if has_images else "text_retrieval",
+        "invalid_filter_attempts": {},
     }
 
 
@@ -97,29 +99,78 @@ def infer_active_category(
     return None
 
 
+def build_filter_signature(
+    *,
+    dimension: str,
+    value: str,
+    category: str | None,
+) -> str:
+    normalized_category = (category or "").strip().lower() or "__missing__"
+    return f"{dimension.strip().lower()}::{value.strip().lower()}::{normalized_category}"
+
+
+def note_invalid_filter_attempt(
+    *,
+    thread_id: str,
+    dimension: str,
+    value: str,
+    category: str | None,
+) -> int:
+    context = _turn_contexts.setdefault(thread_id, {})
+    attempts = context.setdefault("invalid_filter_attempts", {})
+    signature = build_filter_signature(dimension=dimension, value=value, category=category)
+    attempts[signature] = attempts.get(signature, 0) + 1
+    return attempts[signature]
+
+
+def clear_invalid_filter_attempt(
+    *,
+    thread_id: str,
+    dimension: str,
+    value: str,
+    category: str | None,
+) -> None:
+    context = _turn_contexts.get(thread_id)
+    if not context:
+        return
+    attempts = context.get("invalid_filter_attempts")
+    if not attempts:
+        return
+    signature = build_filter_signature(dimension=dimension, value=value, category=category)
+    attempts.pop(signature, None)
+
+
 def build_turn_playbook(context: TurnContext) -> str:
     """Create a compact turn-specific protocol, similar to an on-demand skill."""
     categories = context.get("inferred_categories", [])
-    category_hint = f"当前文本已隐含主品类：{categories[0]}。" if len(categories) == 1 else ""
+    primary_category = categories[0] if len(categories) == 1 else ""
 
     if context.get("has_images"):
         lines = [
-            "[ACTIVE PLAYBOOK: multimodal_retrieval]",
-            "- 这是图像参与的检索轮次，先理解图片，再收缩筛选。",
-            "- 若需要图片理解，优先调用 fashion_vision。",
-            "- 不要并行调用多个会改变集合状态的工具。",
-            "- 工具报错后，先修正参数或换策略，不要重复相同调用。",
+            "[TURN_PROTOCOL]",
+            "skill=multimodal_retrieval",
+            "state_changing_tools_serial_only=true",
+            "same_failed_call_retry=forbidden",
+            "image_understanding_tool=fashion_vision",
+            "plan_order=fashion_vision -> start_collection -> add_filter -> show_collection",
         ]
     else:
         lines = [
-            "[ACTIVE PLAYBOOK: text_retrieval]",
-            "- 这是纯文本检索轮次，先抽取主品类，再逐步增加最关键的过滤条件。",
-            "- 不要并行调用多个会改变集合状态的工具（start_collection/add_filter/remove_filter）。",
-            "- garment attribute（如 color/fabric/pattern/silhouette/collar）必须依附某个 category。",
-            "- 工具报错后，先修正参数或换策略，不要重复相同调用。",
+            "[TURN_PROTOCOL]",
+            "skill=text_retrieval",
+            "state_changing_tools_serial_only=true",
+            "same_failed_call_retry=forbidden",
+            "garment_attribute_requires_category=true",
+            "plan_order=start_collection -> add_filter -> show_collection",
         ]
 
-    if category_hint:
-        lines.append(f"- {category_hint} 对应 garment attribute 默认优先绑定到这个品类。")
+    if primary_category:
+        lines.append(f"inferred_primary_category={primary_category}")
+        lines.append(
+            f"garment_attribute_default_category={primary_category}"
+        )
+        lines.append(
+            f"recommended_next_filters=category:{primary_category} before garment attributes if session has no category yet"
+        )
 
     return "\n".join(lines)
