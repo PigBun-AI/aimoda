@@ -6,6 +6,15 @@ import { sendChatSSE, fetchSearchSessionById, listSessions, createSession, delet
 import { useSessionStore } from './session-store'
 import { normalizeContentBlocks } from './content-blocks'
 
+function toolResultLooksLikeError(content: string): boolean {
+  try {
+    const data = JSON.parse(content)
+    return typeof data?.error === 'string' && data.error.length > 0
+  } catch {
+    return false
+  }
+}
+
 /**
  * Main chat hook — manages messages, SSE streaming, and drawer state
  */
@@ -174,6 +183,9 @@ export function useChat(sessionId: string | null) {
           const block = blockMap.get(event.index)
           if (block && block.type === 'tool_use') {
             ;(block as { status?: string }).status = 'done'
+            commitAssistantBlocks()
+          } else if (block && block.type === 'tool_result') {
+            block.is_error = toolResultLooksLikeError(block.content)
             commitAssistantBlocks()
           }
         } else if (event.type === 'message_stop') {

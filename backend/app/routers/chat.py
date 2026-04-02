@@ -36,6 +36,7 @@ from ..services.chat_service import (
     auto_title_session,
     set_session_execution_status,
     get_artifact,
+    get_session_agent_runtime,
 )
 from ..services.oss_service import get_oss_service
 from ..services.websocket_manager import ws_manager
@@ -43,10 +44,17 @@ from ..services.auth_token import verify_access_token
 from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
 from ..agent.qdrant_utils import get_qdrant, format_result, get_collection, encode_image
-from ..agent.session_state import apply_session_filters
+from ..agent.session_state import (
+    apply_session_filters,
+    get_session as get_agent_session,
+    set_session as set_agent_session,
+)
 from ..agent.harness import (
     build_turn_context,
     build_turn_playbook,
+    get_session_semantics,
+    set_session_semantics,
+    update_session_semantics,
     set_turn_context,
     clear_turn_context,
 )
@@ -170,6 +178,133 @@ def _extract_text_from_blocks(blocks: list[dict[str, Any]]) -> str:
 
 def _extract_image_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [dict(block) for block in blocks if block.get("type") == "image"]
+
+
+def _extract_category_hints_from_payload(payload: dict[str, Any]) -> list[str]:
+    hints: list[str] = []
+
+    direct_fields = [
+        payload.get("resolved_category"),
+        payload.get("resolved_category_hint"),
+    ]
+    for value in direct_fields:
+        if isinstance(value, str) and value.strip():
+            hints.append(value.strip().lower())
+
+    filter_lists = [
+        payload.get("active_filters"),
+        payload.get("filters_applied"),
+    ]
+    for items in filter_lists:
+        if not isinstance(items, list):
+            continue
+        for raw in items:
+            if not isinstance(raw, str):
+                continue
+            item = raw.strip().lower()
+            if item.startswith("category="):
+                hints.append(item.split("=", 1)[1].strip())
+            elif ":" in item:
+                hints.append(item.split(":", 1)[0].strip())
+
+    return list(dict.fromkeys([hint for hint in hints if hint]))
+
+
+async def _restore_agent_session_from_history(
+    thread_id: str,
+    history: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Hydrate agent session state from the latest persisted show_collection result.
+
+    This keeps multi-turn retrieval stable even if the next request lands on a
+    different worker process, where in-memory agent session state would be empty.
+    """
+    if not history:
+        return None
+
+    for message in reversed(history):
+        blocks = message.get("content", [])
+        if not isinstance(blocks, list):
+            continue
+
+        for block in reversed(blocks):
+            if not isinstance(block, dict) or block.get("type") != "tool_result":
+                continue
+
+            content = block.get("content", "")
+            if not isinstance(content, str) or not content:
+                continue
+
+            try:
+                payload = json.loads(content)
+            except json.JSONDecodeError:
+                continue
+
+            category_hints = _extract_category_hints_from_payload(payload)
+            if len(category_hints) == 1:
+                update_session_semantics(
+                    thread_id=thread_id,
+                    explicit_category=category_hints[0],
+                )
+
+            if payload.get("action") != "show_collection":
+                continue
+
+            search_request_id = str(payload.get("search_request_id", "")).strip()
+            if not search_request_id:
+                continue
+
+            artifact = await asyncio.to_thread(
+                get_artifact,
+                search_request_id,
+                artifact_type="collection_result",
+            )
+            if not artifact:
+                continue
+
+            session = artifact.get("metadata", {}).get("search_session")
+            if not isinstance(session, dict):
+                continue
+
+            config = {"configurable": {"thread_id": thread_id}}
+            set_agent_session(config, session)
+            update_session_semantics(
+                thread_id=thread_id,
+                query_text=str(session.get("query", "")),
+                session_filters=session.get("filters", []),
+            )
+            return session
+
+    return None
+
+
+def _restore_agent_session_from_runtime_state(
+    *,
+    session_id: str,
+    thread_id: str,
+) -> dict[str, Any] | None:
+    runtime_state = get_session_agent_runtime(session_id)
+    if not isinstance(runtime_state, dict) or not runtime_state:
+        return None
+
+    session = runtime_state.get("search_session")
+    if not isinstance(session, dict):
+        return None
+
+    config = {"configurable": {"thread_id": thread_id}}
+    set_agent_session(config, session)
+
+    semantics = runtime_state.get("semantics")
+    if isinstance(semantics, dict) and semantics:
+        set_session_semantics(thread_id, semantics)
+    else:
+        update_session_semantics(
+            thread_id=thread_id,
+            query_text=str(session.get("query", "")),
+            session_filters=session.get("filters", []),
+        )
+
+    return session
 
 
 def _to_anthropic_content_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -342,6 +477,14 @@ async def chat_endpoint(
         raw_content_blocks,
     )
 
+    restored_agent_session = await asyncio.to_thread(
+        _restore_agent_session_from_runtime_state,
+        session_id=req.session_id,
+        thread_id=thread_id,
+    )
+    if not restored_agent_session:
+        restored_agent_session = await _restore_agent_session_from_history(thread_id, req.history)
+
     image_blocks = _extract_image_blocks(raw_content_blocks)
     query_text = _extract_text_from_blocks(raw_content_blocks)
     current_query_context = await _build_query_context(raw_content_blocks)
@@ -351,10 +494,15 @@ async def chat_endpoint(
             image_blocks=image_blocks,
             context=current_query_context,
         )
+    existing_agent_session = restored_agent_session or get_agent_session({"configurable": {"thread_id": thread_id}})
+    session_semantics = get_session_semantics(thread_id)
     fallback_image_blocks = [] if image_blocks else get_session_image_blocks(thread_id)
     turn_context = build_turn_context(
         query_text=query_text,
         has_images=bool(image_blocks or fallback_image_blocks),
+        session_filters=existing_agent_session.get("filters", []),
+        session_active=bool(existing_agent_session.get("active")),
+        session_primary_category=session_semantics.get("primary_category"),
     )
     set_turn_context(thread_id, turn_context)
     agent_input = _compose_agent_input(
@@ -868,7 +1016,18 @@ async def websocket_chat(websocket: WebSocket):
                 )
 
                 raw_content_blocks = _normalize_message_content(raw_content)
+                restored_agent_session = await asyncio.to_thread(
+                    _restore_agent_session_from_runtime_state,
+                    session_id=session_id,
+                    thread_id=thread_id,
+                )
+                if not restored_agent_session:
+                    restored_agent_session = await _restore_agent_session_from_history(
+                        thread_id,
+                        msg.get("history", []),
+                    )
                 image_blocks = _extract_image_blocks(raw_content_blocks)
+                query_text = _extract_text_from_blocks(raw_content_blocks)
                 current_query_context = await _build_query_context(raw_content_blocks)
                 if current_query_context and image_blocks:
                     remember_session_images(
@@ -876,10 +1035,21 @@ async def websocket_chat(websocket: WebSocket):
                         image_blocks=image_blocks,
                         context=current_query_context,
                     )
+                existing_agent_session = restored_agent_session or get_agent_session({"configurable": {"thread_id": thread_id}})
+                session_semantics = get_session_semantics(thread_id)
                 fallback_image_blocks = [] if image_blocks else get_session_image_blocks(thread_id)
+                turn_context = build_turn_context(
+                    query_text=query_text,
+                    has_images=bool(image_blocks or fallback_image_blocks),
+                    session_filters=existing_agent_session.get("filters", []),
+                    session_active=bool(existing_agent_session.get("active")),
+                    session_primary_category=session_semantics.get("primary_category"),
+                )
+                set_turn_context(thread_id, turn_context)
                 agent_input = _compose_agent_input(
                     raw_content_blocks,
                     fallback_image_count=len(fallback_image_blocks),
+                    turn_playbook=build_turn_playbook(turn_context),
                 )
                 query_context = current_query_context or get_session_image_context(thread_id)
                 set_query_context(thread_id, query_context)
@@ -919,6 +1089,7 @@ async def websocket_chat(websocket: WebSocket):
                     execution_status="completed",
                 )
                 set_query_context(thread_id, None)
+                clear_turn_context(thread_id)
 
     except WebSocketDisconnect:
         pass
@@ -935,6 +1106,7 @@ async def websocket_chat(websocket: WebSocket):
             pass
     finally:
         set_query_context(thread_id, None)
+        clear_turn_context(thread_id)
         sub_task.cancel()
         await ws_manager.disconnect(user.id, websocket, session_id)
 

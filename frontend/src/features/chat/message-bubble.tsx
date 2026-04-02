@@ -1,7 +1,7 @@
 // MessageBubble — renders user and assistant messages using ContentBlock[]
 // Each block is rendered independently: text bubbles, tool cards, search results
 
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Search, Filter, X, Eye, Images, Palette, BarChart3, Info, Loader2, CheckCircle2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
 import type { ChatMessage, ContentBlock, ImageSource, SearchResultData, ImageResult, FashionVisionResultData } from './chat-types'
 import { SearchResultCard } from './search-result-card'
@@ -72,6 +72,14 @@ function parseToolResultSummary(content: string): string {
     }
   } catch {}
   return content.length > 120 ? `${content.slice(0, 120)}...` : content
+}
+
+function hasToolResultError(content: string): boolean {
+  try {
+    const data = JSON.parse(content)
+    return typeof data?.error === 'string' && data.error.length > 0
+  } catch {}
+  return false
 }
 
 function buildArgsSummary(name: string, args: Record<string, unknown>): string {
@@ -212,6 +220,16 @@ function isCollapsibleToolTrace(block: ContentBlock): boolean {
   return false
 }
 
+function getToolTraceStats(blocks: ContentBlock[]) {
+  const toolUses = blocks.filter((block): block is Extract<ContentBlock, { type: 'tool_use' }> => block.type === 'tool_use')
+  const toolResults = blocks.filter((block): block is Extract<ContentBlock, { type: 'tool_result' }> => block.type === 'tool_result')
+  const resolvedToolUseIds = new Set(toolResults.map((block) => block.tool_use_id))
+  const runningCount = toolUses.filter((block) => !resolvedToolUseIds.has(block.id)).length
+  const doneCount = Math.max(toolUses.length - runningCount, 0)
+  const errorCount = toolResults.filter((block) => block.is_error ?? hasToolResultError(block.content)).length
+  return { toolCount: toolUses.length, doneCount, runningCount, errorCount }
+}
+
 function BlockRenderer({
   block,
   onOpenDrawer,
@@ -273,8 +291,23 @@ function ToolTraceGroup({
   blocks: ContentBlock[]
   onOpenDrawer?: (searchRequestId: string) => void
 }) {
-  const [collapsed, setCollapsed] = useState(true)
-  const toolCount = blocks.filter((block) => block.type === 'tool_use').length
+  const stats = useMemo(() => getToolTraceStats(blocks), [blocks])
+  const resolvedToolUseIds = useMemo(
+    () => new Set(
+      blocks
+        .filter((block): block is Extract<ContentBlock, { type: 'tool_result' }> => block.type === 'tool_result')
+        .map((block) => block.tool_use_id),
+    ),
+    [blocks],
+  )
+  const shouldOpen = stats.runningCount > 0 || stats.errorCount > 0
+  const [collapsed, setCollapsed] = useState(!shouldOpen)
+
+  useEffect(() => {
+    if (shouldOpen) {
+      setCollapsed(false)
+    }
+  }, [shouldOpen])
 
   return (
     <div className="rounded-bubble border border-border/70 bg-muted/20 overflow-hidden">
@@ -286,7 +319,12 @@ function ToolTraceGroup({
         <div className="flex items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
           <span className="text-xs font-medium text-foreground/80">工具执行记录</span>
-          <span className="text-xs text-muted-foreground">{toolCount} 个调用</span>
+          <span className="text-xs text-muted-foreground">{stats.toolCount} 个调用</span>
+          {stats.runningCount > 0 && <span className="text-xs text-primary">执行中 {stats.runningCount}</span>}
+          {stats.errorCount > 0 && <span className="text-xs text-destructive">异常 {stats.errorCount}</span>}
+          {stats.toolCount > 0 && stats.runningCount === 0 && stats.errorCount === 0 && (
+            <span className="text-xs text-success">已完成 {stats.doneCount}</span>
+          )}
         </div>
         <span className="text-xs text-muted-foreground">{collapsed ? '展开' : '收起'}</span>
       </button>
@@ -294,7 +332,15 @@ function ToolTraceGroup({
       {!collapsed && (
         <div className="px-3 pb-3 space-y-2 border-t border-border/60 bg-background/60">
           {blocks.map((block, index) => (
-            <BlockRenderer key={index} block={block} onOpenDrawer={onOpenDrawer} />
+            <BlockRenderer
+              key={index}
+              block={
+                block.type === 'tool_use' && !resolvedToolUseIds.has(block.id)
+                  ? { ...block, status: 'running' }
+                  : block
+              }
+              onOpenDrawer={onOpenDrawer}
+            />
           ))}
         </div>
       )}
@@ -340,6 +386,7 @@ function ToolResultView({
 }) {
   const showCollectionData = useMemo(() => parseShowCollectionResult(block.content), [block.content])
   const fashionVisionData = useMemo(() => parseFashionVisionResult(block.content), [block.content])
+  const isError = block.is_error ?? hasToolResultError(block.content)
 
   if (showCollectionData && onOpenDrawer) {
     return <SearchResultCard data={showCollectionData} images={block.images} onOpenDrawer={onOpenDrawer} />
@@ -349,7 +396,7 @@ function ToolResultView({
     return <FashionVisionCard data={fashionVisionData} />
   }
 
-  if (block.is_error) {
+  if (isError) {
     return (
       <div className="py-1 px-3 ml-3 text-xs border-l-2 border-destructive/50 text-destructive">
         {parseToolResultSummary(block.content)}

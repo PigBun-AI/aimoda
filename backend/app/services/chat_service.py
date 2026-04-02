@@ -325,6 +325,43 @@ def set_session_execution_status(
         conn.commit()
 
 
+def get_session_agent_runtime(session_id: str) -> dict:
+    """Return persisted agent runtime state for a chat session."""
+    session = get_session(session_id)
+    if not session:
+        return {}
+    config = session.get("model_config", {}) if isinstance(session, dict) else {}
+    runtime = config.get("runtime", {}) if isinstance(config.get("runtime"), dict) else {}
+    agent_state = runtime.get("agent_state", {}) if isinstance(runtime.get("agent_state"), dict) else {}
+    return dict(agent_state)
+
+
+def set_session_agent_runtime(session_id: str, agent_state: dict | None) -> None:
+    """Persist serializable agent runtime state into chat_sessions.model_config.runtime."""
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            "SELECT model_config FROM chat_sessions WHERE id = %s",
+            (_uuid(session_id),),
+        ).fetchone()
+        if not row:
+            return
+
+        config = dict(row[0]) if row[0] else {}
+        runtime = dict(config.get("runtime", {}) if isinstance(config.get("runtime"), dict) else {})
+        runtime["agent_state"] = dict(agent_state or {})
+        config["runtime"] = runtime
+
+        conn.execute(
+            """
+            UPDATE chat_sessions
+            SET model_config = %s, updated_at = NOW()
+            WHERE id = %s
+            """,
+            (psycopg.types.json.Json(config), _uuid(session_id)),
+        )
+        conn.commit()
+
+
 def auto_title_session(session_id: str, user_message: str):
     """Auto-set session title from first user message (max 20 chars).
 

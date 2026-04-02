@@ -13,12 +13,14 @@ from app.agent import harness, query_context, session_state, tools
 @pytest.fixture(autouse=True)
 def clear_runtime_state():
     harness._turn_contexts.clear()
+    harness._session_semantics.clear()
     query_context._contexts.clear()
     query_context._session_image_contexts.clear()
     query_context._session_image_blocks.clear()
     session_state._sessions.clear()
     yield
     harness._turn_contexts.clear()
+    harness._session_semantics.clear()
     query_context._contexts.clear()
     query_context._session_image_contexts.clear()
     query_context._session_image_blocks.clear()
@@ -74,3 +76,20 @@ def test_add_filter_returns_structured_error_when_category_still_unknown(monkeyp
     assert payload["error_type"] == "invalid_filter_request"
     assert payload["retry_same_call"] is False
     assert "category" in payload["error"]
+
+
+def test_add_filter_rejects_abstract_style_dimension(monkeypatch):
+    config = {"configurable": {"thread_id": "user-3:session-3"}}
+    session_state.set_session(config, {
+        "query": "",
+        "vector_type": "fashion_clip",
+        "q_emb": [0.1, 0.2, 0.3],
+        "filters": [],
+        "active": True,
+    })
+
+    payload = json.loads(tools.add_filter.func("style", "commute", config=config))
+
+    assert payload["error_type"] == "unsupported_dimension"
+    assert payload["retry_same_call"] is False
+    assert "richer query" in payload["error"]

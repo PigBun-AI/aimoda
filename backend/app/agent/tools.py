@@ -41,9 +41,10 @@ from .harness import (
     infer_active_category,
     note_invalid_filter_attempt,
     clear_invalid_filter_attempt,
+    update_session_semantics,
 )
 from .color_utils import COLOR_KEYWORDS, color_matches
-from ..services.chat_service import create_artifact
+from ..services.chat_service import create_artifact, set_session_agent_runtime
 from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
 from ..config import settings
@@ -73,6 +74,8 @@ def _structured_filter_error(
     inferred_category: str | None = None,
     error_type: str = "invalid_filter_request",
     blocked_by_harness: bool = False,
+    suggested_strategy: str | None = None,
+    suggested_next_actions: list[str] | None = None,
 ) -> str:
     payload = {
         "error": reason,
@@ -84,12 +87,51 @@ def _structured_filter_error(
     }
     if blocked_by_harness:
         payload["blocked_by_harness"] = True
+    if suggested_strategy:
+        payload["suggested_strategy"] = suggested_strategy
+    if suggested_next_actions:
+        payload["suggested_next_actions"] = suggested_next_actions
     if inferred_category:
         payload["resolved_category_hint"] = inferred_category
         payload["suggested_next_call"] = (
             f'add_filter("{dimension}", "{value}", category="{inferred_category}")'
         )
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _build_recovery_actions(
+    *,
+    dimension: str,
+    value: str,
+    category: str | None,
+) -> list[str]:
+    if category:
+        return [
+            f'add_filter("{dimension}", "{value}", category="{category}")',
+            "show_collection()",
+        ]
+
+    return [
+        'add_filter("category", "<garment-category>")',
+        'start_collection("<style-or-category enriched query>")',
+    ]
+
+
+def _structured_argument_error(
+    *,
+    dimension: str,
+    value: str | None,
+    reason: str,
+) -> str:
+    return json.dumps({
+        "error": reason,
+        "message": reason,
+        "error_type": "invalid_arguments",
+        "dimension": dimension,
+        "value": value,
+        "retry_same_call": False,
+        "suggested_strategy": "Provide a concrete non-empty filter value before retrying.",
+    }, ensure_ascii=False)
 
 
 def _session_id_from_config(config: RunnableConfig | None) -> str | None:
@@ -99,6 +141,49 @@ def _session_id_from_config(config: RunnableConfig | None) -> str | None:
     if ":" not in thread_id:
         return None
     return thread_id.split(":", 1)[1]
+
+
+def _serialize_search_session(session: dict) -> dict:
+    q_emb_raw = session.get("q_emb")
+    q_emb_list = (
+        q_emb_raw.tolist() if hasattr(q_emb_raw, "tolist")
+        else list(q_emb_raw) if q_emb_raw is not None
+        else None
+    )
+    return {
+        "query": session.get("query", ""),
+        "vector_type": session.get("vector_type", "tag"),
+        "q_emb": q_emb_list,
+        "filters": session.get("filters", []),
+        "active": session.get("active", False),
+    }
+
+
+def _persist_agent_runtime_state(
+    *,
+    config: RunnableConfig | None,
+    thread_id: str,
+    session: dict,
+) -> None:
+    session_id = _session_id_from_config(config)
+    if not session_id:
+        return
+
+    try:
+        set_session_agent_runtime(
+            session_id,
+            {
+                "search_session": _serialize_search_session(session),
+                "semantics": update_session_semantics(
+                    thread_id=thread_id,
+                    query_text=str(session.get("query", "")),
+                    session_filters=session.get("filters", []),
+                ),
+            },
+        )
+    except Exception:
+        # Runtime persistence is a resilience layer and must not break retrieval.
+        return
 
 
 def _normalize_vector(vector: list[float]) -> list[float]:
@@ -256,6 +341,7 @@ def start_collection(
     }
 
     set_session(config, session)
+    _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
     count = count_session(client, session)
     return json.dumps({
         "status": "collection_started",
@@ -299,9 +385,28 @@ def add_filter(
     client = get_qdrant()
     thread_id = get_thread_id(config)
 
+    dimension = (dimension or "").strip().lower()
+    value = value if isinstance(value, str) else None
+    if not dimension:
+        return _structured_argument_error(
+            dimension="",
+            value=value,
+            reason="Filter dimension must be a non-empty string.",
+        )
+    if value is None or not value.strip():
+        return _structured_argument_error(
+            dimension=dimension,
+            value=value,
+            reason=f'Filter "{dimension}" requires a concrete non-empty value.',
+        )
+    value = value.strip()
+    if category:
+        category = category.strip().lower() or None
+
     GARMENT_TAG_DIMS = {"color", "fabric", "pattern", "silhouette"}
     GARMENT_NESTED_DIMS = {"sleeve_length", "sleeve", "garment_length", "length", "collar"}
     meta_dims = {"brand", "gender", "season", "year_min", "image_type"}
+    abstract_style_dims = {"style", "mood", "vibe"}
 
     DIM_TO_FIELD = {"sleeve_length": "sleeve", "sleeve": "sleeve",
                     "garment_length": "length", "length": "length",
@@ -325,6 +430,26 @@ def add_filter(
         )
         if inferred_category:
             category = inferred_category
+
+    if dimension in abstract_style_dims:
+        return _structured_filter_error(
+            dimension=dimension,
+            value=value,
+            reason=(
+                f'"{dimension}" is not a supported filter dimension. '
+                "Abstract style goals should be translated into a richer query or concrete filters first."
+            ),
+            error_type="unsupported_dimension",
+            suggested_strategy=(
+                "Use start_collection with an enriched query, or add/remove concrete garment filters "
+                "such as category, color, silhouette, collar, fabric, or pattern."
+            ),
+            suggested_next_actions=_build_recovery_actions(
+                dimension=dimension,
+                value=value,
+                category=inferred_category,
+            ),
+        )
 
     if dimension == "category":
         entry = {"type": "category", "key": "category", "value": value}
@@ -359,6 +484,15 @@ def add_filter(
                     inferred_category=inferred_category,
                     error_type="retry_blocked",
                     blocked_by_harness=True,
+                    suggested_strategy=(
+                        "Do not retry the same invalid call. Bind the garment attribute to a concrete category, "
+                        "or repair the search query before continuing."
+                    ),
+                    suggested_next_actions=_build_recovery_actions(
+                        dimension=dimension,
+                        value=value,
+                        category=inferred_category,
+                    ),
                 )
             return _structured_filter_error(
                 dimension=dimension,
@@ -368,8 +502,25 @@ def add_filter(
                     f'Example: add_filter("{dimension}", "{value}", category="dress")'
                 ),
                 inferred_category=inferred_category,
+                suggested_strategy=(
+                    "First resolve the garment category, then retry the attribute filter."
+                ),
+                suggested_next_actions=_build_recovery_actions(
+                    dimension=dimension,
+                    value=value,
+                    category=inferred_category,
+                ),
             )
-        return json.dumps({"error": f"Unknown dimension: {dimension}"})
+        return _structured_filter_error(
+            dimension=dimension,
+            value=value,
+            reason=f"Unknown dimension: {dimension}",
+            error_type="unsupported_dimension",
+            suggested_strategy=(
+                "Only use supported retrieval dimensions. If the request is abstract, translate it into "
+                "query text or concrete garment/image filters."
+            ),
+        )
 
     test_filters = session["filters"] + [entry]
     test_session = dict(session)
@@ -385,6 +536,7 @@ def add_filter(
         )
         session["filters"].append(entry)
         set_session(config, session)
+        _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
         filter_summary = []
         for f in session["filters"]:
             if f["type"] == "category":
@@ -449,6 +601,7 @@ def remove_filter(
 
     session["filters"] = new_filters
     set_session(config, session)
+    _persist_agent_runtime_state(config=config, thread_id=get_thread_id(config), session=session)
     count = count_session(client, session)
 
     return json.dumps({
@@ -537,20 +690,7 @@ def show_collection(
         else:
             filter_summary.append(f"{f['key']}={f['value']}")
 
-    q_emb_raw = session.get("q_emb")
-    q_emb_list = (
-        q_emb_raw.tolist() if hasattr(q_emb_raw, "tolist")
-        else list(q_emb_raw) if q_emb_raw is not None
-        else None
-    )
-
-    serializable_session = {
-        "query": session.get("query", ""),
-        "vector_type": session.get("vector_type", "tag"),
-        "q_emb": q_emb_list,
-        "filters": session.get("filters", []),
-        "active": session.get("active", True),
-    }
+    serializable_session = _serialize_search_session(session)
 
     sample_images = []
     for point in results[:8]:

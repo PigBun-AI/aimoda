@@ -8,16 +8,21 @@ import json
 import pytest
 
 from app.agent import query_context, session_state, tools
+from app.agent import harness
 from app.routers import chat
 
 
 @pytest.fixture(autouse=True)
 def clear_in_memory_state():
+    harness._turn_contexts.clear()
+    harness._session_semantics.clear()
     query_context._contexts.clear()
     query_context._session_image_contexts.clear()
     query_context._session_image_blocks.clear()
     session_state._sessions.clear()
     yield
+    harness._turn_contexts.clear()
+    harness._session_semantics.clear()
     query_context._contexts.clear()
     query_context._session_image_contexts.clear()
     query_context._session_image_blocks.clear()
