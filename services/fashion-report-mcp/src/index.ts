@@ -16,83 +16,86 @@ import { CONFIG } from "./config.js";
 import { authMiddleware } from "./auth.js";
 
 // ── Inline report spec ──────────────────────────────────────────
-const REPORT_SPEC = `# WWWD 报告规范
+const REPORT_SPEC = `# AiModa Fashion Report Zip Spec v2
 
-World Wear Watch Daily (WWWD) 时尚趋势报告的资源层级规范。
-
----
-
-## 1. 文件夹结构
-
-\`\`\`
-{brand}-{season}-{year}/
-├── index.html          # 必需：主报告页面
-├── cover.jpg           # 必需：封面图片（首页截图）
-├── overview.html       # 必需：品牌纵览页面
-├── metadata.json       # 可选：元数据
-└── images/             # 图片资源目录
-    ├── look-01.jpg
-    ├── look-02.jpg
-    └── ...
-\`\`\`
-
-### 命名规范
-
-| 元素 | 规范 | 示例 |
-|------|------|------|
-| 文件夹 | \`{品牌英文名}-{季节}-{年份}\` | \`zimmermann-fall-2026\` |
-| 季节 | 小写英文 | \`fall\`, \`spring\`, \`resort\`, \`pre-fall\` |
-| 封面 | \`cover.jpg\` | 固定文件名 |
-
-### 图片命名说明
-
-- **无数量限制**：图片数量不限
-- **格式灵活**：支持 .jpg、.jpeg、.png、.webp
-- **命名自由**：只要 index.html 能正确引用即可
+AiModa 正式报告上传规范。平台以 manifest + entryHtml + 相对路径资源为核心。
 
 ---
 
-## 2. 必需文件
+## 1. 核心原则
 
-### index.html
-- 主报告页面，嵌入 iframe 展示
-- 必须支持响应式布局
+- 平台只强制要求一个主入口 HTML，不再强制 overview.html
+- 报告可以包含任意数量的 HTML 页面
+- 所有 HTML / CSS / JS / 图片 / JSON 必须使用 zip 内部相对路径引用
+- 正文图片应以文件形式放在 zip 内，不建议把大图以 data URI/base64 内嵌到 HTML
+- 上传后平台会保留 zip 内相对目录结构，并以 manifest.json.entryHtml 作为主入口
 
-### cover.jpg
-- 16:9 比例，推荐 1920x1080
-- **必须使用 Playwright 截取真实页面**
+---
 
-### overview.html
-- 品牌纵览/数据看板（上传时必需）
+## 2. 推荐目录结构
 
-### metadata.json（可选）
+\`\`\`text
+{report-root}/
+├── manifest.json
+├── pages/
+│   ├── report.html
+│   └── *.html
+├── assets/
+│   ├── cover.jpg
+│   ├── look-001.jpg
+│   ├── styles.css
+│   └── ...
+└── image-features.json
+\`\`\`
+
+说明：
+- pages/、assets/ 是推荐目录，不是唯一合法目录
+- 旧格式若没有 manifest.json，平台仍可回退使用根目录 index.html
+
+---
+
+## 3. manifest.json 必填字段
+
 \`\`\`json
 {
-  "brand": "Zimmermann",
-  "season": "Fall",
+  "specVersion": "2.0",
+  "slug": "murmur-aw-2026-27-v5-2",
+  "title": "Murmur 2026-27 秋冬 时装周快报",
+  "brand": "Murmur",
+  "season": "AW",
   "year": 2026,
-  "title": "Zimmermann Fall 2026 RTW 趋势报告",
-  "lookCount": 16
+  "entryHtml": "pages/report.html"
 }
 \`\`\`
 
+可选字段：
+- pages
+- overviewHtml
+- coverImage
+- featuresFile
+- lookCount
+
 ---
 
-## 3. 上传流程
+## 4. 上传前检查清单
 
-1. 生成报告文件（index.html + overview.html + images/）
-2. 使用 Playwright 截取首页保存为 cover.jpg
-3. 打包为 zip 文件
-4. 调用 upload_report 工具上传
+- [ ] zip 根目录中存在 manifest.json（新格式）
+- [ ] manifest.json.entryHtml 指向真实文件
+- [ ] 所有本地资源引用都为 zip 内相对路径
+- [ ] 正文图片未以内联 base64 大图方式嵌入
+- [ ] slug / title / brand / season / year 已填写
+- [ ] overviewHtml 缺失不会阻止上传
 
-## 4. 快速检查清单
+---
 
-上传前确认：
-- [ ] 文件夹命名符合 \`{brand}-{season}-{year}\` 格式
-- [ ] 包含 index.html 和 overview.html
-- [ ] 封面使用 Playwright 截取（不是手动绘制）
-- [ ] 封面比例 16:9（1920x1080 或 1280x720）
-- [ ] 打包为 zip 文件`;
+## 5. 平台上传行为
+
+1. 读取 manifest.json
+2. 校验 entryHtml 和其他声明路径
+3. 保留 zip 内相对目录结构上传到 OSS
+4. 以 entryHtml 对应文件作为主 iframe 地址
+5. overviewHtml 为可选
+6. 没有 manifest.json 时回退为 legacy index.html`;
 
 // ── Parse CLI args ──────────────────────────────────────────────
 const args = process.argv.slice(2);

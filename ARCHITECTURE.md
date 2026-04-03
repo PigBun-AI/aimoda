@@ -231,44 +231,34 @@ OpenClaw Agent 通过 MCP 工具与平台交互，流程如下：
 
 ```typescript
 interface ReportSpec {
-  version: "1.0.0",
-  updatedAt: "2026-03-13",
-  description: "OpenClaw 报告生成规范 - Agent 生成前请查阅",
+  version: "2.0.0",
+  updatedAt: "2026-04-03",
+  description: "AiModa Fashion Report Zip 规范 - Agent 生成前请查阅",
   folderStructure: {
-    root: "品牌-季节-年份/",
+    root: "{report-root}/",
     required: [
-      "index.html",      // 必选：主报告页面（全屏滚动）
-      "overview.html",   // 必选：品牌纵览页面（三栏 dashboard）
-      "images/"          // 必选：图片目录
+      "manifest.json",   // 必选：报告 manifest
+      "entryHtml"        // 必选：manifest.entryHtml 指向的主入口 HTML
     ],
     optional: [
-      "metadata.json",   // 可选：元数据（自动从 HTML 提取）
+      "additional html pages",
+      "assets/",
+      "cover image",
+      "features file"
     ],
-    images: {
-      original: "images/look-001.jpg ~ look-052.jpg",
-      compressed: "images/compressed/look-001-400.jpg (可选)",
-      thumbnails: "images/thumbnails/look-001-thumb.jpg (可选)"
+    recommendedLayout: {
+      manifest: "manifest.json",
+      pagesDir: "pages/",
+      assetsDir: "assets/"
     }
   },
-  iframeRules: {
-    indexHtml: {
-      type: "全屏滚动报告",
-      pages: "每页 100vh，CSS scroll-snap 对齐",
-      structure: "7 个 section，分别展示不同风格系列",
-      title: "品牌 + 季节 + 系列，如 'Zimmermann Fall 2026 RTW'"
-    },
-    overviewHtml: {
-      type: "三栏 dashboard",
-      left: "38% - 缩略图网格（按风格系列分组）",
-      center: "35% - 色彩/廓形/面料统计",
-      right: "27% - 雷达图 + 风格占比 + 季度总结"
-    },
-    cssIsolation: "iframe 天然隔离，外层样式不影响内层",
-    fonts: "Playfair Display (标题) + Inter (正文)"
+  manifest: {
+    requiredFields: ["slug", "title", "brand", "season", "year", "entryHtml"]
   },
-  naming: {
-    folder: "品牌-季节-年份（英文，中横线分隔）",
-    example: "zimmermann-fall-2026, chanel-spring-2027"
+  htmlRules: {
+    entryHtml: "主入口页面，可不是 index.html",
+    additionalHtml: "允许任意数量",
+    relativeLinksOnly: "所有本地页面与资源都必须使用 zip 内部相对路径"
   }
 }
 ```
@@ -281,7 +271,7 @@ Content-Type: multipart/form-data
 Authorization: Bearer <token>
 
 Body:
-  - file: zip 压缩包（包含 index.html, overview.html, images/）
+  - file: zip 压缩包（推荐包含 manifest.json + entryHtml + 相对路径资源）
 
 Response (成功):
 {

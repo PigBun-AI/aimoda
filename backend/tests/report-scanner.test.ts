@@ -11,7 +11,6 @@ const createReportFixture = (directoryName: string) => {
   const reportDirectory = path.join(root, directoryName)
   fs.mkdirSync(path.join(reportDirectory, 'images'), { recursive: true })
   fs.writeFileSync(path.join(reportDirectory, 'index.html'), '<html><head><title>Zimmermann Fall 2026 RTW</title></head><body></body></html>')
-  fs.writeFileSync(path.join(reportDirectory, 'overview.html'), '<html><body>overview</body></html>')
   fs.writeFileSync(path.join(reportDirectory, 'images', 'look-001.jpg'), 'test-image')
   fs.writeFileSync(path.join(reportDirectory, 'images', 'look-002.png'), 'test-image')
 
@@ -44,8 +43,8 @@ describe('report scanner', () => {
   it('rejects directories missing required files', () => {
     const fixture = createReportFixture('zimmermann-fall-2026')
     fixtureRoot = fixture.root
-    fs.rmSync(path.join(fixture.reportDirectory, 'overview.html'))
+    fs.rmSync(path.join(fixture.reportDirectory, 'index.html'))
 
-    expect(() => validateReportDirectory(fixture.reportDirectory)).toThrow('缺少必需文件 overview.html')
+    expect(() => validateReportDirectory(fixture.reportDirectory)).toThrow('缺少必需文件 index.html')
   })
 })

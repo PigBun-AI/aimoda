@@ -1,626 +1,231 @@
-# WWWD 报告规范 Skill
+# AiModa Fashion Report Zip Spec v2（正式版）
 
-这是 World Wear Watch Daily (WWWD) 时尚趋势报告的完整规范，Agent 在生成新报告前必须查阅此规范。
+这是 AiModa Fashion Report 的正式上传规范。平台未来以 **manifest + entryHtml + 相对路径资源** 为唯一推荐标准。
 
-## 1. 文件夹结构
+## 1. 设计目标
 
-```
-{brand}-{season}-{year}/
-├── index.html          # 全屏滚动报告（主页面）
-├── overview.html       # 必需：品牌纵览 Dashboard
-├── cover.jpg           # 封面图片（首页截图，必需）
-├── metadata.json       # 报告元数据（可选）
-└── images/
-    ├── look-01.jpg     # 原始秀场图片 (命名: look-NN.jpg)
-    ├── look-02.jpg
-    └── ...
-    └── compressed/
-        ├── look-01-400.jpg    # 缩略图 (400px 宽度)
-        ├── look-01-800.jpg    # 中图 (800px 宽度)
-        └── ...
-```
+新的规范要解决以下问题：
 
-### 命名规范
-- 文件夹: `{品牌英文名}-{季节}-{年份}`，使用中横线分隔
-  - 示例: `zimmermann-fall-2026`, `chanel-spring-2027`, `dior-resort-2027`
-- 季节缩写: `fall`, `spring`, `summer`, `winter`, `resort`, `pre-fall`, `cruise`
-- 图片: `look-{NN}.jpg`，使用两位数序号 (01, 02, ... 52)
-- 封面: `cover.jpg`，必须是报告首页（index.html 第一页）的截图
+1. 不再把报告绑死为 `index.html + overview.html + images/` 这种固定形态
+2. 允许时装周快报、单页报告、多页专题共用一套上传协议
+3. 要求生成 Agent 按平台规范整理 zip，而不是平台去适配任意输出
+4. 避免正文大图 base64 内嵌导致 HTML 体积过大、线上首屏慢、缓存失效
+5. 上传后保留 zip 内部相对结构，让 HTML 之间和 HTML 对资源的相对引用稳定工作
 
 ---
 
-## 2. CSS 变量规范
+## 2. 规范结论
 
-### 亮色模式 (默认)
-```css
-:root {
-  /* 主色调 */
-  --primary: #1a1a1a;
-  --secondary: #555555;
-  --muted: #888888;
+### 2.1 平台强制要求
 
-  /* 背景色 */
-  --background: #ffffff;
-  --background-secondary: #f8f9fa;
-  --background-tertiary: #f1f3f5;
+一个新格式报告 zip 至少需要：
 
-  /* 边框 */
-  --border: #e5e7eb;
+- `manifest.json`
+- `manifest.json.entryHtml` 指向的 HTML 文件
 
-  /* 文字 */
-  --text-primary: #111827;
-  --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
+平台不再强制要求：
 
-  /* 强调色 */
-  --accent: #1a1a1a;
-}
+- `overview.html`
+- 固定名 `index.html`
+- 固定 `images/` 目录
+- 固定只有 1 个或 2 个 HTML 页面
+
+### 2.2 平台推荐要求
+
+推荐使用：
+
+```text
+{report-root}/
+├── manifest.json
+├── pages/
+│   ├── report.html
+│   └── *.html
+├── assets/
+│   ├── cover.jpg
+│   ├── *.jpg
+│   ├── *.png
+│   ├── *.webp
+│   ├── *.css
+│   └── *.js
+└── image-features.json
 ```
 
-### 暗色模式
-```css
-.dark {
-  --primary: #f5f5f5;
-  --secondary: #a3a3a3;
-  --muted: #525252;
+说明：
 
-  --background: #0f0f0f;
-  --background-secondary: #171717;
-  --background-tertiary: #1f1f1f;
-
-  --border: #262626;
-
-  --text-primary: #f5f5f5;
-  --text-secondary: #a3a3a3;
-  --text-muted: #525252;
-
-  --accent: #f5f5f5;
-}
-```
+- `pages/`、`assets/` 是推荐布局，不是强制唯一布局
+- 平台只认 manifest 里填写的相对路径
+- 旧格式没有 manifest 时，会回退到 legacy `index.html`
 
 ---
 
-## 3. 字体规范
+## 3. manifest.json 正式字段
 
-### Google Fonts 引入
-```html
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+### 3.1 必填字段
+
+```json
+{
+  "specVersion": "2.0",
+  "slug": "murmur-aw-2026-27-v5-2",
+  "title": "Murmur 2026-27 秋冬 时装周快报",
+  "brand": "Murmur",
+  "season": "AW",
+  "year": 2026,
+  "entryHtml": "pages/report.html"
+}
 ```
 
-### 字体使用规则
-- **标题**: `font-family: 'Playfair Display', Georgia, serif;`
-  - 用于品牌名、章节标题
-  - 字重: 400-600
+### 3.2 可选字段
 
-- **正文**: `font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;`
-  - 用于描述文字、统计数据
-  - 字重: 300-500
-  - 行高: 1.5-1.6
+```json
+{
+  "reportType": "fashion_week_brief",
+  "pages": [
+    "pages/report.html",
+    "pages/data.html",
+    "pages/appendix.html"
+  ],
+  "overviewHtml": null,
+  "coverImage": "assets/cover.jpg",
+  "featuresFile": "image-features.json",
+  "lookCount": 38,
+  "version": "v5.2"
+}
+```
+
+### 3.3 字段语义
+
+- `specVersion`: 当前推荐值 `2.0`
+- `slug`: 报告唯一标识，建议标准化为小写字母/数字/中横线
+- `title`: 报告展示标题
+- `brand`: 品牌名
+- `season`: 季节标识，如 `AW`、`SS`、`Fall`、`Spring`
+- `year`: 报告主年份，整数
+- `entryHtml`: 主入口 HTML，相对路径
+- `reportType`: 可选，如 `fashion_week_brief`、`standard_report`
+- `pages`: 可选，其他 HTML 页面列表
+- `overviewHtml`: 可选，仅用于兼容旧交互概念，不再强制存在
+- `coverImage`: 可选，封面图相对路径
+- `featuresFile`: 可选，图像特征/结构化分析文件
+- `lookCount`: 可选；若缺失，平台会尝试推断
+- `version`: 可选，人类可读版本号
 
 ---
 
-## 4. index.html 规范（主报告页面）
+## 4. HTML 页面规范
 
-### 页面结构
-```html
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{品牌} {季节} {年份} RTW | 关键风格分析</title>
-  <!-- 引入字体 -->
-  <link href="fonts.googleapis.com/..." rel="stylesheet">
-  <!-- 引入或内联 CSS -->
-  <style>/* CSS 变量和样式 */</style>
-</head>
-<body>
-  <div class="page-container">
-    <!-- 封面 -->
-    <section class="page cover" id="cover">
-      <header class="page-header">
-        <span class="header-tag">{品牌}</span>
-        <span class="header-info">{季节} {年份}</span>
-      </header>
-      <div class="cover">
-        <div class="cover-left">
-          <span class="cover-season">{季节} {年份}</span>
-          <h1 class="cover-brand">{品牌}</h1>
-          <div class="cover-divider"></div>
-          <h2 class="cover-title">关键风格分析</h2>
-        </div>
-        <div class="cover-right">
-          <img src="images/look-01.jpg" alt="Cover">
-        </div>
-      </div>
-    </section>
+### 4.1 entryHtml
 
-    <!-- 风格系列页 -->
-    <section class="page" id="section-1">
-      <header class="page-header">...</header>
-      <div class="content">...</div>
-    </section>
+- `entryHtml` 必须存在
+- 平台会把它作为报告主 iframe 地址
+- 它不要求名字必须叫 `index.html`
 
-    <!-- 更多页面... -->
-  </div>
+### 4.2 其他 HTML 页面
 
-  <!-- 导航点 -->
-  <nav class="nav-dots">...</nav>
+- 可以有任意数量
+- 只要相对路径合法、文件真实存在即可
+- 平台不再对 `overview.html` 做特殊强制要求
 
-  <!-- 图片灯箱 -->
-  <div class="lightbox">...</div>
+### 4.3 资源引用规则
 
-  <!-- JavaScript -->
-  <script>...</script>
-</body>
-</html>
-```
+所有 HTML/CSS/JS 中的资源引用都必须使用 **zip 内部相对路径**。
 
-### 布局规则
-- **滚动模式**: `scroll-snap-type: y mandatory`
-- **每页高度**: `100vh`
-- **对齐方式**: `scroll-snap-align: start`
-
-### 必需组件
-
-#### 1. 页面头部 (page-header)
-```css
-.page-header {
-  height: 65px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 45px;
-  background: #fff;
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-```
-
-#### 2. 封面布局 (cover)
-- 左侧 36%: 品牌信息文字
-- 右侧 64%: 主图
-- 使用 Flexbox 布局
-
-#### 3. 内容页
-- 全屏图片展示
-- 图片可点击放大 (lightbox)
-- 底部导航点指示当前位置
-
-#### 4. 导航点 (nav-dots)
-```css
-.nav-dots {
-  position: fixed;
-  right: 25px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.nav-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #ccc;
-  cursor: pointer;
-}
-.nav-dot.active {
-  background: var(--primary);
-  transform: scale(1.3);
-}
-```
-
-#### 5. 图片灯箱 (lightbox)
-```css
-.lightbox {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%; height: 100%;
-  background: rgba(0,0,0,0.96);
-  z-index: 10000;
-  display: none;
-  justify-content: center;
-  align-items: center;
-}
-.lightbox.active {
-  display: flex;
-}
-```
-
----
-
-## 5. overview.html 规范（品牌纵览 Dashboard）
-
-### 页面结构
-```html
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <!-- 与 index.html 相同的头部 -->
-</head>
-<body>
-  <div class="page-container">
-    <section class="page overview" id="overview">
-      <header class="page-header">...</header>
-      <div class="overview-grid">
-        <!-- 左侧: 38% - 缩略图网格 -->
-        <div class="overview-left">
-          <div class="looks-grid">
-            <!-- 按风格系列分组的缩略图 -->
-          </div>
-        </div>
-
-        <!-- 中间: 35% - 统计分析 -->
-        <div class="overview-center">
-          <div class="chart color-chart">色彩统计</div>
-          <div class="chart silhouette-chart">廓形统计</div>
-          <div class="chart fabric-chart">面料统计</div>
-        </div>
-
-        <!-- 右侧: 27% - 雷达图和总结 -->
-        <div class="overview-right">
-          <div class="radar-chart">风格雷达图</div>
-          <div class="style-breakdown">风格占比</div>
-          <div class="season-summary">季度总结</div>
-        </div>
-      </div>
-    </section>
-  </div>
-</body>
-</html>
-```
-
-### Dashboard 布局比例
-- 左侧缩略图: 38%
-- 中间统计: 35%
-- 右侧分析: 27%
-
----
-
-## 6. iframe 嵌入规范
-
-### 外部容器
-```html
-<iframe
-  src="{report-path}/index.html"
-  style="
-    width: 100%;
-    height: 100%;
-    border: none;
-  "
-  allow="fullscreen"
-></iframe>
-```
-
-### 样式隔离
-- 使用 iframe 天然隔离外部样式
-- 报告内部使用独立 CSS 变量
-- 不依赖外部平台的 CSS
-
-### 响应式
-- 移动端: 自适应宽度，高度动态
-- 平板: 保持比例缩放
-- 桌面: 全屏展示
-
----
-
-## 7. 图片规范
-
-### 图片尺寸
-| 类型 | 尺寸 | 用途 |
-|------|------|------|
-| 原始 | 原图 | 灯箱查看 |
-| 800 | 800px 宽度 | 桌面展示 |
-| 400 | 400px 宽度 | 缩略图/Mobile |
-
-### 格式
-- 格式: JPEG
-- 质量: 80-90%
-- 命名: `look-{NN}.jpg` 或 `look-{NN}-{size}.jpg`
-
----
-
-## 8. 主题支持
-
-### 检测外部主题
-```javascript
-// 检测父窗口是否为暗色模式
-const prefersDark = window.parent?.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
-
-// 或通过 URL 参数
-const urlParams = new URLSearchParams(window.location.search);
-const theme = urlParams.get('theme'); // 'light' 或 'dark'
-```
-
-### 动态切换
-```javascript
-if (prefersDark || theme === 'dark') {
-  document.documentElement.classList.add('dark');
-}
-```
-
----
-
-## 9. 示例：完整 index.html 模板
+推荐：
 
 ```html
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{Brand}} {{Season}} {{Year}} RTW | 关键风格分析</title>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
-    <style>
-        /* CSS 变量 */
-        :root {
-            --primary: #1a1a1a;
-            --secondary: #555;
-            --light: #f5f5f5;
-            --border: #ddd;
-            --background: #ffffff;
-            --text-primary: #1a1a1a;
-            --text-secondary: #555;
-        }
+<link rel="stylesheet" href="../assets/styles.css">
+<img src="../assets/look-001.jpg" alt="Look 1">
+<a href="./data.html">查看数据页</a>
+<script src="../assets/report.js"></script>
+```
 
-        .dark {
-            --primary: #f5f5f5;
-            --secondary: #a3a3a3;
-            --light: #1f1f1f;
-            --border: #2d2d2d;
-            --background: #0a0a0a;
-            --text-primary: #f5f5f5;
-            --text-secondary: #a3a3a3;
-        }
+禁止：
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-        }
-
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--background);
-            color: var(--primary);
-            line-height: 1.5;
-        }
-
-        .page-container {
-            width: 100vw;
-            height: 100vh;
-            overflow-y: scroll;
-            scroll-snap-type: y mandatory;
-        }
-
-        .page {
-            width: 100vw;
-            height: 100vh;
-            scroll-snap-align: start;
-            background: var(--background);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .page-header {
-            height: 65px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 45px;
-            background: var(--background);
-            border-bottom: 1px solid var(--border);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .cover {
-            display: flex;
-            flex: 1;
-            min-height: 0;
-        }
-
-        .cover-left {
-            width: 36%;
-            background: var(--light);
-            padding: 50px 45px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .cover-season {
-            font-size: 15px;
-            letter-spacing: 5px;
-            color: var(--secondary);
-            text-transform: uppercase;
-        }
-
-        .cover-brand {
-            font-family: 'Playfair Display', serif;
-            font-size: 58px;
-            font-weight: 500;
-            color: var(--primary);
-            margin-bottom: 12px;
-        }
-
-        .cover-title {
-            font-size: 22px;
-            font-weight: 400;
-            letter-spacing: 5px;
-            color: var(--secondary);
-        }
-
-        .cover-right {
-            width: 64%;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .cover-right img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .nav-dots {
-            position: fixed;
-            right: 25px;
-            top: 50%;
-            transform: translateY(-50%);
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .nav-dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            background: #ccc;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .nav-dot:hover, .nav-dot.active {
-            background: var(--primary);
-            transform: scale(1.3);
-        }
-
-        .lightbox {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.96);
-            z-index: 10000;
-            justify-content: center;
-            align-items: center;
-            cursor: zoom-out;
-        }
-
-        .lightbox.active { display: flex; }
-
-        .lightbox img {
-            max-width: 94vw;
-            max-height: 94vh;
-            object-fit: contain;
-        }
-    </style>
-</head>
-<body>
-    <div class="page-container">
-        <!-- 封面 -->
-        <section class="page cover" id="cover">
-            <header class="page-header">
-                <span class="header-tag">{{Brand}}</span>
-                <span class="header-info">{{Season}} {{Year}}</span>
-            </header>
-            <div class="cover">
-                <div class="cover-left">
-                    <span class="cover-season">{{Season}} {{Year}}</span>
-                    <h1 class="cover-brand">{{Brand}}</h1>
-                    <div class="cover-divider"></div>
-                    <h2 class="cover-title">关键风格分析</h2>
-                </div>
-                <div class="cover-right">
-                    <img src="images/look-01.jpg" alt="Cover">
-                </div>
-            </div>
-        </section>
-
-        <!-- 更多页面... -->
-    </div>
-
-    <nav class="nav-dots">
-        <span class="nav-dot active" data-target="cover"></span>
-    </nav>
-
-    <div class="lightbox">
-        <img src="" alt="Zoomed">
-    </div>
-
-    <script>
-        // 导航逻辑
-        // 灯箱逻辑
-    </script>
-</body>
-</html>
+```html
+<img src="/Users/xxx/Desktop/look.jpg">
+<img src="C:\\Users\\xxx\\look.jpg">
+<a href="/data.html">绝对站点根路径</a>
 ```
 
 ---
 
-## 10. 快速参考清单
+## 5. 图片与性能规范
 
-生成新报告前检查：
+### 5.1 正文图片必须文件化
 
-- [ ] 文件夹命名符合规范 (`{brand}-{season}-{year}`)
-- [ ] 包含 `index.html` 和 `overview.html`（两者均为必需）
-- [ ] 图片放在 `images/` 目录
-- [ ] 使用正确的 CSS 变量
-- [ ] 引入 Playfair Display 和 Inter 字体
-- [ ] 实现 `scroll-snap` 滚动
-- [ ] 实现导航点组件
-- [ ] 实现图片灯箱
-- [ ] 支持主题切换（亮色/暗色）
-- [ ] 设置正确的 meta 标签
-- [ ] 生成封面截图 cover.jpg（必需）
+正文图片应作为 zip 内文件存在，例如：
+
+- `assets/look-001.jpg`
+- `assets/look-002.webp`
+
+### 5.2 不建议大图 base64 内嵌
+
+除极小图标或装饰元素外，不建议：
+
+```html
+<img src="data:image/jpg;base64,...">
+```
+
+原因：
+
+- HTML 体积显著膨胀
+- 首屏 HTML 下载变慢
+- 图片无法单独缓存
+- 浏览器无法对图片做更好的并发/懒加载处理
+- MCP / JSON-RPC / base64 上传链路整体更脆弱
+
+### 5.3 封面图
+
+- `coverImage` 可选
+- 如提供，推荐放在 `assets/cover.jpg`
+- 平台不会再因为没有 `overview.html` 阻止上传
 
 ---
 
-## 11. 封面截图规范
+## 6. lookCount 推断规则
 
-### 封面要求
-- **文件名**: `cover.jpg`
-- **位置**: 报告文件夹根目录（与 index.html 同级）
-- **尺寸**: 宽度 1200px，高度按首页实际比例（建议 630px 或 1200x900 4:3 比例）
-- **格式**: JPEG，质量 85%
-- **内容**: index.html 首页（封面页）的完整截图
+平台按以下优先级确定 `lookCount`：
 
-### 截图流程
+1. `manifest.lookCount`
+2. `manifest.featuresFile` 对应 JSON 的条目数
+3. zip 内图片资源数
 
-使用 Playwright MCP 工具截取首页：
+因此，如果 Agent 有可靠的结构化结果，推荐显式写入 `lookCount` 或 `featuresFile`。
 
-```markdown
-1. 在报告文件夹本地生成完成后，使用 Playwright 打开 index.html：
-   mcp__playwright__browser_navigate({ url: "file://{绝对路径}/index.html" })
+---
 
-2. 等待页面完全加载（字体、图片）：
-   mcp__playwright__browser_wait_for({ time: 2 })
+## 7. 上传行为
 
-3. 截取视口作为封面：
-   mcp__playwright__browser_take_screenshot({
-     filename: "{报告文件夹路径}/cover.jpg",
-     type: "jpeg"
-   })
+上传时平台将：
 
-4. 将 cover.jpg 与报告文件一起打包成 zip 上传
-```
+1. 读取 `manifest.json`
+2. 校验必填字段和路径存在性
+3. 保留 zip 内相对目录结构上传到 OSS
+4. 以 `entryHtml` 对应文件作为主入口 URL
+5. 如果存在其他 HTML 页面，一并上传
+6. 如果存在 `coverImage`，返回其 URL
+7. `overviewHtml` 缺失不视为错误
 
-### 截图要点
+---
 
-1. **等待加载**: 确保字体和图片完全加载后再截图
-2. **亮色模式**: 使用默认亮色模式截图（与平台列表页一致）
-3. **视口大小**: 默认视口即可，或设置为 1200x900 获得标准封面
-4. **文件格式**: 必须是 JPEG 格式，避免 PNG 过大
+## 8. OpenClaw / 整理 Agent 的职责
 
-### 完整上传流程
+OpenClaw 不是定义上传协议的一方，它的职责是：
 
-```markdown
-1. 生成报告文件（index.html, overview.html, images/）
-2. 使用 Playwright 截取首页保存为 cover.jpg
-3. 将所有文件打包为 {brand}-{season}-{year}.zip
-4. 调用 mcp__wwwd-reports__upload_report 获取上传 URL
-5. POST zip 到上传 URL
-```
+1. 生成报告内容
+2. 把报告整理为符合本 spec 的 zip
+3. 生成 `manifest.json`
+4. 把图片从 HTML base64 内嵌改为 zip 内文件引用（推荐）
+5. 保证所有页面和资源都用相对路径互相引用
 
-### 降级处理
-如果截图失败，可以：
-- 跳过 cover.jpg，平台将使用默认占位图
-- 但为了最佳展示效果，强烈建议提供封面
+---
+
+## 9. 上传前最终检查清单
+
+- [ ] 有 `manifest.json`
+- [ ] `slug/title/brand/season/year/entryHtml` 已填写
+- [ ] `entryHtml` 指向真实文件
+- [ ] 如有 `pages`，每个页面都真实存在
+- [ ] 如有 `coverImage`/`featuresFile`，路径真实存在
+- [ ] 所有 HTML/CSS/JS 资源引用都为 zip 内相对路径
+- [ ] 正文图片未以超大 base64 方式内嵌
+- [ ] zip 解压后可以在本地用相对路径正常打开主页面

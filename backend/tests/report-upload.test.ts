@@ -21,13 +21,12 @@ const { uploadReportArchive } = await import('../src/modules/reports/report.serv
 
 const app = createApp()
 
-const makeZipFixture = async (targetPath: string, reportName: string, includeOverview = true) => {
+const makeZipFixture = async (targetPath: string, reportName: string, includeIndex = true) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'zip-fixture-'))
   const reportDirectory = path.join(root, reportName)
   fs.mkdirSync(path.join(reportDirectory, 'images'), { recursive: true })
-  fs.writeFileSync(path.join(reportDirectory, 'index.html'), '<html><head><title>Chanel Spring 2027 RTW</title></head></html>')
-  if (includeOverview) {
-    fs.writeFileSync(path.join(reportDirectory, 'overview.html'), '<html></html>')
+  if (includeIndex) {
+    fs.writeFileSync(path.join(reportDirectory, 'index.html'), '<html><head><title>Chanel Spring 2027 RTW</title></head></html>')
   }
   fs.writeFileSync(path.join(reportDirectory, 'images', 'look-001.jpg'), 'image')
 
@@ -145,7 +144,7 @@ describe('report upload flow', () => {
     const archivePath = path.join(process.env.UPLOAD_TMP_DIR!, 'invalid-report.zip')
     await makeZipFixture(archivePath, 'chanel-spring-2027', false)
 
-    await expect(uploadReportArchive({ archivePath, uploadedBy: 1 })).rejects.toThrow('缺少必需文件 overview.html')
+    await expect(uploadReportArchive({ archivePath, uploadedBy: 1 })).rejects.toThrow('缺少必需文件 index.html')
   })
 
   it('rejects sibling-prefix traversal entries during extraction', async () => {
