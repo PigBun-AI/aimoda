@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react'
 import i18n from '@/i18n'
 import {
   loadSessions,
+  markSessionExecutionStatus,
   resetSessionStore,
   useSessionStore,
 } from './session-store'
@@ -120,5 +121,45 @@ describe('session store', () => {
       kind: 'completed',
       title: i18n.t('common:sessionCompletedTitle'),
     })
+  })
+
+  it('preserves optimistic running state when a stale session list still reports idle', async () => {
+    const { result } = renderHook(() => useSessionStore())
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'idle',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    act(() => {
+      markSessionExecutionStatus('session-1', 'running')
+    })
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'idle',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:01.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    expect(result.current.sessions[0]?.execution_status).toBe('running')
   })
 })

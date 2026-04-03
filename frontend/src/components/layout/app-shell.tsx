@@ -80,6 +80,7 @@ export function AppShell() {
     notifications,
     isLoading: sessionsLoading,
     loadSessions: loadChatSessions,
+    setActiveSessionId,
     removeSession: handleRemoveSession,
     renameSession: handleRenameSession,
     toggleSessionPinned,
@@ -191,6 +192,10 @@ export function AppShell() {
       closeSidebarChrome()
       return
     }
+
+    setActiveSessionId(null)
+    navigate('/chat', { replace: location.pathname === '/chat' })
+
     const newSession = await createNewSession()
     closeSidebarChrome()
     if (newSession) {
@@ -198,7 +203,7 @@ export function AppShell() {
     } else {
       navigate('/chat')
     }
-  }, [closeSidebarChrome, createNewSession, currentUser, location.pathname, navigate, openLogin])
+  }, [closeSidebarChrome, createNewSession, currentUser, location.pathname, navigate, openLogin, setActiveSessionId])
 
   const handleDeleteConfirmed = useCallback(async () => {
     if (!deleteDialog) return

@@ -6,11 +6,17 @@ interface FashionImageProps {
   image: ImageResult
   className?: string
   fallbackClassName?: string
+  thumbnailWidth?: number
 }
 
-export function FashionImage({ image, className, fallbackClassName }: FashionImageProps) {
-  const thumbnailUrl = getOssThumbnailUrl(image.image_url, 400)
-  const cropStyle = calculateBackgroundCropStyle(image.object_area, image.image_url, 400)
+export function FashionImage({
+  image,
+  className,
+  fallbackClassName,
+  thumbnailWidth = 400,
+}: FashionImageProps) {
+  const thumbnailUrl = getOssThumbnailUrl(image.image_url, thumbnailWidth)
+  const cropStyle = calculateBackgroundCropStyle(image.object_area, image.image_url, thumbnailWidth)
   const style: React.CSSProperties = cropStyle.backgroundSize
     ? cropStyle
     : {

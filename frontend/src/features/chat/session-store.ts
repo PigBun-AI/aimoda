@@ -132,6 +132,33 @@ function mergeNotifications(current: SessionNotification[], incoming: SessionNot
   return nextItems.length > 0 ? [...nextItems, ...current] : current
 }
 
+function reconcileFetchedSession(previous: ChatSession | undefined, incoming: ChatSession): ChatSession {
+  if (!previous) return incoming
+
+  const previousStartedAt = sessionTime(previous.last_run_started_at)
+  const incomingStartedAt = sessionTime(incoming.last_run_started_at)
+
+  if (
+    previous.execution_status === 'running' &&
+    incoming.execution_status === 'idle' &&
+    previousStartedAt > incomingStartedAt
+  ) {
+    return {
+      ...incoming,
+      execution_status: previous.execution_status,
+      last_run_started_at: previous.last_run_started_at,
+      last_run_completed_at: previous.last_run_completed_at,
+      last_run_error: previous.last_run_error,
+      updated_at:
+        sessionTime(previous.updated_at) > sessionTime(incoming.updated_at)
+          ? previous.updated_at
+          : incoming.updated_at,
+    }
+  }
+
+  return incoming
+}
+
 // ── Actions ──
 
 let loadPromise: Promise<void> | null = null
@@ -144,7 +171,8 @@ export function loadSessions(): Promise<void> {
 
   loadPromise = apiListSessions()
     .then(data => {
-      const nextSessions = sortSessions(data)
+      const previousMap = new Map(store.sessions.map(session => [session.id, session]))
+      const nextSessions = sortSessions(data.map(session => reconcileFetchedSession(previousMap.get(session.id), session)))
       const notifications = collectCompletionNotifications(store.sessions, nextSessions)
       ensureSortedStore({
         sessions: nextSessions,
@@ -254,6 +282,34 @@ export function markSessionExecutionStatus(
   emit()
 }
 
+export function primeSessionForImmediateRun(
+  id: string,
+  patch?: {
+    title?: string | null
+  },
+) {
+  const now = new Date().toISOString()
+  const nextSessions = store.sessions.map(session => {
+    if (session.id !== id) return session
+
+    const nextTitle = patch?.title?.trim() ? patch.title.trim() : session.title
+    return {
+      ...session,
+      title: nextTitle,
+      execution_status: 'running' as const,
+      last_run_started_at: now,
+      last_run_error: null,
+      updated_at: now,
+    }
+  })
+
+  store = {
+    ...store,
+    sessions: sortSessions(nextSessions),
+  }
+  emit()
+}
+
 export async function removeSession(id: string): Promise<{ nextActiveSessionId: string | null; removedActive: boolean } | null> {
   try {
     await deleteSessionApi(id)
@@ -303,6 +359,7 @@ export function useSessionStore() {
     newSession: createNewSession,
     renameSession,
     toggleSessionPinned,
+    primeSessionForImmediateRun,
     markSessionExecutionStatus,
     removeSession,
     dismissSessionNotification,

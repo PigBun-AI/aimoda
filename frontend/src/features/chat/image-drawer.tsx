@@ -71,7 +71,7 @@ export function ImageDrawer({ open, data, onClose, onLoadMore }: ImageDrawerProp
                 style={{ aspectRatio: '1 / 2', width: '100%' }}
                 title={`查看 ${img.brand || '图片'}`}
               >
-                <FashionImage image={img} className="w-full h-full" />
+                <FashionImage image={img} className="w-full h-full" thumbnailWidth={520} />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
               </div>
 

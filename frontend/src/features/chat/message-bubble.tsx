@@ -14,6 +14,7 @@ import type {
 } from './chat-types'
 import { SearchResultCard } from './search-result-card'
 import { ChatMarkdown } from './chat-markdown'
+import { getOssThumbnailUrl } from './oss-image'
 
 const toolIcons: Record<string, typeof Search> = {
   search: Search,
@@ -115,8 +116,10 @@ function buildArgsSummary(name: string, args: Record<string, unknown>): string {
   return ''
 }
 
-function resolveImageSrc(source: ImageSource): string {
-  if (source.type === 'url') return source.url
+function resolveImageSrc(source: ImageSource, thumbnailWidth?: number): string {
+  if (source.type === 'url') {
+    return thumbnailWidth ? getOssThumbnailUrl(source.url, thumbnailWidth) : source.url
+  }
   return `data:${source.media_type};base64,${source.data}`
 }
 
@@ -173,7 +176,7 @@ function UserBlockRenderer({ block }: { block: ContentBlock }) {
   if (block.type === 'image') {
     return (
       <img
-        src={resolveImageSrc(block.source)}
+        src={resolveImageSrc(block.source, 560)}
         alt={block.alt_text || block.file_name || 'uploaded image'}
         className="max-h-72 rounded-2xl object-cover border border-border bg-card shadow-sm ml-auto"
       />
@@ -263,7 +266,7 @@ function BlockRenderer({
   if (block.type === 'image') {
     return (
       <img
-        src={resolveImageSrc(block.source)}
+        src={resolveImageSrc(block.source, 560)}
         alt={block.alt_text || block.file_name || 'assistant image'}
         className="max-h-72 rounded-2xl border border-border bg-card object-cover shadow-sm"
       />

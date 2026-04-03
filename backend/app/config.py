@@ -19,9 +19,10 @@ class Settings(BaseSettings):
     QDRANT_API_KEY: str
     QDRANT_COLLECTION: str = "fashion_items"
 
-    LLM_MODEL: str = "MiniMax-M2.5-highspeed"
+    LLM_PROVIDER: str = "openai"
+    LLM_MODEL: str = "qwen3.5-flash"
     LLM_API_KEY: str
-    LLM_BASE_URL: str = "https://api.minimaxi.com/anthropic"
+    LLM_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 4096
     AGENT_RUNTIME_HARNESS_ENABLED: bool = True

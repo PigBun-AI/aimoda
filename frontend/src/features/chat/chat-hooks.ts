@@ -1,6 +1,6 @@
 // Chat hooks — SSE streaming state management
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useLayoutEffect } from 'react'
 import type { ChatMessage, ContentBlock, ToolStep, DrawerData, ImageResult, ChatSession, ChatComposerInput } from './chat-types'
 import { sendChatSSE, fetchSearchSessionById, listSessions, createSession, deleteSessionApi, getSessionMessages } from './chat-api'
 import { useSessionStore } from './session-store'
@@ -25,26 +25,21 @@ export function useChat(sessionId: string | null) {
   const [drawerData, setDrawerData] = useState<DrawerData | null>(null)
   const isLoading = Boolean(sessionId && streamingSessionIds.includes(sessionId))
 
-  // Reload session list when messages change (e.g. after sending a new message)
-  const { loadSessions, markSessionExecutionStatus } = useSessionStore()
-  useEffect(() => {
-    if (messages.length > 0) {
-      loadSessions()
-    }
-  }, [messages.length, loadSessions])
+  const { markSessionExecutionStatus, primeSessionForImmediateRun } = useSessionStore()
+
+  // Clear stale UI state before paint when switching sessions to avoid old-message flashes.
+  useLayoutEffect(() => {
+    setDrawerOpen(false)
+    setDrawerData(null)
+    setMessages([])
+  }, [sessionId])
 
   // Load historical messages when switching sessions
   useEffect(() => {
-    // Always close the previous session drawer immediately when switching sessions.
-    setDrawerOpen(false)
-    setDrawerData(null)
-
     if (!sessionId) {
-      setMessages([])
       return
     }
-    // Clear stale messages immediately before fetching
-    setMessages([])
+
     getSessionMessages(sessionId)
       .then(msgs => {
         // Map backend messages to frontend ChatMessage format with ContentBlock[]
@@ -74,6 +69,7 @@ export function useChat(sessionId: string | null) {
     if (content.length === 0 || !sid || streamingSessionIds.includes(sid)) return
 
     setStreamingSessionIds(current => (current.includes(sid) ? current : [...current, sid]))
+    primeSessionForImmediateRun(sid)
     markSessionExecutionStatus(sid, 'running')
 
     const userMsg: ChatMessage = {
