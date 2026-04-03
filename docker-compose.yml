@@ -136,8 +136,9 @@ services:
       QDRANT_URL: ${QDRANT_URL:-http://220.168.84.134:16333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-aimoda2025}
       QDRANT_COLLECTION: style_knowledge
-      FASHION_CLIP_ENDPOINT: ${EMBEDDING_URL:-http://183.62.232.22:18730}
-      FASHION_CLIP_MODEL: ${EMBEDDING_MODEL:-Marqo/marqo-fashionSigLIP}
+      STYLE_TEXT_ENDPOINT: ${STYLE_KNOWLEDGE_EMBEDDING_URL:-http://183.62.232.22:18730}
+      STYLE_TEXT_MODEL: ${STYLE_KNOWLEDGE_EMBEDDING_MODEL:-infgrad/stella-mrl-large-zh-v3.5-1792d}
+      STYLE_VECTOR_DIM: ${STYLE_KNOWLEDGE_VECTOR_DIM:-1792}
     deploy:
       resources:
         limits:

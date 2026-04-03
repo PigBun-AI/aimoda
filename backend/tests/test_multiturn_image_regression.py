@@ -107,6 +107,7 @@ def test_start_collection_fuses_style_query_with_text(monkeypatch):
     query_context.remember_session_style(
         thread_id,
         style_retrieval_query="understated elegance, palette: camel, fabric: wool",
+        style_rich_text="style_name: quiet luxury\nvisual_description: understated elegance\npalette: camel\nfabric: wool",
         style_name="quiet luxury",
     )
     query_context.set_query_context(thread_id, query_context.get_session_query_context(thread_id))
@@ -114,7 +115,7 @@ def test_start_collection_fuses_style_query_with_text(monkeypatch):
     monkeypatch.setattr(tools, "get_qdrant", lambda: object())
 
     def fake_encode_text(text: str):
-        if "understated elegance" in text:
+        if "style_name: quiet luxury" in text:
             return [1.0, 0.0, 0.0]
         if text == "dress":
             return [0.0, 1.0, 0.0]

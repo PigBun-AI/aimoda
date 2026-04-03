@@ -112,6 +112,8 @@ export interface StyleKnowledgeResultData {
   query: string
   message?: string
   search_stage?: string
+  rich_text?: string
+  rich_text_summary?: string
   primary_style?: StyleKnowledgePrimaryStyle
   alternatives?: StyleKnowledgePrimaryStyle[]
   style_features?: StyleKnowledgeFeatures

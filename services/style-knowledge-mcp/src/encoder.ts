@@ -1,7 +1,7 @@
 /**
- * FashionCLIP 文本编码器
+ * Style text 编码器
  *
- * 调用远程 /v1/embeddings 端点（OpenAI 兼容格式）将文本编码为 768 维向量。
+ * 调用远程 /v1/embeddings 端点（OpenAI 兼容格式）将文本编码为向量。
  * 包含指数退避重试逻辑。
  */
 
@@ -12,14 +12,14 @@ const BASE_DELAY_MS = 1000;
 const TIMEOUT_MS = 30_000;
 
 /**
- * 将文本编码为 FashionCLIP 向量
+ * 将文本编码为 style retrieval 向量
  */
 export async function encodeText(text: string): Promise<number[]> {
-  const url = `${CONFIG.FASHION_CLIP_ENDPOINT.replace(/\/+$/, "")}/v1/embeddings`;
+  const url = `${CONFIG.STYLE_TEXT_ENDPOINT.replace(/\/+$/, "")}/v1/embeddings`;
   const payload = {
     input: text,
     input_type: "text",
-    model: CONFIG.FASHION_CLIP_MODEL,
+    model: CONFIG.STYLE_TEXT_MODEL,
   };
 
   let lastError: Error | null = null;
@@ -57,7 +57,7 @@ export async function encodeText(text: string): Promise<number[]> {
   }
 
   throw new Error(
-    `FashionCLIP encode failed after ${MAX_RETRIES} retries: ${lastError?.message}`
+    `style text encode failed after ${MAX_RETRIES} retries: ${lastError?.message}`
   );
 }
 

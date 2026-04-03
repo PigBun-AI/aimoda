@@ -9,6 +9,7 @@
 import { QdrantClient } from "@qdrant/js-client-rest";
 import { CONFIG } from "./config.js";
 import type { StyleKnowledge } from "./types.js";
+import { normalizeExactToken } from "./style_text.js";
 
 let _client: QdrantClient | null = null;
 
@@ -55,6 +56,8 @@ export async function ensureCollection(): Promise<void> {
   const keywordFields = [
     "style_name",
     "aliases",
+    "style_name_norm",
+    "aliases_norm",
     "source",
     "category",
     "updated_at",
@@ -74,7 +77,7 @@ export async function ensureCollection(): Promise<void> {
   }
 
   // 创建 text 索引（子串模糊匹配）
-  const textFields = ["style_name_text", "aliases_text"];
+  const textFields = ["style_name_text", "aliases_text", "rich_text_text"];
   for (const field of textFields) {
     try {
       await client.createPayloadIndex(name, {
@@ -100,12 +103,17 @@ export async function findByStyleName(
   styleName: string
 ): Promise<{ id: string | number; payload: StyleKnowledge } | null> {
   const client = getClient();
+  const normalized = normalizeExactToken(styleName);
   const result = await client.scroll(CONFIG.QDRANT_COLLECTION, {
     filter: {
-      must: [
+      should: [
         {
           key: "style_name",
           match: { value: styleName },
+        },
+        {
+          key: "style_name_norm",
+          match: { value: normalized },
         },
       ],
     },
@@ -129,11 +137,14 @@ export async function findByNameOrAlias(
   limit: number
 ): Promise<Array<{ id: string | number; payload: StyleKnowledge }>> {
   const client = getClient();
+  const normalized = normalizeExactToken(query);
   const result = await client.scroll(CONFIG.QDRANT_COLLECTION, {
     filter: {
       should: [
         { key: "style_name", match: { value: query } },
         { key: "aliases", match: { value: query } },
+        { key: "style_name_norm", match: { value: normalized } },
+        { key: "aliases_norm", match: { value: normalized } },
       ],
     },
     limit,
@@ -155,11 +166,13 @@ export async function fuzzyMatchByNameOrAlias(
   limit: number
 ): Promise<Array<{ id: string | number; payload: StyleKnowledge }>> {
   const client = getClient();
+  const normalized = normalizeExactToken(query);
   const result = await client.scroll(CONFIG.QDRANT_COLLECTION, {
     filter: {
       should: [
-        { key: "style_name_text", match: { text: query } },
-        { key: "aliases_text", match: { text: query } },
+        { key: "style_name_text", match: { text: normalized } },
+        { key: "aliases_text", match: { text: normalized } },
+        { key: "rich_text_text", match: { text: normalized } },
       ],
     },
     limit,

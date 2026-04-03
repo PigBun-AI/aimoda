@@ -10,15 +10,7 @@ import { z } from "zod";
 import { findByStyleName, upsertPoint } from "../qdrant.js";
 import { encodeText } from "../encoder.js";
 import type { StyleKnowledge } from "../types.js";
-
-/** 在 payload 中追加 text 索引辅助字段 */
-function withTextFields(payload: StyleKnowledge): Record<string, unknown> {
-  return {
-    ...payload,
-    style_name_text: payload.style_name,
-    aliases_text: payload.aliases.join(" "),
-  };
-}
+import { buildStyleRichText, withSearchFields } from "../style_text.js";
 
 export const updateStyleSchema = {
   style_name: z.string().describe("要更新的风格英文名"),
@@ -119,14 +111,13 @@ export async function updateStyle(args: {
     args.updates.visual_description !== oldPayload.visual_description
   ) {
     newPayload.visual_description = args.updates.visual_description;
-    vector = await encodeText(args.updates.visual_description);
     updatedFields.push("visual_description");
-  } else {
-    // 使用原向量（重新编码老描述以保持一致性）
-    vector = await encodeText(newPayload.visual_description);
   }
 
-  await upsertPoint(existing.id, withTextFields(newPayload), vector);
+  newPayload.rich_text = buildStyleRichText(newPayload);
+  vector = await encodeText(newPayload.rich_text);
+
+  await upsertPoint(existing.id, withSearchFields(newPayload), vector);
 
   return {
     content: [

@@ -16,6 +16,7 @@ class QueryContext(TypedDict, total=False):
     image_embeddings: list[list[float]]
     image_count: int
     style_retrieval_query: str
+    style_rich_text: str
     style_name: str
 
 
@@ -54,11 +55,14 @@ def remember_session_style(
     thread_id: str,
     *,
     style_retrieval_query: str,
+    style_rich_text: str = "",
     style_name: str = "",
 ) -> None:
     context: QueryContext = {}
     if style_retrieval_query.strip():
         context["style_retrieval_query"] = style_retrieval_query.strip()
+    if style_rich_text.strip():
+        context["style_rich_text"] = style_rich_text.strip()
     if style_name.strip():
         context["style_name"] = style_name.strip()
 
@@ -89,6 +93,8 @@ def merge_query_contexts(*contexts: QueryContext | None) -> QueryContext | None:
             merged["image_count"] = int(context.get("image_count", 0))
         if context.get("style_retrieval_query"):
             merged["style_retrieval_query"] = str(context.get("style_retrieval_query", "")).strip()
+        if context.get("style_rich_text"):
+            merged["style_rich_text"] = str(context.get("style_rich_text", "")).strip()
         if context.get("style_name"):
             merged["style_name"] = str(context.get("style_name", "")).strip()
     return merged or None

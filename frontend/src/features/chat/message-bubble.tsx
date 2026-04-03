@@ -516,6 +516,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
   const primaryStyle = data.primary_style
   const styleFeatures = data.style_features
   const retrievalPlan = data.retrieval_plan
+  const richTextSummary = data.rich_text_summary || data.rich_text
   const suggestedFilters = Object.entries(retrievalPlan?.suggested_filters ?? {})
   const alternatives = data.alternatives ?? []
   const featureGroups = [
@@ -543,6 +544,12 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
       </div>
 
       {data.message && <div className="text-sm leading-6 text-foreground">{data.message}</div>}
+
+      {richTextSummary && (
+        <div className="rounded-xl border border-border/60 bg-muted/30 px-3 py-2 text-sm leading-6 text-foreground/90 whitespace-pre-wrap">
+          {richTextSummary}
+        </div>
+      )}
 
       {primaryStyle?.style_name && (
         <div className="flex flex-wrap items-center gap-2">

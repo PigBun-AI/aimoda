@@ -32,6 +32,7 @@ def test_build_style_retrieval_plan_extracts_semantic_and_filter_cues():
 
     assert "palette:" in plan["retrieval_query_en"]
     assert "silhouette:" in plan["retrieval_query_en"]
+    assert "style_name:" in plan["style_rich_text"]
     assert plan["suggested_filters"]["fabric"] == ["wool", "silk", "cashmere"]
     assert plan["suggested_filters"]["gender"] == "women"
     assert "reference_brands" in plan["soft_constraints"]
@@ -50,6 +51,7 @@ def test_search_style_knowledge_prefers_exact_match(monkeypatch):
     assert payload["search_stage"] == "exact"
     assert payload["primary_style"]["style_name"] == "quiet luxury"
     assert payload["primary_style"]["match_type"] == "alias_exact"
+    assert "style_name:" in payload["rich_text"]
     assert payload["retrieval_plan"]["retrieval_query_en"]
 
 
@@ -66,3 +68,7 @@ def test_search_style_knowledge_falls_back_to_semantic(monkeypatch):
     assert payload["search_stage"] == "semantic"
     assert payload["primary_style"]["score"] == 0.82
     assert payload["style_features"]["palette"][0] == "camel"
+
+
+def test_normalize_exact_token_collapses_case_and_hyphen():
+    assert service._normalize_exact_token(" Quiet-Luxury ") == "quiet luxury"

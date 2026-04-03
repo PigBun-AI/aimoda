@@ -53,6 +53,17 @@ def _get_embedding_client() -> httpx.Client:
     return _embedding_client
 
 
+def _post_embeddings(
+    *,
+    url: str,
+    payload: dict,
+) -> dict:
+    client = _get_embedding_client()
+    resp = client.post(url, json=payload)
+    resp.raise_for_status()
+    return resp.json()
+
+
 def encode_text(text: str) -> list[float]:
     """Encode text to embedding vector via OpenAI-compatible endpoint.
 
@@ -60,14 +71,36 @@ def encode_text(text: str) -> list[float]:
     embedding URL. Supports both text and image inputs.
     """
     from ..config import settings
-    client = _get_embedding_client()
-    resp = client.post(
-        f"{settings.EMBEDDING_URL}/v1/embeddings",
-        json={"model": settings.EMBEDDING_MODEL, "input": text},
+    data = _post_embeddings(
+        url=f"{settings.EMBEDDING_URL}/v1/embeddings",
+        payload={"model": settings.EMBEDDING_MODEL, "input": text},
     )
-    resp.raise_for_status()
-    data = resp.json()
     return data["data"][0]["embedding"]
+
+
+def encode_text_with_model(
+    text: str,
+    *,
+    model: str,
+    base_url: str,
+) -> list[float]:
+    """Encode text with an explicit model/base_url pair."""
+    data = _post_embeddings(
+        url=f"{base_url.rstrip('/')}/v1/embeddings",
+        payload={"model": model, "input": text, "input_type": "text"},
+    )
+    return data["data"][0]["embedding"]
+
+
+def encode_style_text(text: str) -> list[float]:
+    """Encode style-knowledge text with the dedicated text-retrieval model."""
+    from ..config import settings
+
+    return encode_text_with_model(
+        text,
+        model=settings.STYLE_KNOWLEDGE_EMBEDDING_MODEL,
+        base_url=settings.STYLE_KNOWLEDGE_EMBEDDING_URL,
+    )
 
 
 def encode_image(
@@ -94,17 +127,14 @@ def encode_image(
     else:
         raise ValueError("encode_image requires image_base64 or image_url")
 
-    client = _get_embedding_client()
-    resp = client.post(
-        f"{settings.EMBEDDING_URL}/v1/embeddings",
-        json={
+    data = _post_embeddings(
+        url=f"{settings.EMBEDDING_URL}/v1/embeddings",
+        payload={
             "model": settings.EMBEDDING_MODEL,
             "input": payload_input,
             "input_type": "image",
         },
     )
-    resp.raise_for_status()
-    data = resp.json()
     return data["data"][0]["embedding"]
 
 

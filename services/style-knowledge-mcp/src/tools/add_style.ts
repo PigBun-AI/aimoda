@@ -11,15 +11,7 @@ import { z } from "zod";
 import { findByStyleName, upsertPoint } from "../qdrant.js";
 import { encodeText } from "../encoder.js";
 import type { StyleKnowledge } from "../types.js";
-
-/** 在 payload 中追加 text 索引辅助字段（用于子串模糊匹配） */
-function withTextFields(payload: StyleKnowledge): Record<string, unknown> {
-  return {
-    ...payload,
-    style_name_text: payload.style_name,
-    aliases_text: payload.aliases.join(" "),
-  };
-}
+import { buildStyleRichText, withSearchFields } from "../style_text.js";
 
 export const addStyleSchema = {
   style_name: z.string().describe("英文规范名（唯一标识）"),
@@ -72,9 +64,6 @@ export async function addStyle(args: {
   let merged = false;
   let pointId: string | number;
 
-  // 编码 visual_description
-  const vector = await encodeText(args.visual_description);
-
   if (existing) {
     // 合并模式：aliases 取并集，其他字段更新
     merged = true;
@@ -89,6 +78,19 @@ export async function addStyle(args: {
       style_name: args.style_name,
       aliases: mergedAliases,
       visual_description: args.visual_description,
+      rich_text: buildStyleRichText({
+        style_name: args.style_name,
+        aliases: mergedAliases,
+        visual_description: args.visual_description,
+        palette: args.palette ?? oldPayload.palette ?? [],
+        silhouette: args.silhouette ?? oldPayload.silhouette ?? [],
+        fabric: args.fabric ?? oldPayload.fabric ?? [],
+        details: args.details ?? oldPayload.details ?? [],
+        reference_brands: args.reference_brands ?? oldPayload.reference_brands ?? [],
+        category: args.category ?? oldPayload.category ?? "",
+        season_relevance: args.season_relevance ?? oldPayload.season_relevance ?? [],
+        gender: args.gender ?? oldPayload.gender ?? "unisex",
+      }),
       palette: args.palette ?? oldPayload.palette ?? [],
       silhouette: args.silhouette ?? oldPayload.silhouette ?? [],
       fabric: args.fabric ?? oldPayload.fabric ?? [],
@@ -109,7 +111,8 @@ export async function addStyle(args: {
         args.popularity_score ?? oldPayload.popularity_score ?? 0,
     };
 
-    await upsertPoint(pointId, withTextFields(payload), vector);
+    const vector = await encodeText(payload.rich_text);
+    await upsertPoint(pointId, withSearchFields(payload), vector);
   } else {
     // 新建
     pointId = randomUUID();
@@ -118,6 +121,19 @@ export async function addStyle(args: {
       style_name: args.style_name,
       aliases: args.aliases,
       visual_description: args.visual_description,
+      rich_text: buildStyleRichText({
+        style_name: args.style_name,
+        aliases: args.aliases,
+        visual_description: args.visual_description,
+        palette: args.palette ?? [],
+        silhouette: args.silhouette ?? [],
+        fabric: args.fabric ?? [],
+        details: args.details ?? [],
+        reference_brands: args.reference_brands ?? [],
+        category: args.category ?? "",
+        season_relevance: args.season_relevance ?? [],
+        gender: args.gender ?? "unisex",
+      }),
       palette: args.palette ?? [],
       silhouette: args.silhouette ?? [],
       fabric: args.fabric ?? [],
@@ -135,7 +151,8 @@ export async function addStyle(args: {
       popularity_score: args.popularity_score ?? 0,
     };
 
-    await upsertPoint(pointId, withTextFields(payload), vector);
+    const vector = await encodeText(payload.rich_text);
+    await upsertPoint(pointId, withSearchFields(payload), vector);
   }
 
   const result = {
@@ -148,4 +165,3 @@ export async function addStyle(args: {
     content: [{ type: "text" as const, text: JSON.stringify(result) }],
   };
 }
-

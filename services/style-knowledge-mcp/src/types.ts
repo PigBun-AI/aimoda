@@ -8,6 +8,7 @@ export interface StyleKnowledge {
 
   // ── 视觉特征 ──
   visual_description: string;
+  rich_text: string;
   palette: string[];
   silhouette: string[];
   fabric: string[];

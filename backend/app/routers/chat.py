@@ -212,7 +212,7 @@ def _extract_category_hints_from_payload(payload: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys([hint for hint in hints if hint]))
 
 
-def _extract_style_hints_from_payload(payload: dict[str, Any]) -> tuple[str, str]:
+def _extract_style_hints_from_payload(payload: dict[str, Any]) -> tuple[str, str, str]:
     primary_style = payload.get("primary_style")
     retrieval_plan = payload.get("retrieval_plan")
 
@@ -224,7 +224,11 @@ def _extract_style_hints_from_payload(payload: dict[str, Any]) -> tuple[str, str
     if isinstance(retrieval_plan, dict):
         retrieval_query = str(retrieval_plan.get("retrieval_query_en", "")).strip()
 
-    return style_name, retrieval_query
+    rich_text = str(payload.get("rich_text", "")).strip()
+    if not rich_text and isinstance(retrieval_plan, dict):
+        rich_text = str(retrieval_plan.get("style_rich_text", "")).strip()
+
+    return style_name, retrieval_query, rich_text
 
 
 async def _restore_agent_session_from_history(
@@ -263,17 +267,19 @@ async def _restore_agent_session_from_history(
                     thread_id=thread_id,
                     explicit_category=category_hints[0],
                 )
-            style_name, retrieval_query = _extract_style_hints_from_payload(payload)
-            if style_name or retrieval_query:
+            style_name, retrieval_query, style_rich_text = _extract_style_hints_from_payload(payload)
+            if style_name or retrieval_query or style_rich_text:
                 update_session_semantics(
                     thread_id=thread_id,
                     explicit_style_name=style_name or None,
                     style_retrieval_query=retrieval_query or None,
+                    style_rich_text=style_rich_text or None,
                 )
-                if retrieval_query:
+                if retrieval_query or style_rich_text:
                     remember_session_style(
                         thread_id,
                         style_retrieval_query=retrieval_query,
+                        style_rich_text=style_rich_text,
                         style_name=style_name,
                     )
 
@@ -337,10 +343,12 @@ def _restore_agent_session_from_runtime_state(
     if isinstance(semantics, dict):
         style_retrieval_query = str(semantics.get("style_retrieval_query", "")).strip()
         style_name = str(semantics.get("primary_style_name", "")).strip()
-        if style_retrieval_query:
+        style_rich_text = str(semantics.get("style_rich_text", "")).strip()
+        if style_retrieval_query or style_rich_text:
             remember_session_style(
                 thread_id,
                 style_retrieval_query=style_retrieval_query,
+                style_rich_text=style_rich_text,
                 style_name=style_name,
             )
 

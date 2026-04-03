@@ -25,6 +25,7 @@
         "build": "node build.cjs",
         "build:dev": "tsc",
         "dev": "tsx src/index.ts",
+        "reindex": "tsx scripts/rebuild-style-knowledge.ts",
         "start": "node dist/index.js",
         "prepublishOnly": "npm run build"
     },

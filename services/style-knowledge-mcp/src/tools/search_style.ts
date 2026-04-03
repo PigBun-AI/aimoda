@@ -18,6 +18,7 @@ import {
 } from "../qdrant.js";
 import { encodeText } from "../encoder.js";
 import { CONFIG } from "../config.js";
+import { buildStyleRichText, normalizeExactToken } from "../style_text.js";
 
 export const searchStyleSchema = {
   query: z
@@ -57,11 +58,18 @@ function toSlim(
   };
 }
 
+function compactVisualDescription(text: string, maxWords = 48): string {
+  const words = text.replace(/\n/g, " ").split(" ").filter(Boolean);
+  return words.length <= maxWords ? words.join(" ") : words.slice(0, maxWords).join(" ");
+}
+
 export async function searchStyle(args: {
   query: string;
   limit: number;
 }) {
-  const { query, limit } = args;
+  const query = args.query.trim();
+  const normalized = normalizeExactToken(query);
+  const limit = args.limit;
 
   // Step 1: 精确匹配 style_name 或 aliases
   const exactMatches = await findByNameOrAlias(query, limit);
@@ -70,13 +78,15 @@ export async function searchStyle(args: {
     const results = exactMatches.map((m) =>
       toSlim(
         m.payload,
-        m.payload.style_name === query ? "name_exact" : "alias_exact"
+        normalizeExactToken(m.payload.style_name) === normalized ? "name_exact" : "alias_exact"
       )
     );
 
     return textContent({
       results,
       total: results.length,
+      rich_text: buildStyleRichText(exactMatches[0].payload),
+      rich_text_summary: compactVisualDescription(exactMatches[0].payload.visual_description ?? ""),
       fallback_suggestion: null,
       hint: "使用 get_style_detail(style_name) 获取完整视觉描述",
     });
@@ -92,6 +102,8 @@ export async function searchStyle(args: {
       return textContent({
         results,
         total: results.length,
+        rich_text: buildStyleRichText(fuzzyMatches[0].payload),
+        rich_text_summary: compactVisualDescription(fuzzyMatches[0].payload.visual_description ?? ""),
         fallback_suggestion: null,
         hint: "使用 get_style_detail(style_name) 获取完整视觉描述",
       });
@@ -124,6 +136,8 @@ export async function searchStyle(args: {
     return textContent({
       results,
       total: results.length,
+      rich_text: buildStyleRichText(filtered[0].payload),
+      rich_text_summary: compactVisualDescription(filtered[0].payload.visual_description ?? ""),
       fallback_suggestion: null,
       hint: "使用 get_style_detail(style_name) 获取完整视觉描述",
     });

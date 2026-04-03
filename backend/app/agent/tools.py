@@ -389,12 +389,14 @@ def search_style(
         primary_style = payload.get("primary_style", {}) if isinstance(payload.get("primary_style"), dict) else {}
         retrieval_plan = payload.get("retrieval_plan", {}) if isinstance(payload.get("retrieval_plan"), dict) else {}
         style_retrieval_query = str(retrieval_plan.get("retrieval_query_en", "")).strip()
+        style_rich_text = str(payload.get("rich_text", "")).strip() or str(retrieval_plan.get("style_rich_text", "")).strip()
         style_name = str(primary_style.get("style_name", "")).strip()
 
-        if style_retrieval_query:
+        if style_retrieval_query or style_rich_text:
             remember_session_style(
                 thread_id,
                 style_retrieval_query=style_retrieval_query,
+                style_rich_text=style_rich_text,
                 style_name=style_name,
             )
             set_query_context(
@@ -403,6 +405,7 @@ def search_style(
                     get_query_context(thread_id),
                     {
                         "style_retrieval_query": style_retrieval_query,
+                        "style_rich_text": style_rich_text,
                         "style_name": style_name,
                     },
                 ),
@@ -412,6 +415,7 @@ def search_style(
             thread_id=thread_id,
             explicit_style_name=style_name or None,
             style_retrieval_query=style_retrieval_query or None,
+            style_rich_text=style_rich_text or None,
         )
         _persist_runtime_semantics(config=config, thread_id=thread_id)
 
@@ -443,9 +447,11 @@ def start_collection(
     image_vectors = query_context.get("image_embeddings", [])
     image_vector = average_embeddings(image_vectors) if image_vectors else None
     style_retrieval_query = str(query_context.get("style_retrieval_query", "")).strip()
+    style_rich_text = str(query_context.get("style_rich_text", "")).strip()
 
     text_vector = encode_text(query) if query else None
-    style_vector = encode_text(style_retrieval_query) if style_retrieval_query else None
+    style_semantic_text = style_rich_text or style_retrieval_query
+    style_vector = encode_text(style_semantic_text) if style_semantic_text else None
     fused_vector = _fuse_query_vectors(
         text_vector=text_vector,
         style_vector=style_vector,
@@ -472,6 +478,7 @@ def start_collection(
         "total": count,
         "query": effective_query or "(all images)",
         "style_retrieval_query": style_retrieval_query or None,
+        "style_rich_text_used": bool(style_semantic_text),
         "message": (
             f"Collection started with {count} images. Use add_filter to narrow down."
             if not image_vectors and not style_retrieval_query

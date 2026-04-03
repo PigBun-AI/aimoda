@@ -143,6 +143,7 @@ def test_search_style_tool_persists_style_session_context(monkeypatch):
     monkeypatch.setattr(tools, "search_style_knowledge", lambda query, limit=3: {
         "status": "ok",
         "primary_style": {"style_name": "quiet luxury"},
+        "rich_text": "style_name: quiet luxury\naliases: 老钱风\nvisual_description: understated elegance",
         "retrieval_plan": {"retrieval_query_en": "understated elegance, palette: camel"},
     })
     monkeypatch.setattr(tools, "set_session_agent_runtime", lambda *args, **kwargs: None)
@@ -151,4 +152,5 @@ def test_search_style_tool_persists_style_session_context(monkeypatch):
 
     assert payload["status"] == "ok"
     assert query_context.get_session_style_context("user-9:session-9")["style_name"] == "quiet luxury"
+    assert "quiet luxury" in query_context.get_session_style_context("user-9:session-9")["style_rich_text"]
     assert harness.get_session_semantics("user-9:session-9")["primary_style_name"] == "quiet luxury"

@@ -32,7 +32,7 @@ export async function getStyleDetail(args: { style_name: string }) {
   }
 
   // 返回完整 payload（排除 text 索引辅助字段）
-  const { style_name_text, aliases_text, ...cleanPayload } =
+  const { style_name_text, aliases_text, style_name_norm, aliases_norm, rich_text_text, ...cleanPayload } =
     result.payload as any;
 
   return {
