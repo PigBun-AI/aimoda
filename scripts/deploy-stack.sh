@@ -33,6 +33,16 @@ cd "$ROOT_DIR"
 echo "Deploying $TARGET_ENV stack ($PROJECT_NAME) from $ROOT_DIR"
 docker compose --env-file "$ENV_FILE" -p "$PROJECT_NAME" up -d --build --remove-orphans
 
+# nginx resolves Compose service hostnames at process start. When frontend/api are
+# recreated during deploy, their container IPs can change while nginx keeps the
+# stale upstream target, causing intermittent 502s on the web root. Restart nginx
+# after the stack update so it re-resolves current service addresses.
+if docker compose --env-file "$ENV_FILE" -p "$PROJECT_NAME" ps nginx >/dev/null 2>&1; then
+  echo
+  echo "Restarting nginx to refresh upstream service resolution..."
+  docker compose --env-file "$ENV_FILE" -p "$PROJECT_NAME" restart nginx
+fi
+
 echo
 echo "Running containers:"
 docker compose --env-file "$ENV_FILE" -p "$PROJECT_NAME" ps
