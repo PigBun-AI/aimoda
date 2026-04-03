@@ -26,6 +26,7 @@ RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS chat_sessions_updated_at ON chat_sessions;
 CREATE TRIGGER chat_sessions_updated_at
     BEFORE UPDATE ON chat_sessions
     FOR EACH ROW EXECUTE FUNCTION chat_sessions_set_updated_at();
