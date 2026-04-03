@@ -93,6 +93,11 @@ def test_get_compaction_bootstrap_payload_returns_recent_messages(monkeypatch):
         "summary": "older summary",
         "range_end": 6,
     })
+    monkeypatch.setattr(service, "get_summary_by_version", lambda session_id, version: {
+        "version": version,
+        "summary": "older summary",
+        "range_end": 6,
+    })
     monkeypatch.setattr(service, "list_messages", lambda session_id, user_id, limit, offset, include_system=False: [
         {"role": "user", "content": [{"type": "text", "text": f"m{i}"}]}
         for i in range(1, 9)

@@ -292,13 +292,16 @@ export function primeSessionForImmediateRun(
   const nextSessions = store.sessions.map(session => {
     if (session.id !== id) return session
 
-    const nextTitle = patch?.title?.trim() ? patch.title.trim() : session.title
+    const canPromoteTitle = !session.title_locked && (session.message_count ?? 0) === 0
+    const nextTitle = canPromoteTitle && patch?.title?.trim() ? patch.title.trim() : session.title
     return {
       ...session,
       title: nextTitle,
+      title_source: nextTitle !== session.title ? 'heuristic' : session.title_source,
       execution_status: 'running' as const,
       last_run_started_at: now,
       last_run_error: null,
+      message_count: Math.max(session.message_count ?? 0, 1),
       updated_at: now,
     }
   })

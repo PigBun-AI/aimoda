@@ -24,7 +24,6 @@ from ..config import settings
 
 DEFAULT_SESSION_TITLE = "新对话"
 IMAGE_SEARCH_SESSION_TITLE = "图片检索"
-MULTIMODAL_SEARCH_SESSION_TITLE = "图文检索"
 SESSION_TITLE_MAX_LEN = 24
 COMPACTION_MESSAGE_THRESHOLD = 18
 COMPACTION_RECENT_MESSAGE_WINDOW = 6
@@ -915,7 +914,8 @@ def get_compaction_bootstrap_payload(
     if compaction.get("pending_bootstrap_thread_version") != thread_version:
         return None
 
-    summary = get_latest_summary(session_id)
+    active_summary_version = int(compaction.get("active_summary_version", 0) or 0)
+    summary = get_summary_by_version(session_id, active_summary_version) if active_summary_version > 0 else get_latest_summary(session_id)
     if not summary:
         return None
 
@@ -1152,6 +1152,34 @@ def get_latest_summary(session_id: str) -> dict | None:
             LIMIT 1
             """,
             (session_id,),
+        ).fetchone()
+
+    if not row:
+        return None
+
+    return {
+        "id": row[0],
+        "session_id": row[1],
+        "summary": row[2],
+        "token_count": row[3],
+        "range_start": row[4],
+        "range_end": row[5],
+        "version": row[6],
+        "created_at": row[7].isoformat() if row[7] else None,
+    }
+
+
+def get_summary_by_version(session_id: str, version: int) -> dict | None:
+    """Get a specific context summary version for a session."""
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT id, session_id, summary, token_count, range_start, range_end, version, created_at
+            FROM session_context_summaries
+            WHERE session_id = %s AND version = %s
+            LIMIT 1
+            """,
+            (session_id, version),
         ).fetchone()
 
     if not row:
