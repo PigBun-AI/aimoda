@@ -7,6 +7,7 @@ import re
 
 # Type aliases
 UserRole = Literal["admin", "editor", "viewer"]
+StyleGapStatus = Literal["open", "covered", "ignored"]
 RedemptionCodeType = Literal["1week", "1month", "3months", "1year"]
 RedemptionCodeStatus = Literal["unused", "used", "expired"]
 SubscriptionStatus = Literal["active", "expired"]
@@ -200,3 +201,10 @@ class RedeemCodeRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refreshToken: str | None = None
+
+
+class UpdateStyleGapRequest(BaseModel):
+    status: StyleGapStatus
+    linked_style_name: str | None = Field(default=None, max_length=255)
+    resolution_note: str | None = Field(default=None, max_length=2000)
+    resolved_by: str | None = Field(default=None, max_length=255)

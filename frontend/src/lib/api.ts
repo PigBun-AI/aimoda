@@ -1,4 +1,17 @@
-import type { AdminUser, AuthUser, DashboardData, LoginResponse, RedemptionCode, RedemptionCodeType, ReportDetail, ReportSummary, Subscription } from '@/lib/types'
+import type {
+  AdminUser,
+  AuthUser,
+  DashboardData,
+  GetStyleGapsParams,
+  LoginResponse,
+  RedemptionCode,
+  RedemptionCodeType,
+  ReportDetail,
+  ReportSummary,
+  StyleGapListResponse,
+  Subscription,
+  UpdateStyleGapPayload,
+} from '@/lib/types'
 
 export class ApiError extends Error {
   status: number
@@ -276,6 +289,133 @@ export async function register(payload: { email: string; password: string }): Pr
 
 export async function getDashboard(): Promise<DashboardData> {
   return request('/api/admin/dashboard')
+}
+
+export async function getStyleGaps(params: GetStyleGapsParams): Promise<StyleGapListResponse> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('status', params.status)
+  if (params.q) searchParams.set('q', params.q)
+  if (typeof params.minHits === 'number') searchParams.set('min_hits', String(params.minHits))
+  if (params.sort) searchParams.set('sort', params.sort)
+  if (params.order) searchParams.set('order', params.order)
+  if (typeof params.limit === 'number') searchParams.set('limit', String(params.limit))
+  if (typeof params.offset === 'number') searchParams.set('offset', String(params.offset))
+
+  const data = await request<{
+    items: Array<{
+      id: string
+      query_normalized: string
+      query_raw: string
+      source: string
+      trigger_tool: string
+      search_stage: string
+      status: 'open' | 'covered' | 'ignored'
+      total_hits: number
+      unique_sessions: number
+      linked_style_name: string | null
+      resolution_note: string
+      resolved_by: string
+      first_seen_at: string | null
+      last_seen_at: string | null
+      covered_at?: string | null
+      latest_context: Record<string, unknown>
+    }>
+    total: number
+    limit: number
+    offset: number
+    status: 'open' | 'covered' | 'ignored'
+    q?: string
+    sort?: string
+    order?: 'asc' | 'desc'
+    min_hits: number
+  }>(`/api/admin/style-gaps?${searchParams.toString()}`, undefined, {
+    items: [],
+    total: 0,
+    limit: params.limit ?? 20,
+    offset: params.offset ?? 0,
+    status: params.status,
+    q: params.q ?? '',
+    sort: params.sort ?? 'total_hits',
+    order: params.order ?? 'desc',
+    min_hits: params.minHits ?? 1,
+  })
+
+  return {
+    items: data.items.map((item) => ({
+      id: item.id,
+      queryNormalized: item.query_normalized,
+      queryRaw: item.query_raw,
+      source: item.source,
+      triggerTool: item.trigger_tool,
+      searchStage: item.search_stage,
+      status: item.status,
+      totalHits: item.total_hits,
+      uniqueSessions: item.unique_sessions,
+      linkedStyleName: item.linked_style_name,
+      resolutionNote: item.resolution_note,
+      resolvedBy: item.resolved_by,
+      firstSeenAt: item.first_seen_at,
+      lastSeenAt: item.last_seen_at,
+      coveredAt: item.covered_at ?? null,
+      latestContext: item.latest_context ?? {},
+    })),
+    total: data.total,
+    limit: data.limit,
+    offset: data.offset,
+    status: data.status,
+    q: data.q,
+    sort: data.sort,
+    order: data.order,
+    minHits: data.min_hits,
+  }
+}
+
+export async function updateStyleGap(signalId: string, payload: UpdateStyleGapPayload) {
+  const data = await request<{
+    id: string
+    query_normalized: string
+    query_raw: string
+    source: string
+    trigger_tool: string
+    search_stage: string
+    status: 'open' | 'covered' | 'ignored'
+    total_hits: number
+    unique_sessions: number
+    linked_style_name: string | null
+    resolution_note: string
+    resolved_by: string
+    first_seen_at: string | null
+    last_seen_at: string | null
+    covered_at: string | null
+    latest_context: Record<string, unknown>
+  }>(`/api/admin/style-gaps/${signalId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: payload.status,
+      linked_style_name: payload.linkedStyleName,
+      resolution_note: payload.resolutionNote,
+      resolved_by: payload.resolvedBy,
+    }),
+  })
+
+  return {
+    id: data.id,
+    queryNormalized: data.query_normalized,
+    queryRaw: data.query_raw,
+    source: data.source,
+    triggerTool: data.trigger_tool,
+    searchStage: data.search_stage,
+    status: data.status,
+    totalHits: data.total_hits,
+    uniqueSessions: data.unique_sessions,
+    linkedStyleName: data.linked_style_name,
+    resolutionNote: data.resolution_note,
+    resolvedBy: data.resolved_by,
+    firstSeenAt: data.first_seen_at,
+    lastSeenAt: data.last_seen_at,
+    coveredAt: data.covered_at,
+    latestContext: data.latest_context ?? {},
+  }
 }
 
 export async function generateRedemptionCodes(payload: { type: RedemptionCodeType; count: number }): Promise<RedemptionCode[]> {

@@ -37,5 +37,46 @@
   "redeemSuccess": "兑换成功！订阅有效期至",
   "redeemFailed": "兑换失败",
   "viewLimitExceeded": "已达到免费查看上限",
-  "viewsRemaining": "次查看剩余"
+  "viewsRemaining": "次查看剩余",
+  "styleGapsTitle": "风格缺口",
+  "styleGapsDesc": "查看用户检索但当前风格库尚未覆盖的风格信号，帮助运营及时补采。",
+  "styleGapsFilters": "筛选条件",
+  "styleGapsFiltersDesc": "按状态、关键词与命中次数快速定位需要优先闭环的风格。",
+  "styleGapsList": "缺口列表",
+  "styleGapListCount": "共 {{count}} 条缺口",
+  "styleGapEmpty": "当前没有符合条件的风格缺口。",
+  "styleGapFilterStatus": "缺口状态",
+  "styleGapFilterQuery": "关键词",
+  "styleGapFilterQueryPlaceholder": "搜索用户检索词",
+  "styleGapFilterMinHits": "最少命中次数",
+  "styleGapFilterSort": "排序方式",
+  "styleGapApplyFilters": "应用筛选",
+  "styleGapRefresh": "刷新",
+  "styleGapNormalized": "归一化词",
+  "styleGapStage": "检索阶段",
+  "styleGapSource": "来源",
+  "styleGapLastSeen": "最近出现",
+  "styleGapFirstSeen": "首次出现",
+  "styleGapLinkedStyle": "关联风格",
+  "styleGapResolvedBy": "处理人",
+  "styleGapCoveredAt": "闭环时间",
+  "styleGapResolutionNote": "处理备注",
+  "styleGapContext": "最近上下文",
+  "styleGapHits": "{{count}} 次命中",
+  "styleGapSessions": "{{count}} 个会话",
+  "styleGapStatus": {
+    "open": "待处理",
+    "covered": "已闭环",
+    "ignored": "已忽略"
+  },
+  "styleGapAction": {
+    "open": "重新打开",
+    "covered": "标记闭环",
+    "ignored": "忽略"
+  },
+  "styleGapSort": {
+    "total_hits": "按命中次数",
+    "last_seen": "按最近出现",
+    "first_seen": "按首次出现"
+  }
 }

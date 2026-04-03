@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router-dom'
 
 import './i18n'
-import i18n from './i18n'
 import '@/index.css'
 import { router } from '@/app/router'
 import { ApiError } from '@/lib/api'
@@ -31,19 +30,6 @@ async function ensureLoggedIn() {
     }
   } catch { /* ignore */ }
 }
-
-
-
-// 动态设置站点标题
-const updateTitle = () => {
-  document.title = i18n.t('common:siteTitle')
-}
-
-// 初始设置
-updateTitle()
-
-// 监听语言变化
-i18n.on('languageChanged', updateTitle)
 
 export const queryClient = new QueryClient({
   defaultOptions: {

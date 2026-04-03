@@ -37,5 +37,46 @@
   "redeemSuccess": "Redemption successful! Subscription valid until",
   "redeemFailed": "Redemption failed",
   "viewLimitExceeded": "You have reached the free view limit",
-  "viewsRemaining": "views remaining"
+  "viewsRemaining": "views remaining",
+  "styleGapsTitle": "Style Gaps",
+  "styleGapsDesc": "Review style signals searched by users but not yet covered in the style library.",
+  "styleGapsFilters": "Filters",
+  "styleGapsFiltersDesc": "Use status, keyword, and hit count to prioritize missing styles to cover next.",
+  "styleGapsList": "Gap List",
+  "styleGapListCount": "{{count}} gaps",
+  "styleGapEmpty": "No style gaps match the current filters.",
+  "styleGapFilterStatus": "Status",
+  "styleGapFilterQuery": "Keyword",
+  "styleGapFilterQueryPlaceholder": "Search user query",
+  "styleGapFilterMinHits": "Minimum hits",
+  "styleGapFilterSort": "Sort by",
+  "styleGapApplyFilters": "Apply filters",
+  "styleGapRefresh": "Refresh",
+  "styleGapNormalized": "Normalized query",
+  "styleGapStage": "Search stage",
+  "styleGapSource": "Source",
+  "styleGapLastSeen": "Last seen",
+  "styleGapFirstSeen": "First seen",
+  "styleGapLinkedStyle": "Linked style",
+  "styleGapResolvedBy": "Resolved by",
+  "styleGapCoveredAt": "Covered at",
+  "styleGapResolutionNote": "Resolution note",
+  "styleGapContext": "Latest context",
+  "styleGapHits": "{{count}} hits",
+  "styleGapSessions": "{{count}} sessions",
+  "styleGapStatus": {
+    "open": "Open",
+    "covered": "Covered",
+    "ignored": "Ignored"
+  },
+  "styleGapAction": {
+    "open": "Reopen",
+    "covered": "Mark covered",
+    "ignored": "Ignore"
+  },
+  "styleGapSort": {
+    "total_hits": "Hit count",
+    "last_seen": "Last seen",
+    "first_seen": "First seen"
+  }
 }

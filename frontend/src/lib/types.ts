@@ -43,6 +43,61 @@ export interface AdminUser extends AuthUser {
   lastActiveAt: string
 }
 
+export type StyleGapStatus = 'open' | 'covered' | 'ignored'
+
+export interface StyleGapSignal {
+  id: string
+  queryNormalized: string
+  queryRaw: string
+  source: string
+  triggerTool: string
+  searchStage: string
+  status: StyleGapStatus
+  totalHits: number
+  uniqueSessions: number
+  linkedStyleName: string | null
+  resolutionNote: string
+  resolvedBy: string
+  firstSeenAt: string | null
+  lastSeenAt: string | null
+  coveredAt: string | null
+  latestContext: Record<string, unknown>
+}
+
+export interface StyleGapListResponse {
+  items: StyleGapSignal[]
+  total: number
+  limit: number
+  offset: number
+  status: StyleGapStatus
+  q?: string
+  sort?: string
+  order?: 'asc' | 'desc'
+  minHits: number
+}
+
+export interface GetStyleGapsParams {
+  status: StyleGapStatus
+  q?: string
+  minHits?: number
+  sort?: 'total_hits' | 'last_seen' | 'first_seen'
+  order?: 'asc' | 'desc'
+  limit?: number
+  offset?: number
+}
+
+export interface UpdateStyleGapPayload {
+  status: StyleGapStatus
+  linkedStyleName?: string
+  resolutionNote?: string
+  resolvedBy?: string
+}
+
+export interface UpdateStyleGapParams {
+  signalId: string
+  payload: UpdateStyleGapPayload
+}
+
 export type RedemptionCodeType = '1week' | '1month' | '3months' | '1year'
 export type RedemptionCodeStatus = 'unused' | 'used' | 'expired'
 

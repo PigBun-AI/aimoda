@@ -48,3 +48,57 @@ def test_mark_style_gap_covered_normalizes_query(monkeypatch):
     assert payload["status"] == "covered"
     assert captured["query_normalized"] == "quiet luxury"
     assert captured["linked_style_name"] == "quiet luxury"
+
+
+def test_list_style_gap_feedback_admin_clamps_and_forwards(monkeypatch):
+    captured = {}
+
+    def _fake_list(**kwargs):
+        captured.update(kwargs)
+        return {"items": [], "total": 0}
+
+    monkeypatch.setattr(service, "list_style_gap_signals", _fake_list)
+
+    payload = service.list_style_gap_feedback_admin(
+        status="ignored",
+        q="  rococo  ",
+        min_hits=0,
+        sort="last_seen",
+        order="asc",
+        limit=1000,
+        offset=-7,
+    )
+
+    assert payload["total"] == 0
+    assert captured["status"] == "ignored"
+    assert captured["q"] == "rococo"
+    assert captured["min_hits"] == 1
+    assert captured["sort"] == "last_seen"
+    assert captured["order"] == "asc"
+    assert captured["limit"] == 100
+    assert captured["offset"] == 0
+
+
+def test_update_style_gap_feedback_admin_trims_values(monkeypatch):
+    captured = {}
+
+    def _fake_update(**kwargs):
+        captured.update(kwargs)
+        return {"id": "gap-1", "status": "ignored"}
+
+    monkeypatch.setattr(service, "update_style_gap_signal", _fake_update)
+
+    payload = service.update_style_gap_feedback_admin(
+        signal_id="gap-1",
+        status="ignored",
+        linked_style_name="  ",
+        resolution_note="  out of scope  ",
+        resolved_by="  admin_user  ",
+    )
+
+    assert payload["status"] == "ignored"
+    assert captured["signal_id"] == "gap-1"
+    assert captured["status"] == "ignored"
+    assert captured["linked_style_name"] is None
+    assert captured["resolution_note"] == "out of scope"
+    assert captured["resolved_by"] == "admin_user"

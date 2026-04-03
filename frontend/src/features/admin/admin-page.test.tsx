@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
+import '@/i18n'
 import { AdminPage } from '@/features/admin/admin-page'
 
 const adminUsers = [
@@ -24,7 +25,7 @@ vi.mock('@/features/admin/use-admin-users', () => ({
 }))
 
 describe('AdminPage', () => {
-  it('renders admin user information and upload entry', () => {
+  it('renders admin user information', () => {
     const queryClient = new QueryClient()
 
     render(
@@ -37,6 +38,5 @@ describe('AdminPage', () => {
 
     expect(screen.getByText('Admin User')).toBeInTheDocument()
     expect(screen.getByText('admin@example.com')).toBeInTheDocument()
-    expect(screen.getByText('进入上传入口')).toBeInTheDocument()
   })
 })

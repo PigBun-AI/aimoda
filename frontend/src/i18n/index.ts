@@ -21,12 +21,14 @@ i18n
       en: { common: enCommon, auth: enAuth, reports: enReports, admin: enAdmin },
       'zh-CN': { common: zhCommon, auth: zhAuth, reports: zhReports, admin: zhAdmin }
     },
+    supportedLngs: ['en', 'zh-CN'],
     fallbackLng: 'en',  // 默认英文
     ns: ['common', 'auth', 'reports', 'admin'],
     defaultNS: 'common',
     interpolation: { escapeValue: false },
     detection: {
-      order: ['localStorage', 'navigator'],
+      order: ['querystring', 'localStorage', 'navigator'],
+      lookupQuerystring: 'lang',
       caches: ['localStorage'],
       lookupLocalStorage: 'i18nextLng'
     }

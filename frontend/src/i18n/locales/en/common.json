@@ -1,5 +1,8 @@
 {
   "siteTitle": "Aimoda - Fashion Report",
+  "seoHomeTitle": "Aimoda - Global One-Stop Fashion AI Design Agent",
+  "seoHomeDescription": "Aimoda helps fashion teams search styles, explore design inspiration, and track trends in one AI-powered workflow.",
+  "seoNoindexDescription": "This page requires login or subscription access and is excluded from public indexing.",
   "loading": "Loading...",
   "error": "Error",
   "success": "Success",
@@ -216,5 +219,6 @@
   "toolResultCount": "{{count}} results",
   "expandArgs": "Show args",
   "collapseArgs": "Hide args",
-  "imageSearchSessionTitle": "Image search"
+  "imageSearchSessionTitle": "Image search",
+  "styleGapsTab": "Style Gaps"
 }

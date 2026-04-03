@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /chat
+Disallow: /profile
+Disallow: /reports
+Disallow: /report
+Disallow: /inspiration
+Disallow: /image
+
+Sitemap: https://ai-moda.ai/sitemap.xml

@@ -6,6 +6,7 @@ from typing import Any
 from ..repositories.style_feedback_repo import (
     list_style_gap_signals,
     mark_style_gap_signal_covered,
+    update_style_gap_signal,
     upsert_style_gap_signal,
 )
 
@@ -64,6 +65,44 @@ def get_open_style_gap_feedback(
         limit=max(1, min(limit, 100)),
         offset=max(0, offset),
         min_hits=max(1, min_hits),
+    )
+
+
+def list_style_gap_feedback_admin(
+    *,
+    status: str = "open",
+    q: str | None = None,
+    min_hits: int = 1,
+    sort: str = "total_hits",
+    order: str = "desc",
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    return list_style_gap_signals(
+        status=status,
+        q=(q or "").strip() or None,
+        sort=sort,
+        order=order,
+        limit=max(1, min(limit, 100)),
+        offset=max(0, offset),
+        min_hits=max(1, min_hits),
+    )
+
+
+def update_style_gap_feedback_admin(
+    *,
+    signal_id: str,
+    status: str,
+    linked_style_name: str | None = None,
+    resolution_note: str | None = None,
+    resolved_by: str | None = None,
+) -> dict[str, Any] | None:
+    return update_style_gap_signal(
+        signal_id=signal_id,
+        status=status,
+        linked_style_name=(linked_style_name or "").strip() or None,
+        resolution_note=(resolution_note or "").strip() or None,
+        resolved_by=(resolved_by or "").strip() or None,
     )
 
 

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import '@/i18n'
 import { ReportsPage } from '@/features/reports/reports-page'
 
 const reports = [
@@ -21,7 +22,13 @@ const reports = [
 vi.mock('@/features/reports/use-reports', () => ({
   useReports: () => ({
     isLoading: false,
-    data: reports,
+    data: {
+      reports,
+      total: 1,
+      page: 1,
+      limit: 12,
+      totalPages: 1,
+    },
   }),
 }))
 
@@ -43,6 +50,6 @@ describe('ReportsPage', () => {
 
     expect(screen.getByText('测试报告')).toBeInTheDocument()
     expect(screen.getByText('Brand · AW26')).toBeInTheDocument()
-    expect(screen.getByText('已发布')).toBeInTheDocument()
+    expect(screen.getByText('Published')).toBeInTheDocument()
   })
 })

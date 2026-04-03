@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom'
 
 import { AppShell } from '@/components/layout/app-shell'
 import { ProtectedRoute } from '@/features/auth/protected-route'
@@ -10,55 +10,70 @@ import { ProfilePage } from '@/features/profile/profile-page'
 import { ImageDetailPage } from '@/features/chat/image-detail-page'
 import { InspirationPage } from '@/features/inspiration/inspiration-page'
 import { GalleryDetailPage } from '@/features/inspiration/gallery-detail-page'
+import { RouteSeo } from '@/shared/seo/route-seo'
+
+function SeoLayout() {
+  return (
+    <>
+      <RouteSeo />
+      <Outlet />
+    </>
+  )
+}
 
 export const router = createBrowserRouter([
   {
-    // Standalone full-screen pages (no sidebar)
-    element: <ProtectedRoute />,
+    element: <SeoLayout />,
     children: [
       {
-        path: '/image/:imageId',
-        element: <ImageDetailPage />,
-      },
-    ],
-  },
-  {
-    element: <AppShell />,
-    children: [
-      {
-        path: '/',
-        element: <CoverPage />,
-      },
-      {
+        // Standalone full-screen pages (no sidebar)
         element: <ProtectedRoute />,
         children: [
           {
-            path: '/chat',
-            element: <ChatPage />,
+            path: '/image/:imageId',
+            element: <ImageDetailPage />,
+          },
+        ],
+      },
+      {
+        element: <AppShell />,
+        children: [
+          {
+            path: '/',
+            element: <CoverPage />,
           },
           {
-            path: '/reports',
-            element: <ReportsPage />,
-          },
-          {
-            path: '/report',
-            element: <ReportsPage />,
-          },
-          {
-            path: '/reports/:reportId',
-            element: <ReportDetailPage />,
-          },
-          {
-            path: '/profile',
-            element: <ProfilePage />,
-          },
-          {
-            path: '/inspiration',
-            element: <InspirationPage />,
-          },
-          {
-            path: '/inspiration/:galleryId',
-            element: <GalleryDetailPage />,
+            element: <ProtectedRoute />,
+            children: [
+              {
+                path: '/chat',
+                element: <ChatPage />,
+              },
+              {
+                path: '/reports',
+                element: <ReportsPage />,
+              },
+              {
+                path: '/report',
+                element: <Navigate to="/reports" replace />,
+              },
+              {
+                path: '/reports/:reportId',
+                element: <ReportDetailPage />,
+              },
+              {
+                path: '/profile',
+                element: <ProfilePage />,
+              },
+              {
+                path: '/inspiration',
+                element: <InspirationPage />,
+              },
+              {
+                path: '/inspiration/:galleryId',
+                element: <GalleryDetailPage />,
+              },
+            ],
           },
         ],
       },

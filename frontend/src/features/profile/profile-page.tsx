@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { BarChart3, FileText, UserCog, Ticket, User, LogOut, Image as ImageIcon } from 'lucide-react'
+import { BarChart3, FileText, UserCog, Ticket, User, LogOut, Image as ImageIcon, Tags } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { queryClient } from '@/main'
@@ -14,8 +14,9 @@ import { ArticlesPage } from '@/features/admin/articles-page'
 import { AdminPage } from '@/features/admin/admin-page'
 import { RedemptionCodesPage } from '@/features/admin/redemption-codes-page'
 import { AdminGalleriesPage } from '@/features/admin/admin-galleries-page'
+import { StyleGapPage } from '@/features/admin/style-gap-page'
 
-type TabId = 'profile' | 'dashboard' | 'articles' | 'galleries' | 'users' | 'redemption'
+type TabId = 'profile' | 'dashboard' | 'articles' | 'galleries' | 'styleGaps' | 'users' | 'redemption'
 
 interface TabConfig {
   id: TabId
@@ -34,6 +35,7 @@ export function ProfilePage() {
     { id: 'dashboard', labelKey: 'dashboardTab', icon: BarChart3, requiresAdmin: true },
     { id: 'articles', labelKey: 'articlesTab', icon: FileText, requiresAdmin: true },
     { id: 'galleries', labelKey: 'galleriesTab', icon: ImageIcon, requiresAdmin: true },
+    { id: 'styleGaps', labelKey: 'styleGapsTab', icon: Tags, requiresAdmin: true },
     { id: 'users', labelKey: 'usersTab', icon: UserCog, requiresAdmin: true },
     { id: 'redemption', labelKey: 'redemptionTab', icon: Ticket, requiresAdmin: true },
   ]
@@ -46,6 +48,7 @@ export function ProfilePage() {
       case 'dashboard': return <DashboardPage />
       case 'articles': return <ArticlesPage />
       case 'galleries': return <AdminGalleriesPage />
+      case 'styleGaps': return <StyleGapPage />
       case 'users': return <AdminPage />
       case 'redemption': return <RedemptionCodesPage />
       default: return <ProfileContent />

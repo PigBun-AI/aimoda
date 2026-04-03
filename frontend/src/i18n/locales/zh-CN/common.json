@@ -1,5 +1,8 @@
 {
   "siteTitle": "Aimoda - 时尚报告",
+  "seoHomeTitle": "Aimoda - 全球一站式服装AI设计智能体",
+  "seoHomeDescription": "Aimoda 提供服装风格检索、设计灵感与趋势洞察能力，帮助品牌与买手在同一平台完成高效决策。",
+  "seoNoindexDescription": "此页面为登录或订阅后可访问内容，不参与公开搜索索引。",
   "loading": "加载中...",
   "error": "错误",
   "success": "成功",
@@ -216,5 +219,6 @@
   "toolResultCount": "{{count}} 张结果",
   "expandArgs": "展开参数",
   "collapseArgs": "收起",
-  "imageSearchSessionTitle": "图片检索"
+  "imageSearchSessionTitle": "图片检索",
+  "styleGapsTab": "风格缺口"
 }

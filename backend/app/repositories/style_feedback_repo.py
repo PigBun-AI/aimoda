@@ -165,13 +165,40 @@ def upsert_style_gap_signal(
 def list_style_gap_signals(
     *,
     status: str = "open",
+    q: str | None = None,
+    sort: str = "total_hits",
+    order: str = "desc",
     limit: int = 20,
     offset: int = 0,
     min_hits: int = 1,
 ) -> dict[str, Any]:
+    sort_map = {
+        "total_hits": "total_hits",
+        "last_seen": "last_seen_at",
+        "last_seen_at": "last_seen_at",
+        "first_seen": "first_seen_at",
+        "first_seen_at": "first_seen_at",
+    }
+    order_map = {"asc": "ASC", "desc": "DESC"}
+    sort_column = sort_map.get(sort, "total_hits")
+    order_clause = order_map.get(order.lower(), "DESC")
+
+    where_clauses = ["status = %s", "total_hits >= %s"]
+    params: list[Any] = [status, min_hits]
+    count_params: list[Any] = [status, min_hits]
+
+    query_text = " ".join((q or "").split()).strip()
+    if query_text:
+        where_clauses.append("(latest_query_raw ILIKE %s OR query_normalized ILIKE %s)")
+        like_value = f"%{query_text}%"
+        params.extend([like_value, like_value])
+        count_params.extend([like_value, like_value])
+
+    where_sql = " AND ".join(where_clauses)
+
     with _get_pg_conn() as conn:
         rows = conn.execute(
-            """
+            f"""
             SELECT
                 id,
                 query_normalized,
@@ -189,21 +216,19 @@ def list_style_gap_signals(
                 last_seen_at,
                 latest_context
             FROM style_gap_signals
-            WHERE status = %s
-              AND total_hits >= %s
-            ORDER BY total_hits DESC, last_seen_at DESC
+            WHERE {where_sql}
+            ORDER BY {sort_column} {order_clause}, last_seen_at DESC
             LIMIT %s OFFSET %s
             """,
-            (status, min_hits, limit, offset),
+            tuple(params + [limit, offset]),
         ).fetchall()
         count_row = conn.execute(
-            """
+            f"""
             SELECT COUNT(*)::int
             FROM style_gap_signals
-            WHERE status = %s
-              AND total_hits >= %s
+            WHERE {where_sql}
             """,
-            (status, min_hits),
+            tuple(count_params),
         ).fetchone()
 
     items = [
@@ -233,7 +258,92 @@ def list_style_gap_signals(
         "limit": limit,
         "offset": offset,
         "status": status,
+        "q": query_text,
+        "sort": sort_column,
+        "order": order.lower(),
         "min_hits": min_hits,
+    }
+
+
+def update_style_gap_signal(
+    *,
+    signal_id: str,
+    status: str,
+    linked_style_name: str | None = None,
+    resolution_note: str | None = None,
+    resolved_by: str | None = None,
+) -> dict[str, Any] | None:
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            """
+            UPDATE style_gap_signals
+            SET
+                status = %s,
+                covered_at = CASE
+                    WHEN %s = 'covered' THEN NOW()
+                    ELSE NULL
+                END,
+                resolved_by = CASE
+                    WHEN %s = '' THEN resolved_by
+                    ELSE %s
+                END,
+                linked_style_name = COALESCE(%s, linked_style_name),
+                resolution_note = CASE
+                    WHEN %s = '' THEN resolution_note
+                    ELSE %s
+                END
+            WHERE id = %s
+            RETURNING
+                id,
+                query_normalized,
+                latest_query_raw,
+                source,
+                trigger_tool,
+                search_stage,
+                status,
+                total_hits,
+                unique_sessions,
+                linked_style_name,
+                resolution_note,
+                resolved_by,
+                first_seen_at,
+                last_seen_at,
+                covered_at,
+                latest_context
+            """,
+            (
+                status,
+                status,
+                (resolved_by or "").strip(),
+                (resolved_by or "").strip(),
+                linked_style_name,
+                resolution_note or "",
+                resolution_note or "",
+                signal_id,
+            ),
+        ).fetchone()
+        conn.commit()
+
+    if not row:
+        return None
+
+    return {
+        "id": str(row[0]),
+        "query_normalized": row[1],
+        "query_raw": row[2],
+        "source": row[3],
+        "trigger_tool": row[4],
+        "search_stage": row[5],
+        "status": row[6],
+        "total_hits": row[7],
+        "unique_sessions": row[8],
+        "linked_style_name": row[9],
+        "resolution_note": row[10],
+        "resolved_by": row[11],
+        "first_seen_at": row[12].isoformat() if row[12] else None,
+        "last_seen_at": row[13].isoformat() if row[13] else None,
+        "covered_at": row[14].isoformat() if row[14] else None,
+        "latest_context": dict(row[15]) if row[15] else {},
     }
 
 
@@ -248,57 +358,41 @@ def mark_style_gap_signal_covered(
     if not signal_id and not query_normalized:
         raise ValueError("Either signal_id or query_normalized is required.")
 
-    where_clause = "id = %s" if signal_id else "query_normalized = %s"
-    where_value = signal_id or query_normalized
+    resolved_signal_id = signal_id
+    if not resolved_signal_id:
+        with _get_pg_conn() as conn:
+            row = conn.execute(
+                """
+                SELECT id
+                FROM style_gap_signals
+                WHERE query_normalized = %s
+                LIMIT 1
+                """,
+                (query_normalized,),
+            ).fetchone()
+        if not row:
+            return None
+        resolved_signal_id = str(row[0])
 
-    with _get_pg_conn() as conn:
-        row = conn.execute(
-            f"""
-            UPDATE style_gap_signals
-            SET
-                status = 'covered',
-                covered_at = NOW(),
-                resolved_by = %s,
-                linked_style_name = COALESCE(%s, linked_style_name),
-                resolution_note = CASE
-                    WHEN %s = '' THEN resolution_note
-                    ELSE %s
-                END
-            WHERE {where_clause}
-            RETURNING
-                id,
-                query_normalized,
-                latest_query_raw,
-                status,
-                linked_style_name,
-                resolution_note,
-                resolved_by,
-                covered_at,
-                total_hits,
-                unique_sessions
-            """,
-            (
-                resolved_by,
-                linked_style_name,
-                resolution_note or "",
-                resolution_note or "",
-                where_value,
-            ),
-        ).fetchone()
-        conn.commit()
-
-    if not row:
+    updated = update_style_gap_signal(
+        signal_id=resolved_signal_id,
+        status="covered",
+        linked_style_name=linked_style_name,
+        resolution_note=resolution_note,
+        resolved_by=resolved_by,
+    )
+    if not updated:
         return None
 
     return {
-        "signal_id": str(row[0]),
-        "query_normalized": row[1],
-        "query_raw": row[2],
-        "status": row[3],
-        "linked_style_name": row[4],
-        "resolution_note": row[5],
-        "resolved_by": row[6],
-        "covered_at": row[7].isoformat() if row[7] else None,
-        "total_hits": row[8],
-        "unique_sessions": row[9],
+        "signal_id": updated["id"],
+        "query_normalized": updated["query_normalized"],
+        "query_raw": updated["query_raw"],
+        "status": updated["status"],
+        "linked_style_name": updated["linked_style_name"],
+        "resolution_note": updated["resolution_note"],
+        "resolved_by": updated["resolved_by"],
+        "covered_at": updated["covered_at"],
+        "total_hits": updated["total_hits"],
+        "unique_sessions": updated["unique_sessions"],
     }
