@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, RefreshCw } from 'lucide-react'
 
@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useStyleGaps, useUpdateStyleGap } from '@/features/admin/use-style-gaps'
+import { useStyleGapEvents, useStyleGapStats, useStyleGaps, useUpdateStyleGap } from '@/features/admin/use-style-gaps'
 import type { StyleGapSignal, StyleGapStatus } from '@/lib/types'
 
 const statusBadgeVariant: Record<StyleGapStatus, 'default' | 'success' | 'warning'> = {
@@ -41,16 +41,28 @@ function GapRow({
   language,
   t,
   onChangeStatus,
+  onSaveDetails,
   isUpdating,
 }: {
   gap: StyleGapSignal
   language: string
   t: (key: string, options?: Record<string, unknown>) => string
   onChangeStatus: (gap: StyleGapSignal, status: StyleGapStatus) => void
+  onSaveDetails: (gap: StyleGapSignal, fields: { linkedStyleName: string; resolutionNote: string; resolvedBy: string }) => void
   isUpdating: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [linkedStyleName, setLinkedStyleName] = useState(gap.linkedStyleName ?? '')
+  const [resolutionNote, setResolutionNote] = useState(gap.resolutionNote ?? '')
+  const [resolvedBy, setResolvedBy] = useState(gap.resolvedBy ?? 'admin')
   const contextJson = useMemo(() => JSON.stringify(gap.latestContext ?? {}, null, 2), [gap.latestContext])
+  const eventsQuery = useStyleGapEvents(gap.id, expanded)
+
+  useEffect(() => {
+    setLinkedStyleName(gap.linkedStyleName ?? '')
+    setResolutionNote(gap.resolutionNote ?? '')
+    setResolvedBy(gap.resolvedBy ?? 'admin')
+  }, [gap.id, gap.linkedStyleName, gap.resolutionNote, gap.resolvedBy])
 
   return (
     <div className="rounded-lg border border-border bg-secondary/60 p-4">
@@ -105,7 +117,7 @@ function GapRow({
       </div>
 
       {expanded ? (
-        <div className="mt-4 grid gap-4 rounded-lg border border-border bg-background/70 p-4 text-sm md:grid-cols-2">
+        <div className="mt-4 grid gap-4 rounded-lg border border-border bg-background/70 p-4 text-sm xl:grid-cols-3">
           <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {t('admin:styleGapContext')}
@@ -114,18 +126,71 @@ function GapRow({
               {contextJson}
             </pre>
           </div>
-          <div className="space-y-3 text-xs text-muted-foreground">
-            <p>{t('admin:styleGapFirstSeen')}: {formatDate(gap.firstSeenAt, language)}</p>
-            <p>{t('admin:styleGapResolvedBy')}: {gap.resolvedBy || '-'}</p>
-            <p>{t('admin:styleGapCoveredAt')}: {formatDate(gap.coveredAt, language)}</p>
-            <div>
-              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="space-y-3 text-xs">
+            <p className="text-muted-foreground">{t('admin:styleGapFirstSeen')}: {formatDate(gap.firstSeenAt, language)}</p>
+            <p className="text-muted-foreground">{t('admin:styleGapResolvedBy')}: {gap.resolvedBy || '-'}</p>
+            <p className="text-muted-foreground">{t('admin:styleGapCoveredAt')}: {formatDate(gap.coveredAt, language)}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t('admin:styleGapEditLinkedStyle')}
+              </p>
+              <Input
+                value={linkedStyleName}
+                onChange={(event) => setLinkedStyleName(event.target.value)}
+                placeholder={t('admin:styleGapEditLinkedStylePlaceholder')}
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t('admin:styleGapEditResolvedBy')}
+              </p>
+              <Input
+                value={resolvedBy}
+                onChange={(event) => setResolvedBy(event.target.value)}
+                placeholder={t('admin:styleGapEditResolvedByPlaceholder')}
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 {t('admin:styleGapResolutionNote')}
               </p>
-              <p className="rounded-md bg-secondary p-3 text-xs text-foreground">
-                {gap.resolutionNote || '-'}
-              </p>
+              <textarea
+                value={resolutionNote}
+                onChange={(event) => setResolutionNote(event.target.value)}
+                rows={4}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
+                placeholder={t('admin:styleGapEditResolutionNotePlaceholder')}
+              />
             </div>
+            <Button
+              type="button"
+              size="sm"
+              loading={isUpdating}
+              onClick={() => onSaveDetails(gap, { linkedStyleName, resolutionNote, resolvedBy })}
+              disabled={isUpdating}
+            >
+              {t('admin:styleGapSaveDetails')}
+            </Button>
+          </div>
+          <div className="space-y-3 text-xs">
+            <p className="font-medium uppercase tracking-wide text-muted-foreground">
+              {t('admin:styleGapRecentEvents')}
+            </p>
+            {eventsQuery.isLoading ? (
+              <Skeleton className="h-24 w-full rounded-md" />
+            ) : eventsQuery.data?.length ? (
+              <div className="space-y-2">
+                {eventsQuery.data.map((event) => (
+                  <div key={event.id} className="rounded-md border border-border bg-secondary/60 p-2">
+                    <p className="text-foreground">{event.queryRaw}</p>
+                    <p className="text-muted-foreground">{event.searchStage} · {event.source}</p>
+                    <p className="text-muted-foreground">{formatDate(event.createdAt, language)}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">{t('admin:styleGapNoEvents')}</p>
+            )}
           </div>
         </div>
       ) : null}
@@ -157,6 +222,7 @@ export function StyleGapPage() {
     limit: 50,
     offset: 0,
   })
+  const styleGapStatsQuery = useStyleGapStats()
   const updateStyleGapMutation = useUpdateStyleGap()
 
   const handleSearch = () => {
@@ -172,6 +238,21 @@ export function StyleGapPage() {
     updateStyleGapMutation.mutate({
       signalId: gap.id,
       payload: { status },
+    })
+  }
+
+  const handleSaveDetails = (
+    gap: StyleGapSignal,
+    fields: { linkedStyleName: string; resolutionNote: string; resolvedBy: string },
+  ) => {
+    updateStyleGapMutation.mutate({
+      signalId: gap.id,
+      payload: {
+        status: gap.status,
+        linkedStyleName: fields.linkedStyleName.trim() || undefined,
+        resolutionNote: fields.resolutionNote.trim() || undefined,
+        resolvedBy: fields.resolvedBy.trim() || undefined,
+      },
     })
   }
 
@@ -274,6 +355,41 @@ export function StyleGapPage() {
         </CardContent>
       </Card>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {styleGapStatsQuery.isLoading ? (
+          Array.from({ length: 4 }).map((_, index) => (
+            <Skeleton key={index} className="h-24 w-full rounded-lg" />
+          ))
+        ) : (
+          <>
+            <Card className="border">
+              <CardContent className="pt-5">
+                <p className="text-xs text-muted-foreground">{t('admin:styleGapStatsOpen')}</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">{styleGapStatsQuery.data?.open ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card className="border">
+              <CardContent className="pt-5">
+                <p className="text-xs text-muted-foreground">{t('admin:styleGapStatsCovered')}</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">{styleGapStatsQuery.data?.covered ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card className="border">
+              <CardContent className="pt-5">
+                <p className="text-xs text-muted-foreground">{t('admin:styleGapStatsIgnored')}</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">{styleGapStatsQuery.data?.ignored ?? 0}</p>
+              </CardContent>
+            </Card>
+            <Card className="border">
+              <CardContent className="pt-5">
+                <p className="text-xs text-muted-foreground">{t('admin:styleGapStatsRecent')}</p>
+                <p className="mt-1 text-2xl font-semibold text-foreground">{styleGapStatsQuery.data?.recentNew ?? 0}</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -296,6 +412,7 @@ export function StyleGapPage() {
               language={i18n.language}
               t={t}
               onChangeStatus={handleChangeStatus}
+              onSaveDetails={handleSaveDetails}
               isUpdating={updateStyleGapMutation.isPending && updateStyleGapMutation.variables?.signalId === gap.id}
             />
           ))

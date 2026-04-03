@@ -84,3 +84,36 @@ def test_update_style_gap_forwards_payload(monkeypatch):
         "resolution_note": "pending data source",
         "resolved_by": "admin",
     }
+
+
+def test_get_style_gap_events_forwards_params(monkeypatch):
+    captured = {}
+
+    def _fake_events(**kwargs):
+        captured.update(kwargs)
+        return [{"id": "evt-1"}]
+
+    monkeypatch.setattr(admin_router, "list_style_gap_events_admin", _fake_events)
+
+    response = admin_router.get_style_gap_events(
+        signal_id="gap-1",
+        limit=12,
+        user=_admin_user(),
+    )
+
+    assert response["success"] is True
+    assert response["data"]["items"] == [{"id": "evt-1"}]
+    assert captured == {"signal_id": "gap-1", "limit": 12}
+
+
+def test_get_style_gap_stats_returns_payload(monkeypatch):
+    monkeypatch.setattr(
+        admin_router,
+        "get_style_gap_stats_admin",
+        lambda: {"open_count": 5, "covered_count": 2, "ignored_count": 1, "new_last_7d": 3, "top_open": []},
+    )
+
+    response = admin_router.get_style_gap_stats(user=_admin_user())
+
+    assert response["success"] is True
+    assert response["data"]["open_count"] == 5

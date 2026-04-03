@@ -4,6 +4,8 @@ import re
 from typing import Any
 
 from ..repositories.style_feedback_repo import (
+    get_style_gap_stats,
+    list_style_gap_events,
     list_style_gap_signals,
     mark_style_gap_signal_covered,
     update_style_gap_signal,
@@ -104,6 +106,21 @@ def update_style_gap_feedback_admin(
         resolution_note=(resolution_note or "").strip() or None,
         resolved_by=(resolved_by or "").strip() or None,
     )
+
+
+def list_style_gap_events_admin(
+    *,
+    signal_id: str,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    return list_style_gap_events(
+        signal_id=signal_id,
+        limit=max(1, min(limit, 100)),
+    )
+
+
+def get_style_gap_stats_admin() -> dict[str, Any]:
+    return get_style_gap_stats()
 
 
 def mark_style_gap_covered(

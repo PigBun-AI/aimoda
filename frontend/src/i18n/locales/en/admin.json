@@ -78,5 +78,17 @@
     "total_hits": "Hit count",
     "last_seen": "Last seen",
     "first_seen": "First seen"
-  }
+  },
+  "styleGapStatsOpen": "Open Gaps",
+  "styleGapStatsCovered": "Covered Gaps",
+  "styleGapStatsIgnored": "Ignored Gaps",
+  "styleGapStatsRecent": "New in 7 Days",
+  "styleGapEditLinkedStyle": "Linked Style",
+  "styleGapEditLinkedStylePlaceholder": "e.g. barn core",
+  "styleGapEditResolvedBy": "Resolved By",
+  "styleGapEditResolvedByPlaceholder": "e.g. admin",
+  "styleGapEditResolutionNotePlaceholder": "Add a short resolution note",
+  "styleGapSaveDetails": "Save Details",
+  "styleGapRecentEvents": "Recent Events",
+  "styleGapNoEvents": "No event records yet"
 }

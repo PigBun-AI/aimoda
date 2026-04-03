@@ -214,6 +214,7 @@ def list_style_gap_signals(
                 resolved_by,
                 first_seen_at,
                 last_seen_at,
+                covered_at,
                 latest_context
             FROM style_gap_signals
             WHERE {where_sql}
@@ -247,7 +248,8 @@ def list_style_gap_signals(
             "resolved_by": row[11],
             "first_seen_at": row[12].isoformat() if row[12] else None,
             "last_seen_at": row[13].isoformat() if row[13] else None,
-            "latest_context": dict(row[14]) if row[14] else {},
+            "covered_at": row[14].isoformat() if row[14] else None,
+            "latest_context": dict(row[15]) if row[15] else {},
         }
         for row in rows
     ]
@@ -395,4 +397,94 @@ def mark_style_gap_signal_covered(
         "covered_at": updated["covered_at"],
         "total_hits": updated["total_hits"],
         "unique_sessions": updated["unique_sessions"],
+    }
+
+
+def list_style_gap_events(
+    *,
+    signal_id: str,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    with _get_pg_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+                id,
+                query_raw,
+                query_normalized,
+                session_id,
+                user_id,
+                source,
+                trigger_tool,
+                search_stage,
+                context,
+                created_at
+            FROM style_gap_events
+            WHERE signal_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (signal_id, limit),
+        ).fetchall()
+
+    return [
+        {
+            "id": str(row[0]),
+            "query_raw": row[1],
+            "query_normalized": row[2],
+            "session_id": str(row[3]) if row[3] else None,
+            "user_id": row[4],
+            "source": row[5],
+            "trigger_tool": row[6],
+            "search_stage": row[7],
+            "context": dict(row[8]) if row[8] else {},
+            "created_at": row[9].isoformat() if row[9] else None,
+        }
+        for row in rows
+    ]
+
+
+def get_style_gap_stats() -> dict[str, Any]:
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'open')::int AS open_count,
+                COUNT(*) FILTER (WHERE status = 'covered')::int AS covered_count,
+                COUNT(*) FILTER (WHERE status = 'ignored')::int AS ignored_count,
+                COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '7 days')::int AS new_last_7d
+            FROM style_gap_signals
+            """
+        ).fetchone()
+
+        top_rows = conn.execute(
+            """
+            SELECT
+                id,
+                latest_query_raw,
+                total_hits,
+                unique_sessions,
+                last_seen_at
+            FROM style_gap_signals
+            WHERE status = 'open'
+            ORDER BY total_hits DESC, last_seen_at DESC
+            LIMIT 5
+            """
+        ).fetchall()
+
+    return {
+        "open_count": int(row[0]) if row and row[0] is not None else 0,
+        "covered_count": int(row[1]) if row and row[1] is not None else 0,
+        "ignored_count": int(row[2]) if row and row[2] is not None else 0,
+        "new_last_7d": int(row[3]) if row and row[3] is not None else 0,
+        "top_open": [
+            {
+                "id": str(item[0]),
+                "query_raw": item[1],
+                "total_hits": item[2],
+                "unique_sessions": item[3],
+                "last_seen_at": item[4].isoformat() if item[4] else None,
+            }
+            for item in top_rows
+        ],
     }

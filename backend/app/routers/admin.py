@@ -9,6 +9,8 @@ from ..repositories.user_repo import count_users, count_users_by_role
 from ..services.subscription_service import get_stats as get_subscription_stats
 from ..services.activity_service import get_daily_active_percent, get_activity_trend
 from ..services.style_feedback_service import (
+    get_style_gap_stats_admin,
+    list_style_gap_events_admin,
     list_style_gap_feedback_admin,
     update_style_gap_feedback_admin,
 )
@@ -72,3 +74,22 @@ def update_style_gap(
         raise AppError("style gap signal not found", 404)
 
     return {"success": True, "data": payload}
+
+
+@router.get("/style-gaps/stats")
+def get_style_gap_stats(
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    del user
+    return {"success": True, "data": get_style_gap_stats_admin()}
+
+
+@router.get("/style-gaps/{signal_id}/events")
+def get_style_gap_events(
+    signal_id: str,
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+):
+    del user
+    payload = list_style_gap_events_admin(signal_id=signal_id, limit=limit)
+    return {"success": True, "data": {"items": payload, "limit": limit}}

@@ -42,6 +42,19 @@ vi.mock('@/features/admin/use-style-gaps', () => ({
     variables: undefined,
     mutate,
   }),
+  useStyleGapStats: () => ({
+    isLoading: false,
+    data: {
+      open: 1,
+      covered: 2,
+      ignored: 0,
+      recentNew: 1,
+    },
+  }),
+  useStyleGapEvents: () => ({
+    isLoading: false,
+    data: [],
+  }),
 }))
 
 describe('StyleGapPage', () => {

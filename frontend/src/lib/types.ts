@@ -64,6 +64,20 @@ export interface StyleGapSignal {
   latestContext: Record<string, unknown>
 }
 
+export interface StyleGapEvent {
+  id: string
+  signalId: string
+  queryRaw: string
+  queryNormalized: string
+  sessionId: string | null
+  userId: number | null
+  source: string
+  triggerTool: string
+  searchStage: string
+  context: Record<string, unknown>
+  createdAt: string | null
+}
+
 export interface StyleGapListResponse {
   items: StyleGapSignal[]
   total: number
@@ -74,6 +88,13 @@ export interface StyleGapListResponse {
   sort?: string
   order?: 'asc' | 'desc'
   minHits: number
+}
+
+export interface StyleGapStats {
+  open: number
+  covered: number
+  ignored: number
+  recentNew: number
 }
 
 export interface GetStyleGapsParams {
@@ -96,6 +117,11 @@ export interface UpdateStyleGapPayload {
 export interface UpdateStyleGapParams {
   signalId: string
   payload: UpdateStyleGapPayload
+}
+
+export interface GetStyleGapEventsParams {
+  signalId: string
+  limit?: number
 }
 
 export type RedemptionCodeType = '1week' | '1month' | '3months' | '1year'

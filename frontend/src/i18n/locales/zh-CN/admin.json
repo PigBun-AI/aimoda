@@ -78,5 +78,17 @@
     "total_hits": "按命中次数",
     "last_seen": "按最近出现",
     "first_seen": "按首次出现"
-  }
+  },
+  "styleGapStatsOpen": "待处理缺口",
+  "styleGapStatsCovered": "已闭环缺口",
+  "styleGapStatsIgnored": "已忽略缺口",
+  "styleGapStatsRecent": "近 7 天新增",
+  "styleGapEditLinkedStyle": "关联风格名称",
+  "styleGapEditLinkedStylePlaceholder": "例如：barn core",
+  "styleGapEditResolvedBy": "处理人",
+  "styleGapEditResolvedByPlaceholder": "例如：admin",
+  "styleGapEditResolutionNotePlaceholder": "记录本次缺口处理说明",
+  "styleGapSaveDetails": "保存详情",
+  "styleGapRecentEvents": "最近触发事件",
+  "styleGapNoEvents": "暂无事件记录"
 }

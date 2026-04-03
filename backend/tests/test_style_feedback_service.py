@@ -102,3 +102,30 @@ def test_update_style_gap_feedback_admin_trims_values(monkeypatch):
     assert captured["linked_style_name"] is None
     assert captured["resolution_note"] == "out of scope"
     assert captured["resolved_by"] == "admin_user"
+
+
+def test_list_style_gap_events_admin_clamps_limit(monkeypatch):
+    captured = {}
+
+    def _fake_events(**kwargs):
+        captured.update(kwargs)
+        return [{"id": "evt-1"}]
+
+    monkeypatch.setattr(service, "list_style_gap_events", _fake_events)
+
+    payload = service.list_style_gap_events_admin(signal_id="gap-1", limit=1000)
+
+    assert payload == [{"id": "evt-1"}]
+    assert captured == {"signal_id": "gap-1", "limit": 100}
+
+
+def test_get_style_gap_stats_admin_forwards(monkeypatch):
+    monkeypatch.setattr(
+        service,
+        "get_style_gap_stats",
+        lambda: {"open_count": 3, "covered_count": 1, "ignored_count": 0, "new_last_7d": 2, "top_open": []},
+    )
+
+    payload = service.get_style_gap_stats_admin()
+
+    assert payload["open_count"] == 3

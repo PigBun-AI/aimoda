@@ -3,6 +3,8 @@ import type {
   AuthUser,
   DashboardData,
   GetStyleGapsParams,
+  StyleGapEvent,
+  StyleGapStats,
   LoginResponse,
   RedemptionCode,
   RedemptionCodeType,
@@ -415,6 +417,81 @@ export async function updateStyleGap(signalId: string, payload: UpdateStyleGapPa
     lastSeenAt: data.last_seen_at,
     coveredAt: data.covered_at,
     latestContext: data.latest_context ?? {},
+  }
+}
+
+export async function getStyleGapEvents(signalId: string, limit = 10): Promise<StyleGapEvent[]> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('limit', String(Math.max(1, Math.min(limit, 50))))
+
+  const data = await request<Array<{
+    id: string
+    signal_id: string
+    query_raw: string
+    query_normalized: string
+    session_id: string | null
+    user_id: number | null
+    source: string
+    trigger_tool: string
+    search_stage: string
+    context: Record<string, unknown>
+    created_at: string | null
+  }>>(`/api/admin/style-gaps/${signalId}/events?${searchParams.toString()}`, undefined, [])
+
+  return data.map((item) => ({
+    id: item.id,
+    signalId: item.signal_id,
+    queryRaw: item.query_raw,
+    queryNormalized: item.query_normalized,
+    sessionId: item.session_id,
+    userId: item.user_id,
+    source: item.source,
+    triggerTool: item.trigger_tool,
+    searchStage: item.search_stage,
+    context: item.context ?? {},
+    createdAt: item.created_at,
+  }))
+}
+
+function getRecentCountFromItems(items: StyleGapListResponse['items']) {
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+  return items.reduce((count, item) => {
+    const timestamp = item.firstSeenAt ? Date.parse(item.firstSeenAt) : Number.NaN
+    if (!Number.isNaN(timestamp) && timestamp >= sevenDaysAgo) {
+      return count + 1
+    }
+    return count
+  }, 0)
+}
+
+export async function getStyleGapStats(): Promise<StyleGapStats> {
+  try {
+    const data = await request<{
+      open: number
+      covered: number
+      ignored: number
+      recent_new: number
+    }>('/api/admin/style-gaps/stats')
+
+    return {
+      open: data.open,
+      covered: data.covered,
+      ignored: data.ignored,
+      recentNew: data.recent_new,
+    }
+  } catch {
+    const [open, covered, ignored] = await Promise.all([
+      getStyleGaps({ status: 'open', limit: 100, offset: 0, sort: 'first_seen', order: 'desc' }),
+      getStyleGaps({ status: 'covered', limit: 100, offset: 0, sort: 'first_seen', order: 'desc' }),
+      getStyleGaps({ status: 'ignored', limit: 100, offset: 0, sort: 'first_seen', order: 'desc' }),
+    ])
+
+    return {
+      open: open.total,
+      covered: covered.total,
+      ignored: ignored.total,
+      recentNew: getRecentCountFromItems(open.items) + getRecentCountFromItems(covered.items) + getRecentCountFromItems(ignored.items),
+    }
   }
 }
 
