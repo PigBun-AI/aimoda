@@ -154,3 +154,32 @@ def test_search_style_tool_persists_style_session_context(monkeypatch):
     assert query_context.get_session_style_context("user-9:session-9")["style_name"] == "quiet luxury"
     assert "quiet luxury" in query_context.get_session_style_context("user-9:session-9")["style_rich_text"]
     assert harness.get_session_semantics("user-9:session-9")["primary_style_name"] == "quiet luxury"
+
+
+def test_search_style_tool_logs_gap_when_not_found(monkeypatch):
+    config = {"configurable": {"thread_id": "user-11:session-11"}}
+    monkeypatch.setattr(tools, "search_style_knowledge", lambda query, limit=3: {
+        "status": "not_found",
+        "query": query,
+        "search_stage": "not_found",
+        "message": f'No style knowledge matched "{query}".',
+        "results": [],
+        "fallback_suggestion": "Try a broader style phrase.",
+    })
+
+    recorded = {}
+
+    def _fake_record(**kwargs):
+        recorded.update(kwargs)
+        return {"signal_id": "gap-1", "total_hits": 4, "unique_sessions": 3}
+
+    monkeypatch.setattr(tools, "record_style_gap_feedback", _fake_record)
+
+    payload = json.loads(tools.search_style.func("巴恩风", limit=3, config=config))
+
+    assert payload["status"] == "not_found"
+    assert payload["feedback_logged"] is True
+    assert payload["feedback_total_hits"] == 4
+    assert recorded["query"] == "巴恩风"
+    assert recorded["session_id"] == "session-11"
+    assert recorded["thread_id"] == "user-11:session-11"

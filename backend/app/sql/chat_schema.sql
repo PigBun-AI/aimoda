@@ -114,3 +114,62 @@ CREATE TABLE IF NOT EXISTS session_context_summaries (
 
 CREATE INDEX IF NOT EXISTS idx_context_summaries_session_version
     ON session_context_summaries(session_id, version DESC);
+
+-- ── 5. style gap feedback ───────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS style_gap_signals (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    query_normalized  TEXT NOT NULL UNIQUE,
+    latest_query_raw  TEXT NOT NULL,
+    source            TEXT NOT NULL DEFAULT 'agent_auto',
+    trigger_tool      TEXT NOT NULL DEFAULT 'search_style',
+    search_stage      TEXT NOT NULL DEFAULT 'not_found',
+    status            TEXT NOT NULL DEFAULT 'open'
+                      CHECK (status IN ('open', 'covered', 'ignored')),
+    total_hits        INTEGER NOT NULL DEFAULT 1,
+    unique_sessions   INTEGER NOT NULL DEFAULT 0,
+    last_session_id   UUID,
+    last_user_id      INTEGER,
+    latest_context    JSONB NOT NULL DEFAULT '{}'::jsonb,
+    first_seen_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    covered_at        TIMESTAMPTZ,
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT style_gap_signals_last_session_fkey
+        FOREIGN KEY (last_session_id) REFERENCES chat_sessions(id) ON DELETE SET NULL
+);
+
+CREATE OR REPLACE FUNCTION style_gap_signals_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS style_gap_signals_updated_at ON style_gap_signals;
+CREATE TRIGGER style_gap_signals_updated_at
+    BEFORE UPDATE ON style_gap_signals
+    FOR EACH ROW EXECUTE FUNCTION style_gap_signals_set_updated_at();
+
+CREATE TABLE IF NOT EXISTS style_gap_events (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    signal_id         UUID NOT NULL,
+    query_raw         TEXT NOT NULL,
+    query_normalized  TEXT NOT NULL,
+    session_id        UUID,
+    user_id           INTEGER,
+    source            TEXT NOT NULL DEFAULT 'agent_auto',
+    trigger_tool      TEXT NOT NULL DEFAULT 'search_style',
+    search_stage      TEXT NOT NULL DEFAULT 'not_found',
+    context           JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT style_gap_events_signal_fkey
+        FOREIGN KEY (signal_id) REFERENCES style_gap_signals(id) ON DELETE CASCADE,
+    CONSTRAINT style_gap_events_session_fkey
+        FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE SET NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_style_gap_events_session_query_tool
+    ON style_gap_events(query_normalized, session_id, trigger_tool)
+    WHERE session_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_style_gap_signals_status_seen
+    ON style_gap_signals(status, total_hits DESC, last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_style_gap_events_signal_created
+    ON style_gap_events(signal_id, created_at DESC);

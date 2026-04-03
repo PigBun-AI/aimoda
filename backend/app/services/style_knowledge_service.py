@@ -311,6 +311,7 @@ def search_style_knowledge(query: str, *, limit: int = 5) -> dict[str, Any]:
     return {
         "status": "not_found",
         "query": normalized_query,
+        "search_stage": "not_found",
         "message": f'No style knowledge matched "{normalized_query}".',
         "results": [],
         "fallback_suggestion": (

@@ -23,18 +23,20 @@ import {
   getStyleDetail,
 } from "./tools/get_style_detail.js";
 import { listStylesSchema, listStyles } from "./tools/list_styles.js";
+import { listStyleGapsSchema, listStyleGapsTool } from "./tools/list_style_gaps.js";
 import { updateStyleSchema, updateStyle } from "./tools/update_style.js";
 import { deleteStyleSchema, deleteStyle } from "./tools/delete_style.js";
 import {
   batchImportSchema,
   batchImportStyles,
 } from "./tools/batch_import.js";
+import { CONFIG } from "./config.js";
 
 // ── Parse CLI args ──────────────────────────────────────────────
 const args = process.argv.slice(2);
 const transportArg = args.find((a) => a.startsWith("--transport="));
 const transportMode = transportArg?.split("=")[1] ?? "http";
-const PORT = parseInt(process.env.PORT ?? "18750", 10);
+const PORT = CONFIG.PORT;
 
 // ── Create MCP Server ──────────────────────────────────────────
 
@@ -88,6 +90,15 @@ function createServer(): McpServer {
 适用场景: VLM 打标 pipeline 获取风格定义、管理后台浏览列表。`,
     listStylesSchema,
     async (args) => listStyles(args as any),
+  );
+
+  server.tool(
+    "list_style_gaps",
+    `列出 Aimoda 智能体在 search_style 阶段未命中的风格缺口。
+返回: 用户近期检索但风格库尚未覆盖的风格词、触发次数(total_hits)、涉及会话数(unique_sessions)、最近一次上下文。
+适用场景: OpenClaw 定向补采趋势风格、运营查看近期风格需求空白。`,
+    listStyleGapsSchema,
+    async (args) => listStyleGapsTool(args as any),
   );
 
   // ── P1: 批量导入 ──────────────────────────────────────────────

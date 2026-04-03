@@ -134,12 +134,16 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: '18750'
+      POSTGRES_DSN: postgresql://fashion:fashion@postgres:5432/fashion_chat
       QDRANT_URL: ${QDRANT_URL:-http://220.168.84.134:16333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-aimoda2025}
       QDRANT_COLLECTION: style_knowledge
       STYLE_TEXT_ENDPOINT: ${STYLE_KNOWLEDGE_EMBEDDING_URL:-http://183.62.232.22:18730}
       STYLE_TEXT_MODEL: ${STYLE_KNOWLEDGE_EMBEDDING_MODEL:-infgrad/stella-mrl-large-zh-v3.5-1792d}
       STYLE_VECTOR_DIM: ${STYLE_KNOWLEDGE_VECTOR_DIM:-1792}
+    depends_on:
+      postgres:
+        condition: service_healthy
     deploy:
       resources:
         limits:

@@ -47,6 +47,7 @@ from .color_utils import COLOR_KEYWORDS, color_matches
 from ..services.chat_service import create_artifact, set_session_agent_runtime
 from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
 from ..services.style_knowledge_service import search_style_knowledge
+from ..services.style_feedback_service import record_style_gap_feedback
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
 from .query_context import remember_session_style, set_query_context, merge_query_contexts
 from ..config import settings
@@ -418,6 +419,27 @@ def search_style(
             style_rich_text=style_rich_text or None,
         )
         _persist_runtime_semantics(config=config, thread_id=thread_id)
+    elif payload.get("status") == "not_found":
+        try:
+            thread_id = get_thread_id(config) if config else None
+            feedback = record_style_gap_feedback(
+                query=str(payload.get("query", query) or query),
+                session_id=_session_id_from_config(config),
+                thread_id=thread_id,
+                trigger_tool="search_style",
+                search_stage=str(payload.get("search_stage", "not_found") or "not_found"),
+                fallback_suggestion=str(payload.get("fallback_suggestion", "") or ""),
+                extra_context={
+                    "message": str(payload.get("message", "") or ""),
+                },
+            )
+            if feedback:
+                payload["feedback_logged"] = True
+                payload["feedback_id"] = feedback.get("signal_id")
+                payload["feedback_total_hits"] = feedback.get("total_hits", 0)
+                payload["feedback_unique_sessions"] = feedback.get("unique_sessions", 0)
+        except Exception:
+            payload["feedback_logged"] = False
 
     return json.dumps(payload, ensure_ascii=False)
 
