@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { fetchGallery, fetchSimilarByColor, type Gallery, type GalleryImage } from './gallery-api'
 
 export function GalleryDetailPage() {
+  const { t } = useTranslation('common')
   const { galleryId } = useParams<{ galleryId: string }>()
   const [gallery, setGallery] = useState<Gallery | null>(null)
   const [loading, setLoading] = useState(true)
@@ -66,11 +68,11 @@ export function GalleryDetailPage() {
   if (!gallery) {
     return (
       <section className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground">图集不存在</p>
+        <p className="text-muted-foreground">{t('galleryNotFound')}</p>
         <Link to="/inspiration" className="mt-4">
           <Button variant="outline" size="sm">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            返回灵感情报站
+            {t('backToInspiration')}
           </Button>
         </Link>
       </section>
@@ -87,7 +89,7 @@ export function GalleryDetailPage() {
         <Link to="/inspiration">
           <Button variant="ghost" size="sm" className="gap-1 -ml-2 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="h-4 w-4" />
-            返回
+            {t('back')}
           </Button>
         </Link>
         <span className="text-xs text-muted-foreground font-mono">
@@ -160,7 +162,7 @@ export function GalleryDetailPage() {
         <Link to="/inspiration">
           <Button variant="outline" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" />
-            返回灵感情报站
+            {t('backToInspiration')}
           </Button>
         </Link>
       </div>
@@ -249,9 +251,9 @@ export function GalleryDetailPage() {
                 className="w-6 h-6 rounded-full border border-border shadow-sm" 
                 style={{ backgroundColor: searchColors.hex }} 
               />
-              <h2 className="font-medium text-foreground">全域色彩追踪</h2>
+              <h2 className="font-medium text-foreground">{t('globalColorTracking')}</h2>
               <span className="text-muted-foreground text-sm ml-2">
-                {searchingColors ? '搜索中...' : `找到 ${similarImages.length} 个结果`}
+                {searchingColors ? t('searching') : t('searchResultCount', { count: similarImages.length })}
               </span>
             </div>
             <Button variant="ghost" size="icon" onClick={() => setSearchColors(null)}>
@@ -292,7 +294,7 @@ export function GalleryDetailPage() {
             ) : (
               <div className="py-20 text-center text-muted-foreground flex flex-col items-center gap-3">
                 <div className="w-12 h-12 rounded-full border-4 border-muted" style={{ backgroundColor: searchColors.hex }} />
-                没有任何款式包含该色彩
+                {t('noStyleWithColor')}
               </div>
             )}
           </div>

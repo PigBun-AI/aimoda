@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Search, Filter, Eye, Image, ChevronDown, ArrowRight, X, Palette, BarChart3, Info } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ToolStep as ToolStepType, ImageResult } from './chat-types'
 import { calculateBackgroundCropStyle } from './crop-utils'
 import { getOssThumbnailUrl } from './oss-image'
@@ -19,15 +20,15 @@ const toolIcons: Record<string, typeof Search> = {
 }
 
 const toolLabels: Record<string, string> = {
-  search: '智能检索',
-  explore_colors: '色彩探索',
-  analyze_trends: '趋势分析',
-  get_image_details: '查看详情',
-  start_collection: '开启新检索',
-  add_filter: '添加过滤条件',
-  remove_filter: '移除过滤条件',
-  peek_collection: '后台自查',
-  show_collection: '检索结果',
+  search: 'toolSearch',
+  explore_colors: 'toolExploreColors',
+  analyze_trends: 'toolAnalyzeTrends',
+  get_image_details: 'toolGetImageDetails',
+  start_collection: 'toolStartCollection',
+  add_filter: 'toolAddFilter',
+  remove_filter: 'toolRemoveFilter',
+  peek_collection: 'toolPeekCollection',
+  show_collection: 'toolShowCollection',
 }
 
 /** Format brand: capitalize each word */
@@ -42,10 +43,11 @@ interface ToolStepProps {
 }
 
 export function ToolStepView({ step, onShowImages }: ToolStepProps) {
+  const { t } = useTranslation('common')
   const [expanded, setExpanded] = useState(false)
 
   const IconComp = toolIcons[step.toolName] || Search
-  const label = toolLabels[step.toolName] || step.toolName
+  const label = toolLabels[step.toolName] ? t(toolLabels[step.toolName]) : step.toolName
   const args = step.args || {}
 
   // Summary line
@@ -89,7 +91,7 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
                     ? 'bg-warning/20 text-warning dark:text-warning'
                     : 'bg-primary/15 text-primary'
               }`}>
-                {step.resultCount} 张结果
+                {t('toolResultCount', { count: step.resultCount })}
                 {step.matchLevel === 'exact' && ' ✓'}
                 {step.matchLevel === 'partial' && ' ≈'}
                 {step.resultCount === 0 && ' ✗'}
@@ -101,7 +103,7 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
                 className="inline-flex items-center gap-1 text-xs bg-primary hover:bg-primary/90 text-primary-foreground px-2.5 py-1 rounded-full transition-all font-medium shadow-sm"
               >
                 <Image size={12} />
-                查看全部
+                {t('viewAll')}
                 <ArrowRight size={10} />
               </button>
             )}
@@ -110,7 +112,7 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
                 onClick={() => setExpanded(!expanded)}
                 className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5"
               >
-                {expanded ? '收起' : '展开参数'}
+                {expanded ? t('collapseArgs') : t('expandArgs')}
                 <ChevronDown
                   size={10}
                   className={`transition-transform duration-fast ${expanded ? 'rotate-180' : ''}`}

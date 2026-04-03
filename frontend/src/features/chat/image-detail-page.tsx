@@ -1,6 +1,7 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getImageListContext } from './image-context'
 import { ImageInfoPanel } from './image-info-panel'
 import { ImageViewer } from './image-viewer'
@@ -11,6 +12,7 @@ import type { SearchResponse } from './chat-api'
 import type { ImageResult } from './chat-types'
 
 export function ImageDetailPage() {
+  const { t } = useTranslation('common')
   const { imageId } = useParams<{ imageId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -132,7 +134,7 @@ export function ImageDetailPage() {
               <button
                 onClick={goPrev}
                 className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
-                aria-label="上一张"
+                aria-label={t('previousImage')}
               >
                 <ChevronLeft size={18} className="text-foreground/70" />
               </button>
@@ -146,7 +148,7 @@ export function ImageDetailPage() {
               <button
                 onClick={goNext}
                 className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
-                aria-label="下一张"
+                aria-label={t('nextImage')}
               >
                 <ChevronRight size={18} className="text-foreground/70" />
               </button>
@@ -156,7 +158,7 @@ export function ImageDetailPage() {
           <button
             onClick={handleClose}
             className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
-            aria-label="关闭"
+            aria-label={t('close')}
           >
             <X size={18} className="text-foreground/70" />
           </button>
@@ -172,7 +174,7 @@ export function ImageDetailPage() {
               <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]" />
               <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
             </div>
-            <p className="text-sm text-muted-foreground">加载图片详情...</p>
+            <p className="text-sm text-muted-foreground">{t('loadingImageDetails')}</p>
           </div>
         </div>
       )}

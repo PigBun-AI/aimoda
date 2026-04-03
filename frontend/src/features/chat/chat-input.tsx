@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { ImagePlus, ArrowUp, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { ChatComposerInput, ContentBlock, ImageSourceBase64 } from './chat-types'
 
@@ -32,10 +33,11 @@ export function ChatInput({
   placeholder,
   disabled = false,
 }: ChatInputProps) {
+  const { t } = useTranslation('common')
   const [inputValue, setInputValue] = useState('')
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const resolvedPlaceholder = placeholder ?? '输入搜索需求，如「找红色连衣裙」「风衣搭配短裙」...'
+  const resolvedPlaceholder = placeholder ?? t('chatInputPlaceholder')
 
   const handleSend = useCallback(() => {
     const trimmed = inputValue.trim()
@@ -137,7 +139,7 @@ export function ChatInput({
                     type="button"
                     onClick={() => removePendingImage(image.id)}
                     className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-foreground"
-                    aria-label={`移除 ${image.fileName}`}
+                    aria-label={t('removeImage', { fileName: image.fileName })}
                   >
                     <X size={12} />
                   </button>
@@ -161,7 +163,7 @@ export function ChatInput({
                 type="button"
                 onClick={handlePickImages}
                 className="p-2.5 rounded-lg transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
-                title="上传图片"
+                title={t('uploadImage')}
               >
                 <ImagePlus size={18} />
               </button>

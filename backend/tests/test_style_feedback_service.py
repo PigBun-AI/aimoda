@@ -28,3 +28,23 @@ def test_record_style_gap_feedback_normalizes_and_forwards(monkeypatch):
 
 def test_record_style_gap_feedback_ignores_empty_queries():
     assert service.record_style_gap_feedback(query="   ") is None
+
+
+def test_mark_style_gap_covered_normalizes_query(monkeypatch):
+    captured = {}
+
+    def _fake_mark(**kwargs):
+        captured.update(kwargs)
+        return {"signal_id": "gap-1", "status": "covered"}
+
+    monkeypatch.setattr(service, "mark_style_gap_signal_covered", _fake_mark)
+
+    payload = service.mark_style_gap_covered(
+        query=" Quiet-Luxury ",
+        linked_style_name="quiet luxury",
+        resolution_note="ingested into style library",
+    )
+
+    assert payload["status"] == "covered"
+    assert captured["query_normalized"] == "quiet luxury"
+    assert captured["linked_style_name"] == "quiet luxury"

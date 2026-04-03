@@ -2,6 +2,7 @@
 // Displays result count, filters, preview thumbnails, and triggers drawer
 
 import { Images, Filter, ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { SearchResultData, ImageResult } from './chat-types'
 import { FashionImage } from './fashion-image'
 
@@ -24,6 +25,7 @@ function formatFilterTag(filter: string): string {
 }
 
 export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCardProps) {
+  const { t } = useTranslation('common')
   const previewImages = (images?.length ? images : data.sample_images)?.slice(0, 4) ?? []
   const hasFilters = data.filters_applied.length > 0
 
@@ -37,9 +39,9 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-foreground">检索结果</span>
+              <span className="text-sm font-semibold text-foreground">{t('searchResultTitle')}</span>
               <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-primary/15 text-primary">
-                {data.total} 张图片
+                {t('imageCountWithUnit', { count: data.total })}
               </span>
             </div>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -72,7 +74,7 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
               onClick={() => onOpenDrawer(data.search_request_id)}
               className="inline-flex items-center gap-1 text-xs bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-full transition-all font-medium shadow-sm whitespace-nowrap"
             >
-              查看全部
+              {t('viewAll')}
               <ArrowRight size={10} />
             </button>
           )}
@@ -86,8 +88,8 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
             >
           <div className="border border-border/60 bg-muted/25 p-2.5">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-foreground/75">结果预览</span>
-              <span className="text-[10px] text-muted-foreground">前 4 张</span>
+              <span className="text-xs font-medium text-foreground/75">{t('resultPreview')}</span>
+              <span className="text-[10px] text-muted-foreground">{t('topImageCount', { count: 4 })}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {previewImages.map((img, i) => (

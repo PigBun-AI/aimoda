@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ImageResult, ExtractedColor } from './chat-types'
 import type { SearchResponse } from './chat-api'
 import { searchSimilar, searchByColor } from './chat-api'
@@ -15,14 +16,20 @@ function formatBrand(brand: string): string {
 }
 
 /** Format season display */
-function formatLocationInfo(image: ImageResult): string {
+function formatLocationInfo(image: ImageResult, t: (key: string) => string): string {
   const parts: string[] = []
   if (image.year) parts.push(String(image.year))
   if (image.season) {
     const seasonMap: Record<string, string> = {
-      spring: '春夏', summer: '春夏', fall: '秋冬', winter: '秋冬',
-      'spring-summer': '春夏', 'fall-winter': '秋冬',
-      resort: '早春', 'pre-fall': '早秋', cruise: '早春',
+      spring: t('seasonSpringSummer'),
+      summer: t('seasonSpringSummer'),
+      fall: t('seasonFallWinter'),
+      winter: t('seasonFallWinter'),
+      'spring-summer': t('seasonSpringSummer'),
+      'fall-winter': t('seasonFallWinter'),
+      resort: t('seasonResort'),
+      'pre-fall': t('seasonPreFall'),
+      cruise: t('seasonResort'),
     }
     const s = typeof image.season === 'string' ? image.season.toLowerCase() : ''
     parts.push(seasonMap[s] || String(image.season))
@@ -60,8 +67,9 @@ interface ImageInfoPanelProps {
 }
 
 export function ImageInfoPanel({ image, onSearchResult }: ImageInfoPanelProps) {
+  const { t } = useTranslation('common')
   const extractedColors = image.extracted_colors || []
-  const locationInfo = formatLocationInfo(image)
+  const locationInfo = formatLocationInfo(image, t)
   const descriptionText = getDescriptionText(image)
   const { mainColors, accentColors, textureColors } = categorizeColors(extractedColors)
 
@@ -75,7 +83,7 @@ export function ImageInfoPanel({ image, onSearchResult }: ImageInfoPanelProps) {
     try {
       const params = { brand, page: 1, page_size: 56 }
       const results = await searchSimilar(params)
-      onSearchResult?.(results, `品牌: ${formatBrand(brand)}`, 'similar', params)
+      onSearchResult?.(results, t('brandSearchLabel', { brand: formatBrand(brand) }), 'similar', params)
     } catch (err) {
       console.error('Brand search failed:', err)
     } finally {
@@ -116,7 +124,7 @@ export function ImageInfoPanel({ image, onSearchResult }: ImageInfoPanelProps) {
             <div
               className={`font-bold text-foreground mb-2.5 text-2xl leading-none cursor-pointer hover:text-blue-600 transition-colors inline-flex items-center gap-2 ${isSearchingBrand ? 'opacity-60 pointer-events-none' : ''}`}
               onClick={() => handleBrandSearch(image.brand)}
-              title="点击搜索该品牌下的所有图片"
+              title={t('searchBrandImages')}
             >
               {formatBrand(image.brand)}
               {isSearchingBrand && (
@@ -132,7 +140,7 @@ export function ImageInfoPanel({ image, onSearchResult }: ImageInfoPanelProps) {
 
       {/* Key colors title */}
       <h3 className="text-2xl font-medium text-foreground mb-7">
-        关键颜色
+        {t('keyColors')}
       </h3>
 
       {/* Description text */}
@@ -162,7 +170,7 @@ export function ImageInfoPanel({ image, onSearchResult }: ImageInfoPanelProps) {
                     height: `${height}px`,
                     backgroundColor: color.hex,
                   }}
-                  title={`点击搜索 ${color.color_name} 色 — ${color.hex} (${color.percentage}%)`}
+                  title={t('searchColorSwatch', { color: color.color_name, hex: color.hex, percentage: color.percentage })}
                   onClick={() => handleColorSearch(color)}
                 />
               )
@@ -180,14 +188,14 @@ export function ImageInfoPanel({ image, onSearchResult }: ImageInfoPanelProps) {
       <div className="space-y-3">
         {mainColors.length > 0 && (
           <div>
-            <div className="text-sm font-bold text-foreground mb-2">主色</div>
+            <div className="text-sm font-bold text-foreground mb-2">{t('mainColors')}</div>
             <div className="space-y-1">
               {mainColors.map((color, index) => (
                 <div
                   key={index}
                   className="text-xs text-foreground font-bold cursor-pointer hover:text-primary transition-colors"
                   onClick={() => handleColorSearch(color)}
-                  title={`点击搜索 ${color.color_name} 色`}
+                  title={t('searchColor', { color: color.color_name })}
                 >
                   {color.hex} ({color.color_name})
                 </div>
@@ -198,14 +206,14 @@ export function ImageInfoPanel({ image, onSearchResult }: ImageInfoPanelProps) {
 
         {accentColors.length > 0 && (
           <div>
-            <div className="text-sm font-bold text-foreground mb-2">点缀色</div>
+            <div className="text-sm font-bold text-foreground mb-2">{t('accentColors')}</div>
             <div className="space-y-1">
               {accentColors.map((color, index) => (
                 <div
                   key={index}
                   className="text-xs text-foreground font-bold cursor-pointer hover:text-primary transition-colors"
                   onClick={() => handleColorSearch(color)}
-                  title={`点击搜索 ${color.color_name} 色`}
+                  title={t('searchColor', { color: color.color_name })}
                 >
                   {color.hex} ({color.color_name})
                 </div>
@@ -216,14 +224,14 @@ export function ImageInfoPanel({ image, onSearchResult }: ImageInfoPanelProps) {
 
         {textureColors.length > 0 && (
           <div>
-            <div className="text-sm font-bold text-foreground mb-2">纹理色</div>
+            <div className="text-sm font-bold text-foreground mb-2">{t('textureColors')}</div>
             <div className="space-y-1">
               {textureColors.map((color, index) => (
                 <div
                   key={index}
                   className="text-xs text-foreground font-bold cursor-pointer hover:text-primary transition-colors"
                   onClick={() => handleColorSearch(color)}
-                  title={`点击搜索 ${color.color_name} 色`}
+                  title={t('searchColor', { color: color.color_name })}
                 >
                   {color.hex} ({color.color_name})
                 </div>

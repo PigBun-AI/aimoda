@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { ChatInput } from './chat-input'
 import { MessageBubble } from './message-bubble'
 import { ImageDrawer } from './image-drawer'
@@ -12,6 +13,7 @@ import { cn } from '@/lib/utils'
 import type { ChatComposerInput } from './chat-types'
 
 function LoadingIndicator() {
+  const { t } = useTranslation('common')
   return (
     <div className="flex items-center gap-2 py-4 pl-1 animate-in fade-in duration-normal">
       <div className="flex gap-1">
@@ -19,12 +21,13 @@ function LoadingIndicator() {
         <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: '0.25s' }} />
         <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: '0.5s' }} />
       </div>
-      <span className="text-xs text-muted-foreground">Agent 思考中...</span>
+      <span className="text-xs text-muted-foreground">{t('agentThinking')}</span>
     </div>
   )
 }
 
 function EmptyState() {
+  const { t } = useTranslation('common')
   return (
     <div className="flex min-h-full w-full items-center justify-center px-6 py-8 text-center">
       <div className="flex w-full max-w-xl flex-col items-center">
@@ -33,11 +36,11 @@ function EmptyState() {
             <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden h-8 w-auto" />
             <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block h-8 w-auto" />
             <div className="h-6 w-px bg-border" />
-            <span className="text-xl font-semibold tracking-[0.18em] text-foreground/88">智能体</span>
+            <span className="text-xl font-semibold tracking-[0.18em] text-foreground/88">{t('agent')}</span>
           </div>
         </div>
         <p className="mt-6 max-w-lg text-sm leading-7 text-muted-foreground">
-          说出你脑海中的画面，我来帮你在秀场中找到它。
+          {t('chatEmptyHint')}
         </p>
       </div>
     </div>
@@ -45,6 +48,7 @@ function EmptyState() {
 }
 
 export function ChatPage() {
+  const { t } = useTranslation('common')
   const isDesktop = useIsDesktop()
   const drawerWidthStorageKey = 'fashion-report-chat-drawer-width'
   const navigate = useNavigate()
@@ -241,7 +245,7 @@ export function ChatPage() {
               <div
                 role="separator"
                 aria-orientation="vertical"
-                aria-label="Resize drawer"
+                aria-label={t('resizeDrawer')}
                 onPointerDown={handleResizeStart}
                 className="group relative w-3 shrink-0 cursor-col-resize touch-none"
               >
@@ -265,7 +269,7 @@ export function ChatPage() {
                     className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                   >
                     <span>←</span>
-                    <span>返回聊天</span>
+                    <span>{t('backToChat')}</span>
                   </button>
                   <div className="flex-1" />
                   <button

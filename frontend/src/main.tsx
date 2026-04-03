@@ -36,9 +36,7 @@ async function ensureLoggedIn() {
 
 // 动态设置站点标题
 const updateTitle = () => {
-  document.title = i18n.language === 'zh-CN'
-    ? 'Aimoda - 时尚报告'
-    : 'Aimoda - Fashion Report'
+  document.title = i18n.t('common:siteTitle')
 }
 
 // 初始设置

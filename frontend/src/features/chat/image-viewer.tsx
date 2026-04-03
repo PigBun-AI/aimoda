@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Loader2, MousePointerClick } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ImageResult } from './chat-types'
 import type { SearchResponse } from './chat-api'
 import { ImageLabels } from './image-labels'
@@ -14,6 +15,7 @@ const MAX_SCALE = 4
 const DOUBLE_TAP_SCALES = [1, 2]
 
 export function ImageViewer({ image, onSearchResult }: ImageViewerProps) {
+  const { t } = useTranslation('common')
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
@@ -129,7 +131,7 @@ export function ImageViewer({ image, onSearchResult }: ImageViewerProps) {
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-sm rounded-lg">
           <MousePointerClick size={14} className="text-white/80 flex-shrink-0" />
           <span className="text-xs text-white/90 whitespace-nowrap">
-            点击浮标可搜索相似款，双击缩放
+            {t('imageInteractionHint')}
           </span>
         </div>
       )}

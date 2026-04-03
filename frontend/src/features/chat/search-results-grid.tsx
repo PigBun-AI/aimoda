@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ImageResult } from './chat-types'
 import type { SearchResponse } from './chat-api'
 import { FashionImage } from './fashion-image'
@@ -17,6 +18,7 @@ export function SearchResultsGrid({
   onPageChange,
   isLoading,
 }: SearchResultsGridProps) {
+  const { t } = useTranslation('common')
   const gridRef = useRef<HTMLDivElement>(null)
 
   const { images, total, page, page_size, has_more } = searchResults
@@ -33,7 +35,7 @@ export function SearchResultsGrid({
   if (images.length === 0 && !isLoading) {
     return (
       <div className="w-full max-w-[1784px] mt-6 mb-6 text-center py-12">
-        <p className="text-muted-foreground">未找到相关图片</p>
+        <p className="text-muted-foreground">{t('noRelatedImages')}</p>
       </div>
     )
   }
@@ -45,7 +47,7 @@ export function SearchResultsGrid({
         <h3 className="text-lg font-semibold text-foreground">
           {labelName}
           <span className="text-sm text-muted-foreground font-normal ml-2">
-            共 {total} 张
+            {t('imageCountSummary', { count: total })}
           </span>
         </h3>
 
@@ -77,7 +79,7 @@ export function SearchResultsGrid({
       {isLoading && (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <span className="ml-2 text-sm text-muted-foreground">搜索中...</span>
+          <span className="ml-2 text-sm text-muted-foreground">{t('searching')}</span>
         </div>
       )}
 
@@ -120,7 +122,7 @@ export function SearchResultsGrid({
             className="h-8 px-3 flex items-center gap-1 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
           >
             <ChevronLeft size={14} />
-            上一页
+            {t('previous')}
           </button>
           <span className="text-sm text-muted-foreground">
             {page} / {totalPages}
@@ -130,7 +132,7 @@ export function SearchResultsGrid({
             disabled={!has_more}
             className="h-8 px-3 flex items-center gap-1 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
           >
-            下一页
+            {t('next')}
             <ChevronRight size={14} />
           </button>
         </div>

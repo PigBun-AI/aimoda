@@ -52,6 +52,7 @@ const TOOL_PERMISSIONS: Record<string, Permission> = {
   get_style_detail: "read",
   list_styles: "read",
   list_style_gaps: "read",
+  mark_style_gap_covered: "write",
   add_style: "write",
   update_style: "write",
   batch_import_styles: "write",

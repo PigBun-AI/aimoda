@@ -5,6 +5,7 @@ from typing import Any
 
 from ..repositories.style_feedback_repo import (
     list_style_gap_signals,
+    mark_style_gap_signal_covered,
     upsert_style_gap_signal,
 )
 
@@ -63,4 +64,22 @@ def get_open_style_gap_feedback(
         limit=max(1, min(limit, 100)),
         offset=max(0, offset),
         min_hits=max(1, min_hits),
+    )
+
+
+def mark_style_gap_covered(
+    *,
+    signal_id: str | None = None,
+    query: str | None = None,
+    linked_style_name: str | None = None,
+    resolution_note: str | None = None,
+    resolved_by: str = "openclaw",
+) -> dict[str, Any] | None:
+    normalized_query = _normalize_gap_query(query or "") if query else None
+    return mark_style_gap_signal_covered(
+        signal_id=signal_id,
+        query_normalized=normalized_query,
+        linked_style_name=(linked_style_name or "").strip() or None,
+        resolution_note=(resolution_note or "").strip() or None,
+        resolved_by=(resolved_by or "").strip() or "openclaw",
     )

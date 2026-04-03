@@ -182,6 +182,9 @@ def list_style_gap_signals(
                 status,
                 total_hits,
                 unique_sessions,
+                linked_style_name,
+                resolution_note,
+                resolved_by,
                 first_seen_at,
                 last_seen_at,
                 latest_context
@@ -214,9 +217,12 @@ def list_style_gap_signals(
             "status": row[6],
             "total_hits": row[7],
             "unique_sessions": row[8],
-            "first_seen_at": row[9].isoformat() if row[9] else None,
-            "last_seen_at": row[10].isoformat() if row[10] else None,
-            "latest_context": dict(row[11]) if row[11] else {},
+            "linked_style_name": row[9],
+            "resolution_note": row[10],
+            "resolved_by": row[11],
+            "first_seen_at": row[12].isoformat() if row[12] else None,
+            "last_seen_at": row[13].isoformat() if row[13] else None,
+            "latest_context": dict(row[14]) if row[14] else {},
         }
         for row in rows
     ]
@@ -228,4 +234,71 @@ def list_style_gap_signals(
         "offset": offset,
         "status": status,
         "min_hits": min_hits,
+    }
+
+
+def mark_style_gap_signal_covered(
+    *,
+    signal_id: str | None = None,
+    query_normalized: str | None = None,
+    linked_style_name: str | None = None,
+    resolution_note: str | None = None,
+    resolved_by: str = "openclaw",
+) -> dict[str, Any] | None:
+    if not signal_id and not query_normalized:
+        raise ValueError("Either signal_id or query_normalized is required.")
+
+    where_clause = "id = %s" if signal_id else "query_normalized = %s"
+    where_value = signal_id or query_normalized
+
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            f"""
+            UPDATE style_gap_signals
+            SET
+                status = 'covered',
+                covered_at = NOW(),
+                resolved_by = %s,
+                linked_style_name = COALESCE(%s, linked_style_name),
+                resolution_note = CASE
+                    WHEN %s = '' THEN resolution_note
+                    ELSE %s
+                END
+            WHERE {where_clause}
+            RETURNING
+                id,
+                query_normalized,
+                latest_query_raw,
+                status,
+                linked_style_name,
+                resolution_note,
+                resolved_by,
+                covered_at,
+                total_hits,
+                unique_sessions
+            """,
+            (
+                resolved_by,
+                linked_style_name,
+                resolution_note or "",
+                resolution_note or "",
+                where_value,
+            ),
+        ).fetchone()
+        conn.commit()
+
+    if not row:
+        return None
+
+    return {
+        "signal_id": str(row[0]),
+        "query_normalized": row[1],
+        "query_raw": row[2],
+        "status": row[3],
+        "linked_style_name": row[4],
+        "resolution_note": row[5],
+        "resolved_by": row[6],
+        "covered_at": row[7].isoformat() if row[7] else None,
+        "total_hits": row[8],
+        "unique_sessions": row[9],
     }

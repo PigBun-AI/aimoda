@@ -22,9 +22,21 @@ export interface StyleGapItem {
   status: string;
   total_hits: number;
   unique_sessions: number;
+  linked_style_name?: string;
+  resolution_note?: string;
+  resolved_by?: string;
+  covered_at?: string;
   first_seen_at: string;
   last_seen_at: string;
   latest_context: Record<string, unknown>;
+}
+
+export interface MarkStyleGapCoveredInput {
+  signal_id?: string;
+  query_normalized?: string;
+  linked_style_name?: string;
+  resolution_note?: string;
+  resolved_by?: string;
 }
 
 export async function listStyleGaps(opts: {
@@ -52,6 +64,10 @@ export async function listStyleGaps(opts: {
           status,
           total_hits,
           unique_sessions,
+          linked_style_name,
+          resolution_note,
+          resolved_by,
+          covered_at,
           first_seen_at,
           last_seen_at,
           latest_context
@@ -85,10 +101,82 @@ export async function listStyleGaps(opts: {
       status: row.status,
       total_hits: row.total_hits,
       unique_sessions: row.unique_sessions,
+      linked_style_name: row.linked_style_name ?? "",
+      resolution_note: row.resolution_note ?? "",
+      resolved_by: row.resolved_by ?? "",
+      covered_at: row.covered_at ?? "",
       first_seen_at: row.first_seen_at,
       last_seen_at: row.last_seen_at,
       latest_context: row.latest_context ?? {},
     })),
     total: countResult.rows[0]?.total ?? 0,
   };
+}
+
+export async function markStyleGapCovered(
+  input: MarkStyleGapCoveredInput,
+): Promise<StyleGapItem | null> {
+  if (!input.signal_id && !input.query_normalized) {
+    throw new Error("signal_id or query_normalized is required");
+  }
+
+  const db = getPool();
+  const whereField = input.signal_id ? "id" : "query_normalized";
+  const whereValue = input.signal_id ?? input.query_normalized ?? "";
+  const resolvedBy = (input.resolved_by ?? "openclaw").trim() || "openclaw";
+  const linkedStyleName = (input.linked_style_name ?? "").trim() || null;
+  const resolutionNote = (input.resolution_note ?? "").trim();
+
+  const result = await db.query(
+    `
+      UPDATE style_gap_signals
+      SET
+        status = 'covered',
+        covered_at = NOW(),
+        resolved_by = $1,
+        linked_style_name = COALESCE($2, linked_style_name),
+        resolution_note = CASE WHEN $3 = '' THEN resolution_note ELSE $3 END
+      WHERE ${whereField} = $4
+      RETURNING
+        id,
+        query_normalized,
+        latest_query_raw,
+        source,
+        trigger_tool,
+        search_stage,
+        status,
+        total_hits,
+        unique_sessions,
+        linked_style_name,
+        resolution_note,
+        resolved_by,
+        covered_at,
+        first_seen_at,
+        last_seen_at,
+        latest_context
+    `,
+    [resolvedBy, linkedStyleName, resolutionNote, whereValue],
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    query_normalized: row.query_normalized,
+    query_raw: row.latest_query_raw,
+    source: row.source,
+    trigger_tool: row.trigger_tool,
+    search_stage: row.search_stage,
+    status: row.status,
+    total_hits: row.total_hits,
+    unique_sessions: row.unique_sessions,
+    linked_style_name: row.linked_style_name ?? "",
+    resolution_note: row.resolution_note ?? "",
+    resolved_by: row.resolved_by ?? "",
+    covered_at: row.covered_at ?? "",
+    first_seen_at: row.first_seen_at,
+    last_seen_at: row.last_seen_at,
+    latest_context: row.latest_context ?? {},
+  } as StyleGapItem & Record<string, unknown>;
 }

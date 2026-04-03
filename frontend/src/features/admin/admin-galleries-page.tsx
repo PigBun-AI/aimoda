@@ -8,12 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export function AdminGalleriesPage() {
-  const { t, i18n } = useTranslation('admin')
+  const { t, i18n } = useTranslation(['admin', 'common'])
   const { data, isLoading } = useAdminGalleries()
   const deleteGalleryMutation = useDeleteGallery()
 
   function handleDelete(id: string) {
-    if (window.confirm(t('common:deleteConfirm', '确定要删除该内容吗？此操作不可恢复。'))) {
+    if (window.confirm(t('common:deleteConfirm'))) {
       deleteGalleryMutation.mutate(id)
     }
   }
@@ -24,17 +24,17 @@ export function AdminGalleriesPage() {
     <section className="space-y-6 sm:space-y-8 font-sans">
       <div>
         <h1 className="font-serif text-2xl sm:text-3xl font-medium mb-2 text-foreground">
-          {t('common:galleriesTab', '灵感情报站')}
+          {t('common:galleriesTab')}
         </h1>
         <p className="text-sm text-muted-foreground">
-          {t('common:galleriesDesc', '管理平台上的所有灵感图集。')}
+          {t('common:galleriesDesc')}
         </p>
       </div>
 
       <div className="space-y-4 text-sm">
         <div>
           <h2 className="text-lg font-medium text-foreground">
-            {t('common:galleryList', '图集列表')}
+            {t('common:galleryList')}
           </h2>
         </div>
         <div className="space-y-4">
@@ -91,7 +91,7 @@ export function AdminGalleriesPage() {
                         </span>
                       </div>
                       <div className="text-xs mt-2 text-muted-foreground font-sans flex items-center gap-2">
-                        <span>{gallery.image_count} 张图片</span>
+                        <span>{t('common:imageCountWithUnit', { count: gallery.image_count })}</span>
                         <span>•</span>
                         <span>
                           {new Date(gallery.created_at).toLocaleString(i18n.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
@@ -123,7 +123,7 @@ export function AdminGalleriesPage() {
                         disabled={deleteGalleryMutation.isPending}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        删除
+                        {t('common:delete')}
                       </Button>
                     </div>
                   </div>
@@ -131,7 +131,7 @@ export function AdminGalleriesPage() {
               ))}
           {!isLoading && galleries.length === 0 && (
             <div className="text-center py-8 text-muted-foreground font-sans">
-              暂无图集
+              {t('common:noGalleries')}
             </div>
           )}
         </div>

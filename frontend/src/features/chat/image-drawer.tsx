@@ -1,6 +1,7 @@
 // ImageDrawer — 结果面板（仿 aimoda-web ResultPanelContainer）
 
 import { Maximize2, Minimize2, X, Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import type { DrawerData } from './chat-types'
 import { FashionImage } from './fashion-image'
@@ -32,6 +33,7 @@ export function ImageDrawer({
   onLoadMore,
   onToggleFullscreen,
 }: ImageDrawerProps) {
+  const { t } = useTranslation('common')
   if (!open || !data) return null
 
   const safeImages = data.images || []
@@ -47,14 +49,14 @@ export function ImageDrawer({
       {/* Header — 仿 aimoda-web HeaderCommon */}
       <div className="flex min-h-15 items-end justify-between gap-3 border-b border-border px-4 pb-3.5 sm:px-8">
         <div className="flex min-w-0 items-end gap-2">
-          <div className="text-xl font-bold leading-[24px]">AI检索结果</div>
+          <div className="text-xl font-bold leading-[24px]">{t('aiSearchResult')}</div>
           <div className="mb-0.5 text-sm text-muted-foreground">
             ({safeImages.length}
-            {displayCount > safeImages.length ? ` / ${displayCount}` : ''} 张图片)
+            {displayCount > safeImages.length ? ` / ${displayCount}` : ''} {t('imageUnit')})
           </div>
           {isFullscreen && (
             <div className="mb-0.5 hidden text-xs text-muted-foreground/80 lg:block">
-              Esc 可退出聚焦查看
+              {t('escExitFocus')}
             </div>
           )}
         </div>
@@ -67,7 +69,7 @@ export function ImageDrawer({
               onClick={onToggleFullscreen}
             >
               {isFullscreen ? <Minimize2 size={14} className="mr-1.5" /> : <Maximize2 size={14} className="mr-1.5" />}
-              {isFullscreen ? '退出聚焦' : '聚焦查看'}
+              {isFullscreen ? t('exitFocus') : t('focusView')}
             </Button>
           )}
           <button
@@ -97,7 +99,7 @@ export function ImageDrawer({
                 onClick={() => handleImageClick(img)}
                 className="relative group overflow-hidden bg-muted w-full transition-all border border-border/70 hover:border-primary/40 hover:shadow-md cursor-pointer"
                 style={{ aspectRatio: '1 / 2', width: '100%' }}
-                title={`查看 ${img.brand || '图片'}`}
+                title={t('viewImageItem', { brand: img.brand || t('image') })}
               >
                 <FashionImage image={img} className="w-full h-full" thumbnailWidth={thumbnailWidth} />
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
@@ -136,17 +138,17 @@ export function ImageDrawer({
               {data.isLoadingMore ? (
                 <>
                   <Loader2 size={14} className="mr-2 animate-spin" />
-                  加载中...
+                  {t('loading')}
                 </>
               ) : (
-                '加载更多'
+                t('loadMore')
               )}
             </Button>
           </div>
         )}
 
         {!data.hasMore && safeImages.length > 0 && (
-          <p className="text-center text-muted-foreground text-sm mt-8 pb-2">已加载全部图片</p>
+          <p className="text-center text-muted-foreground text-sm mt-8 pb-2">{t('allImagesLoaded')}</p>
         )}
       </div>
     </div>

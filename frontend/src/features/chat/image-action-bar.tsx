@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { Download, Heart, Link2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ImageResult } from './chat-types'
 
 interface ImageActionBarProps {
@@ -7,6 +8,7 @@ interface ImageActionBarProps {
 }
 
 export function ImageActionBar({ image }: ImageActionBarProps) {
+  const { t } = useTranslation('common')
   const handleDownload = useCallback(() => {
     const a = document.createElement('a')
     a.href = image.image_url
@@ -34,8 +36,8 @@ export function ImageActionBar({ image }: ImageActionBarProps) {
         type="button"
         onClick={handleCopyLink}
         className="transition-opacity hover:opacity-70"
-        title="复制链接"
-        aria-label="复制链接"
+        title={t('copyLink')}
+        aria-label={t('copyLink')}
       >
         <Link2 className="w-7 h-7 text-foreground" strokeWidth={1.5} />
       </button>
@@ -43,16 +45,16 @@ export function ImageActionBar({ image }: ImageActionBarProps) {
         type="button"
         onClick={handleDownload}
         className="transition-opacity hover:opacity-70"
-        title="下载"
-        aria-label="下载"
+        title={t('download')}
+        aria-label={t('download')}
       >
         <Download className="w-7 h-7 text-foreground" strokeWidth={1.5} />
       </button>
       <button
         type="button"
         className="transition-opacity hover:opacity-70"
-        title="收藏"
-        aria-label="收藏"
+        title={t('favorite')}
+        aria-label={t('favorite')}
       >
         <Heart className="w-7 h-7 text-foreground" strokeWidth={1.5} />
       </button>

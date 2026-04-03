@@ -5,20 +5,22 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Sparkles, TrendingUp, Camera, Palette, BookOpen } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { fetchGalleries, type Gallery } from './gallery-api'
 
 const CATEGORIES = [
-  { value: '', label: '全部', icon: Sparkles },
-  { value: 'trend', label: '趋势分析', icon: TrendingUp },
-  { value: 'collection', label: '品牌系列', icon: BookOpen },
-  { value: 'street_style', label: '街拍精选', icon: Camera },
-  { value: 'editorial', label: '编辑精选', icon: Palette },
-  { value: 'inspiration', label: '灵感板', icon: Sparkles },
+  { value: '', labelKey: 'inspirationCategoryAll', icon: Sparkles },
+  { value: 'trend', labelKey: 'inspirationCategoryTrend', icon: TrendingUp },
+  { value: 'collection', labelKey: 'inspirationCategoryCollection', icon: BookOpen },
+  { value: 'street_style', labelKey: 'inspirationCategoryStreetStyle', icon: Camera },
+  { value: 'editorial', labelKey: 'inspirationCategoryEditorial', icon: Palette },
+  { value: 'inspiration', labelKey: 'inspirationCategoryBoard', icon: Sparkles },
 ]
 
 const PAGE_SIZE = 12
 
 export function InspirationPage() {
+  const { t } = useTranslation('common')
   const [searchParams, setSearchParams] = useSearchParams()
   const [galleries, setGalleries] = useState<Gallery[]>([])
   const [total, setTotal] = useState(0)
@@ -69,10 +71,10 @@ export function InspirationPage() {
       {/* Header */}
       <header className="space-y-2">
         <h1 className="font-serif text-2xl sm:text-3xl font-medium text-foreground">
-          灵感情报站
+          {t('inspiration')}
         </h1>
         <p className="text-sm text-muted-foreground">
-          由 AI 自动采集与整理的时尚灵感图集
+          {t('inspirationSubtitle')}
         </p>
       </header>
 
@@ -90,7 +92,7 @@ export function InspirationPage() {
               className="gap-1.5"
             >
               <Icon className="h-3.5 w-3.5" />
-              {cat.label}
+              {t(cat.labelKey)}
             </Button>
           )
         })}
@@ -122,7 +124,7 @@ export function InspirationPage() {
                       )}
                       {/* Image count badge */}
                       <div className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-xs text-white backdrop-blur-sm">
-                        {gallery.image_count} 张
+                        {t('imageCount', { count: gallery.image_count })}
                       </div>
                     </div>
 
@@ -159,9 +161,9 @@ export function InspirationPage() {
       {!loading && galleries.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <Sparkles className="h-12 w-12 text-muted-foreground/30 mb-4" />
-          <p className="text-muted-foreground">暂无灵感图集</p>
+          <p className="text-muted-foreground">{t('inspirationEmptyTitle')}</p>
           <p className="text-xs text-muted-foreground/60 mt-1">
-            AI Agent 正在努力采集中...
+            {t('inspirationEmptyHint')}
           </p>
         </div>
       )}
@@ -176,7 +178,7 @@ export function InspirationPage() {
             onClick={() => setPage(page - 1)}
           >
             <ChevronLeft className="h-4 w-4 mr-1" />
-            上一页
+            {t('previous')}
           </Button>
           <span className="text-sm text-muted-foreground">
             {page} / {totalPages}
@@ -187,7 +189,7 @@ export function InspirationPage() {
             disabled={page >= totalPages}
             onClick={() => setPage(page + 1)}
           >
-            下一页
+            {t('next')}
             <ChevronRight className="h-4 w-4 ml-1" />
           </Button>
         </div>

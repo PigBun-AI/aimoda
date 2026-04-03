@@ -3,6 +3,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Search, Filter, X, Eye, Images, Palette, BarChart3, Info, Loader2, CheckCircle2, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type {
   ChatMessage,
   ContentBlock,
@@ -31,17 +32,17 @@ const toolIcons: Record<string, typeof Search> = {
 }
 
 const toolLabels: Record<string, string> = {
-  search: '智能检索',
-  search_style: '风格库检索',
-  explore_colors: '色彩探索',
-  analyze_trends: '趋势分析',
-  get_image_details: '查看详情',
-  start_collection: '开启新检索',
-  add_filter: '添加过滤条件',
-  remove_filter: '移除过滤条件',
-  peek_collection: '后台自查',
-  show_collection: '检索结果',
-  fashion_vision: '时尚视觉分析',
+  search: 'toolSearch',
+  search_style: 'toolSearchStyle',
+  explore_colors: 'toolExploreColors',
+  analyze_trends: 'toolAnalyzeTrends',
+  get_image_details: 'toolGetImageDetails',
+  start_collection: 'toolStartCollection',
+  add_filter: 'toolAddFilter',
+  remove_filter: 'toolRemoveFilter',
+  peek_collection: 'toolPeekCollection',
+  show_collection: 'toolShowCollection',
+  fashion_vision: 'toolFashionVision',
 }
 
 function parseShowCollectionResult(content: string): SearchResultData | null {
@@ -82,14 +83,16 @@ function parseStyleKnowledgeResult(content: string): StyleKnowledgeResultData | 
   return null
 }
 
-function parseToolResultSummary(content: string): string {
+function parseToolResultSummary(content: string, t: (key: string, options?: Record<string, unknown>) => string): string {
   try {
     const data = JSON.parse(content)
     if (typeof data === 'object' && data !== null) {
       if ('message' in data && typeof data.message === 'string') return data.message
       if ('status' in data && typeof data.status === 'string') return `${data.status}${data.total != null ? ` (${String(data.total)})` : ''}`
-      if ('action' in data && typeof data.action === 'string') return `${data.action}${data.remaining != null ? ` — ${String(data.remaining)} 结果` : ''}`
-      if ('error' in data && typeof data.error === 'string') return `错误: ${data.error}`
+      if ('action' in data && typeof data.action === 'string') {
+        return `${data.action}${data.remaining != null ? ` — ${t('toolRemainingResults', { count: data.remaining })}` : ''}`
+      }
+      if ('error' in data && typeof data.error === 'string') return `${t('error')}: ${data.error}`
       const compact = JSON.stringify(data)
       return compact.length > 120 ? `${compact.slice(0, 120)}...` : compact
     }
@@ -165,6 +168,8 @@ export function MessageBubble({ msg, onOpenDrawer }: MessageBubbleProps) {
 }
 
 function UserBlockRenderer({ block }: { block: ContentBlock }) {
+  const { t } = useTranslation('common')
+
   if (block.type === 'text') {
     return block.text ? (
       <div className="bg-primary text-primary-foreground rounded-bubble rounded-br-sm px-4 py-2.5 shadow-sm text-sm whitespace-pre-wrap">
@@ -177,7 +182,7 @@ function UserBlockRenderer({ block }: { block: ContentBlock }) {
     return (
       <img
         src={resolveImageSrc(block.source, 560)}
-        alt={block.alt_text || block.file_name || 'uploaded image'}
+        alt={block.alt_text || block.file_name || t('uploadedImage')}
         className="max-h-72 rounded-2xl object-cover border border-border bg-card shadow-sm ml-auto"
       />
     )
@@ -186,7 +191,7 @@ function UserBlockRenderer({ block }: { block: ContentBlock }) {
   if (block.type === 'document') {
     return (
       <div className="rounded-xl border border-white/15 bg-primary text-primary-foreground/90 px-3 py-2 text-xs shadow-sm">
-        已上传文件{block.file_name ? `：${block.file_name}` : ''}
+        {block.file_name ? t('uploadedFileNamed', { fileName: block.file_name }) : t('uploadedFile')}
       </div>
     )
   }
@@ -262,12 +267,13 @@ function BlockRenderer({
   block: ContentBlock
   onOpenDrawer?: (searchRequestId: string) => void
 }) {
+  const { t } = useTranslation('common')
   if (block.type === 'text') return <TextBlockView block={block} />
   if (block.type === 'image') {
     return (
       <img
         src={resolveImageSrc(block.source, 560)}
-        alt={block.alt_text || block.file_name || 'assistant image'}
+        alt={block.alt_text || block.file_name || t('assistantImage')}
         className="max-h-72 rounded-2xl border border-border bg-card object-cover shadow-sm"
       />
     )
@@ -275,7 +281,7 @@ function BlockRenderer({
   if (block.type === 'document') {
     return (
       <div className="rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground shadow-sm">
-        文件{block.file_name ? `：${block.file_name}` : ''}
+        {block.file_name ? t('documentFileNamed', { fileName: block.file_name }) : t('documentFile')}
       </div>
     )
   }
@@ -288,6 +294,8 @@ function BlockRenderer({
 }
 
 function ShowCollectionPendingCard() {
+  const { t } = useTranslation('common')
+
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-1 duration-normal">
       <div className="px-3 sm:px-4 py-3 sm:py-4 flex items-start justify-between gap-3">
@@ -302,7 +310,7 @@ function ShowCollectionPendingCard() {
         </div>
         <div className="inline-flex items-center gap-2 rounded-full bg-muted/70 px-3 py-1.5">
           <Loader2 size={12} className="animate-spin text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">正在生成结果</span>
+          <span className="text-xs text-muted-foreground">{t('generatingResults')}</span>
         </div>
       </div>
     </div>
@@ -316,6 +324,7 @@ function ToolTraceGroup({
   blocks: ContentBlock[]
   onOpenDrawer?: (searchRequestId: string) => void
 }) {
+  const { t } = useTranslation('common')
   const stats = useMemo(() => getToolTraceStats(blocks), [blocks])
   const resolvedToolUseIds = useMemo(
     () => new Set(
@@ -343,15 +352,15 @@ function ToolTraceGroup({
       >
         <div className="flex items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-          <span className="text-xs font-medium text-foreground/80">工具执行记录</span>
-          <span className="text-xs text-muted-foreground">{stats.toolCount} 个调用</span>
-          {stats.runningCount > 0 && <span className="text-xs text-primary">执行中 {stats.runningCount}</span>}
-          {stats.errorCount > 0 && <span className="text-xs text-destructive">异常 {stats.errorCount}</span>}
+          <span className="text-xs font-medium text-foreground/80">{t('toolTraceTitle')}</span>
+          <span className="text-xs text-muted-foreground">{t('toolCallsCount', { count: stats.toolCount })}</span>
+          {stats.runningCount > 0 && <span className="text-xs text-primary">{t('toolRunningCount', { count: stats.runningCount })}</span>}
+          {stats.errorCount > 0 && <span className="text-xs text-destructive">{t('toolErrorCount', { count: stats.errorCount })}</span>}
           {stats.toolCount > 0 && stats.runningCount === 0 && stats.errorCount === 0 && (
-            <span className="text-xs text-success">已完成 {stats.doneCount}</span>
+            <span className="text-xs text-success">{t('toolDoneCount', { count: stats.doneCount })}</span>
           )}
         </div>
-        <span className="text-xs text-muted-foreground">{collapsed ? '展开' : '收起'}</span>
+        <span className="text-xs text-muted-foreground">{collapsed ? t('expand') : t('collapse')}</span>
       </button>
 
       {!collapsed && (
@@ -383,8 +392,9 @@ function TextBlockView({ block }: { block: { type: 'text'; text: string } }) {
 }
 
 function ToolCallCard({ block }: { block: { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; status?: 'running' | 'done' } }) {
+  const { t } = useTranslation('common')
   const IconComp = toolIcons[block.name] || Search
-  const label = toolLabels[block.name] || block.name
+  const label = toolLabels[block.name] ? t(toolLabels[block.name]) : block.name
   const summary = buildArgsSummary(block.name, block.input)
   const isDone = block.status === 'done'
 
@@ -409,6 +419,7 @@ function ToolResultView({
   block: { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean; images?: ImageResult[]; metadata?: Record<string, unknown> }
   onOpenDrawer?: (searchRequestId: string) => void
 }) {
+  const { t } = useTranslation('common')
   const showCollectionData = useMemo(() => parseShowCollectionResult(block.content), [block.content])
   const fashionVisionData = useMemo(() => parseFashionVisionResult(block.content), [block.content])
   const styleKnowledgeData = useMemo(() => parseStyleKnowledgeResult(block.content), [block.content])
@@ -429,26 +440,27 @@ function ToolResultView({
   if (isError) {
     return (
       <div className="py-1 px-3 ml-3 text-xs border-l-2 border-destructive/50 text-destructive">
-        {parseToolResultSummary(block.content)}
+        {parseToolResultSummary(block.content, t)}
       </div>
     )
   }
 
   return (
     <div className="py-1 px-3 ml-3 text-xs border-l-2 border-muted-foreground/30 text-muted-foreground">
-      {parseToolResultSummary(block.content)}
+      {parseToolResultSummary(block.content, t)}
     </div>
   )
 }
 
 function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
+  const { t } = useTranslation('common')
   const analysis = data.analysis
   const filterEntries = [
-    ...analysis.hard_filters.category.map((value) => ({ label: '品类', value })),
-    ...analysis.hard_filters.color.map((value) => ({ label: '颜色', value })),
-    ...analysis.hard_filters.fabric.map((value) => ({ label: '面料', value })),
-    ...(analysis.hard_filters.gender ? [{ label: '性别', value: analysis.hard_filters.gender }] : []),
-    ...analysis.hard_filters.season.map((value) => ({ label: '季节', value })),
+    ...analysis.hard_filters.category.map((value) => ({ label: t('filterCategory'), value })),
+    ...analysis.hard_filters.color.map((value) => ({ label: t('filterColor'), value })),
+    ...analysis.hard_filters.fabric.map((value) => ({ label: t('filterFabric'), value })),
+    ...(analysis.hard_filters.gender ? [{ label: t('filterGender'), value: analysis.hard_filters.gender }] : []),
+    ...analysis.hard_filters.season.map((value) => ({ label: t('filterSeason'), value })),
   ]
 
   return (
@@ -459,9 +471,9 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
             <Sparkles size={16} className="text-primary" />
           </div>
           <div>
-            <div className="text-sm font-medium text-foreground">时尚视觉分析</div>
+            <div className="text-sm font-medium text-foreground">{t('toolFashionVision')}</div>
             <div className="text-xs text-muted-foreground">
-              {data.image_count ? `${data.image_count} 张图` : '图片分析'}
+              {data.image_count ? t('imageCardCount', { count: data.image_count }) : t('imageAnalysis')}
               {data.model ? ` · ${data.model}` : ''}
             </div>
           </div>
@@ -489,7 +501,7 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
 
       {filterEntries.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">建议硬过滤条件</div>
+          <div className="text-xs font-medium text-muted-foreground">{t('suggestedHardFilters')}</div>
           <div className="flex flex-wrap gap-2">
             {filterEntries.map((item, index) => (
               <span key={`${item.label}-${item.value}-${index}`} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
@@ -503,7 +515,7 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
 
       {analysis.follow_up_questions_zh.length > 0 && (
         <div className="rounded-xl border border-dashed border-border px-3 py-2">
-          <div className="text-xs font-medium text-muted-foreground mb-1">可追问</div>
+          <div className="text-xs font-medium text-muted-foreground mb-1">{t('followUpQuestions')}</div>
           <div className="space-y-1">
             {analysis.follow_up_questions_zh.map((question) => (
               <div key={question} className="text-xs text-foreground/80">{question}</div>
@@ -516,6 +528,7 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
 }
 
 function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
+  const { t } = useTranslation('common')
   const primaryStyle = data.primary_style
   const styleFeatures = data.style_features
   const retrievalPlan = data.retrieval_plan
@@ -523,10 +536,10 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
   const suggestedFilters = Object.entries(retrievalPlan?.suggested_filters ?? {})
   const alternatives = data.alternatives ?? []
   const featureGroups = [
-    { label: '色盘', values: styleFeatures?.palette ?? [] },
-    { label: '廓形', values: styleFeatures?.silhouette ?? [] },
-    { label: '面料', values: styleFeatures?.fabric ?? [] },
-    { label: '细节', values: styleFeatures?.details ?? [] },
+    { label: t('stylePalette'), values: styleFeatures?.palette ?? [] },
+    { label: t('styleSilhouette'), values: styleFeatures?.silhouette ?? [] },
+    { label: t('styleFabric'), values: styleFeatures?.fabric ?? [] },
+    { label: t('styleDetails'), values: styleFeatures?.details ?? [] },
   ].filter((group) => group.values.length > 0)
 
   return (
@@ -537,9 +550,9 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
             <Sparkles size={16} className="text-primary" />
           </div>
           <div>
-            <div className="text-sm font-medium text-foreground">风格库检索</div>
+            <div className="text-sm font-medium text-foreground">{t('toolSearchStyle')}</div>
             <div className="text-xs text-muted-foreground">
-              {data.query ? `查询：${data.query}` : '抽象风格检索'}
+              {data.query ? t('styleSearchQuery', { query: data.query }) : t('abstractStyleSearch')}
               {data.search_stage ? ` · ${data.search_stage}` : ''}
             </div>
           </div>
@@ -565,7 +578,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
             </span>
           )}
           {primaryStyle.match_type && (
-            <span className="text-xs text-muted-foreground">匹配方式：{primaryStyle.match_type}</span>
+            <span className="text-xs text-muted-foreground">{t('matchType', { value: primaryStyle.match_type })}</span>
           )}
         </div>
       )}
@@ -579,7 +592,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
 
       {featureGroups.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">风格特征</div>
+          <div className="text-xs font-medium text-muted-foreground">{t('styleFeatures')}</div>
           <div className="flex flex-wrap gap-2">
             {featureGroups.flatMap((group) =>
               group.values.map((value) => (
@@ -598,7 +611,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
 
       {suggestedFilters.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">建议过滤条件</div>
+          <div className="text-xs font-medium text-muted-foreground">{t('suggestedFilters')}</div>
           <div className="flex flex-wrap gap-2">
             {suggestedFilters.flatMap(([key, rawValue]) => {
               const values = Array.isArray(rawValue) ? rawValue : [rawValue]
@@ -618,7 +631,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
 
       {alternatives.length > 0 && (
         <div className="rounded-xl border border-dashed border-border px-3 py-2">
-          <div className="text-xs font-medium text-muted-foreground mb-1">相近风格</div>
+          <div className="text-xs font-medium text-muted-foreground mb-1">{t('relatedStyles')}</div>
           <div className="flex flex-wrap gap-2">
             {alternatives.map((item) => (
               <span key={`${item.style_name}-${item.match_type ?? 'alt'}`} className="text-xs text-foreground/80">

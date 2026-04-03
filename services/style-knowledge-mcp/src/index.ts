@@ -24,6 +24,7 @@ import {
 } from "./tools/get_style_detail.js";
 import { listStylesSchema, listStyles } from "./tools/list_styles.js";
 import { listStyleGapsSchema, listStyleGapsTool } from "./tools/list_style_gaps.js";
+import { markStyleGapCoveredSchema, markStyleGapCoveredTool } from "./tools/mark_style_gap_covered.js";
 import { updateStyleSchema, updateStyle } from "./tools/update_style.js";
 import { deleteStyleSchema, deleteStyle } from "./tools/delete_style.js";
 import {
@@ -99,6 +100,14 @@ function createServer(): McpServer {
 适用场景: OpenClaw 定向补采趋势风格、运营查看近期风格需求空白。`,
     listStyleGapsSchema,
     async (args) => listStyleGapsTool(args as any),
+  );
+
+  server.tool(
+    "mark_style_gap_covered",
+    `将某个风格缺口标记为已闭环。
+适用场景: OpenClaw 补采并写入 style knowledge 后，调用本工具将缺口从 open 标记为 covered，并记录 linked_style_name 与 resolution_note。`,
+    markStyleGapCoveredSchema,
+    async (args) => markStyleGapCoveredTool(args as any),
   );
 
   // ── P1: 批量导入 ──────────────────────────────────────────────

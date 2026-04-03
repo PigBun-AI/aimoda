@@ -131,6 +131,9 @@ CREATE TABLE IF NOT EXISTS style_gap_signals (
     last_session_id   UUID,
     last_user_id      INTEGER,
     latest_context    JSONB NOT NULL DEFAULT '{}'::jsonb,
+    linked_style_name TEXT,
+    resolution_note   TEXT NOT NULL DEFAULT '',
+    resolved_by       TEXT NOT NULL DEFAULT '',
     first_seen_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_seen_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     covered_at        TIMESTAMPTZ,
@@ -138,6 +141,13 @@ CREATE TABLE IF NOT EXISTS style_gap_signals (
     CONSTRAINT style_gap_signals_last_session_fkey
         FOREIGN KEY (last_session_id) REFERENCES chat_sessions(id) ON DELETE SET NULL
 );
+
+ALTER TABLE style_gap_signals
+    ADD COLUMN IF NOT EXISTS linked_style_name TEXT;
+ALTER TABLE style_gap_signals
+    ADD COLUMN IF NOT EXISTS resolution_note TEXT NOT NULL DEFAULT '';
+ALTER TABLE style_gap_signals
+    ADD COLUMN IF NOT EXISTS resolved_by TEXT NOT NULL DEFAULT '';
 
 CREATE OR REPLACE FUNCTION style_gap_signals_set_updated_at()
 RETURNS TRIGGER AS $$

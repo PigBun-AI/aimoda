@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ImageResult } from './chat-types'
 import { searchSimilar } from './chat-api'
 import type { SearchResponse } from './chat-api'
@@ -75,6 +76,7 @@ interface ImageLabelsProps {
 }
 
 export function ImageLabels({ image, onSearchResult }: ImageLabelsProps) {
+  const { t } = useTranslation('common')
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
   const [searchingIndex, setSearchingIndex] = useState<number | null>(null)
@@ -180,7 +182,7 @@ export function ImageLabels({ image, onSearchResult }: ImageLabelsProps) {
                 maxWidth: '200px',
                 whiteSpace: 'nowrap',
               }}
-              title={`点击搜索类似 ${displayName}`}
+              title={t('searchSimilarGarment', { name: displayName })}
               onClick={(e) => {
                 e.stopPropagation()
                 handleLabelClick(label, index)
