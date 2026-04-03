@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useSessionStore } from '@/features/chat/session-store'
+import { useChatLayoutStore } from '@/features/chat/chat-layout-store'
 import { useLoginDialog } from '@/features/auth/auth-store'
 import { LoginDialog } from '@/features/auth/login-dialog'
 
@@ -73,6 +74,7 @@ export function AppShell() {
   const [isRenaming, setIsRenaming] = useState(false)
   const [deleteDialog, setDeleteDialog] = useState<SessionDialogState | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const { isDrawerFullscreen } = useChatLayoutStore()
   const { openLogin } = useLoginDialog()
 
   const {
@@ -94,6 +96,7 @@ export function AppShell() {
     location.pathname === '/' ||
     location.pathname === '/chat' ||
     location.pathname.startsWith('/reports/')
+  const isChatImmersive = location.pathname === '/chat' && isDrawerFullscreen
 
   const hasRunningSession = chatSessions.some(session => session.execution_status === 'running')
 
@@ -167,7 +170,7 @@ export function AppShell() {
     i18n.changeLanguage(next)
   }, [i18n])
 
-  const sidebarWidth = isLargeScreen && isSidebarOpen ? SIDEBAR_WIDTH : 0
+  const sidebarWidth = isLargeScreen && isSidebarOpen && !isChatImmersive ? SIDEBAR_WIDTH : 0
 
   const closeSidebarChrome = useCallback(() => {
     if (isFloating) setIsHovering(false)
@@ -568,14 +571,14 @@ export function AppShell() {
         </div>
       )}
 
-      {isSidebarOpen && !isLargeScreen && (
+      {isSidebarOpen && !isLargeScreen && !isChatImmersive && (
         <div
           className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-normal"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
-      {!isSidebarOpen && isLargeScreen && (
+      {!isSidebarOpen && isLargeScreen && !isChatImmersive && (
         <div
           className="fixed top-2 left-0 w-4 z-50"
           style={{ height: 'calc(100% - 56px)' }}
@@ -583,7 +586,7 @@ export function AppShell() {
         />
       )}
 
-      {isFloating && (
+      {isFloating && !isChatImmersive && (
         <>
           <div
             className="fixed top-2 left-2 z-50 overflow-hidden flex flex-col bg-background border border-border rounded-xl shadow-xl"
@@ -604,7 +607,7 @@ export function AppShell() {
         </>
       )}
 
-      {!isFloating && (
+      {!isFloating && !isChatImmersive && (
         <aside
           className="fixed left-0 top-0 z-50 h-dvh flex flex-col transition-transform duration-normal ease-out bg-secondary border-r border-border"
           style={{
@@ -617,7 +620,7 @@ export function AppShell() {
         </aside>
       )}
 
-      {!isLargeScreen && isSidebarOpen && (
+      {!isLargeScreen && isSidebarOpen && !isChatImmersive && (
         <button
           onClick={() => setIsSidebarOpen(false)}
           className="fixed top-4 z-[60] cursor-pointer"
@@ -631,7 +634,10 @@ export function AppShell() {
         className="min-h-dvh transition-all duration-normal ease-out"
         style={{ marginLeft: isLargeScreen ? `${sidebarWidth}px` : 0 }}
       >
-        <header className="lg:hidden sticky top-0 z-30 flex items-center h-14 px-4 border-b border-border bg-background">
+        <header className={cn(
+          'lg:hidden sticky top-0 z-30 flex items-center h-14 px-4 border-b border-border bg-background',
+          isChatImmersive && 'hidden',
+        )}>
           <div className="w-10 flex justify-start">
             <button
               onClick={() => setIsSidebarOpen(true)}
@@ -667,7 +673,7 @@ export function AppShell() {
           </div>
         </header>
 
-        {isLargeScreen && !isSidebarOpen && (
+        {isLargeScreen && !isSidebarOpen && !isChatImmersive && (
           <div className="fixed top-3 left-3 z-30">
             <Button
               variant="ghost"

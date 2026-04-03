@@ -5,6 +5,7 @@ import { ChatInput } from './chat-input'
 import { MessageBubble } from './message-bubble'
 import { ImageDrawer } from './image-drawer'
 import { useChat } from './chat-hooks'
+import { useChatLayoutStore } from './chat-layout-store'
 import { useSessionStore } from './session-store'
 import { useIsDesktop } from '@/lib/use-breakpoint'
 import { cn } from '@/lib/utils'
@@ -55,6 +56,7 @@ export function ChatPage() {
     const stored = Number(window.localStorage.getItem(drawerWidthStorageKey))
     return Number.isFinite(stored) && stored >= 28 && stored <= 62 ? stored : 45
   })
+  const { isDrawerFullscreen, setDrawerFullscreen } = useChatLayoutStore()
 
   const {
     activeSessionId,
@@ -125,6 +127,31 @@ export function ChatPage() {
     window.localStorage.setItem(drawerWidthStorageKey, String(drawerWidthPercent))
   }, [drawerWidthPercent])
 
+  useEffect(() => {
+    if (!drawerOpen || !isDesktop) {
+      setDrawerFullscreen(false)
+    }
+  }, [drawerOpen, isDesktop, setDrawerFullscreen])
+
+  useEffect(() => {
+    return () => {
+      setDrawerFullscreen(false)
+    }
+  }, [setDrawerFullscreen])
+
+  useEffect(() => {
+    if (!isDrawerFullscreen) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setDrawerFullscreen(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isDrawerFullscreen, setDrawerFullscreen])
+
   const handleSend = useCallback(async (input: ChatComposerInput) => {
     // Lazy session creation: create on first message if no active session
     if (!activeSessionId) {
@@ -137,6 +164,11 @@ export function ChatPage() {
     }
     sendMessage(input)
   }, [activeSessionId, newSession, sendMessage])
+
+  const toggleDrawerFullscreen = useCallback(() => {
+    if (!isDesktop || !drawerOpen) return
+    setDrawerFullscreen(!isDrawerFullscreen)
+  }, [drawerOpen, isDesktop, isDrawerFullscreen, setDrawerFullscreen])
 
   const handleResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const container = mainRef.current
@@ -166,7 +198,10 @@ export function ChatPage() {
     window.addEventListener('pointerup', onPointerUp)
   }, [])
 
-  const chatWidthPercent = drawerOpen ? 100 - drawerWidthPercent : 100
+  const chatWidthPercent =
+    drawerOpen
+      ? (isDesktop && isDrawerFullscreen ? 0 : 100 - drawerWidthPercent)
+      : 100
 
   return (
     <div className="h-full w-full flex flex-col bg-background overflow-hidden">
@@ -176,7 +211,9 @@ export function ChatPage() {
         <div
           className={cn(
             "flex w-full flex-1 flex-col min-h-0 transition-all duration-normal",
-            drawerOpen && !isDesktop ? "hidden" : "flex"
+            (drawerOpen && !isDesktop) || (drawerOpen && isDesktop && isDrawerFullscreen)
+              ? "hidden"
+              : "flex"
           )}
           style={isDesktop ? { width: `${chatWidthPercent}%` } : undefined}
         >
@@ -200,7 +237,7 @@ export function ChatPage() {
         {drawerOpen && (
           <>
             {/* Resize handle - desktop only */}
-            {isDesktop && (
+            {isDesktop && !isDrawerFullscreen && (
               <div
                 role="separator"
                 aria-orientation="vertical"
@@ -215,9 +252,10 @@ export function ChatPage() {
             <div
               className={cn(
                 "shrink-0 min-w-0 flex flex-col",
-                !isDesktop && "fixed inset-0 z-50 bg-background"
+                !isDesktop && "fixed inset-0 z-50 bg-background",
+                isDesktop && isDrawerFullscreen && "w-full"
               )}
-              style={isDesktop ? { width: `${drawerWidthPercent}%` } : undefined}
+              style={isDesktop ? { width: isDrawerFullscreen ? '100%' : `${drawerWidthPercent}%` } : undefined}
             >
               {/* Mobile header: back button */}
               {!isDesktop && (
@@ -241,8 +279,10 @@ export function ChatPage() {
               <ImageDrawer
                 open={drawerOpen}
                 data={drawerData}
+                isFullscreen={isDesktop && isDrawerFullscreen}
                 onClose={() => setDrawerOpen(false)}
                 onLoadMore={loadMoreDrawerImages}
+                onToggleFullscreen={isDesktop ? toggleDrawerFullscreen : undefined}
               />
             </div>
           </>
