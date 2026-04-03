@@ -37,6 +37,9 @@ from ..services.chat_service import (
     set_session_execution_status,
     get_artifact,
     get_session_agent_runtime,
+    maybe_compact_session,
+    get_compaction_bootstrap_payload,
+    clear_compaction_bootstrap,
 )
 from ..services.oss_service import get_oss_service
 from ..services.websocket_manager import ws_manager
@@ -180,6 +183,67 @@ def _extract_text_from_blocks(blocks: list[dict[str, Any]]) -> str:
 
 def _extract_image_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [dict(block) for block in blocks if block.get("type") == "image"]
+
+
+def _summarize_tool_payload(payload: dict[str, Any]) -> str:
+    action = str(payload.get("action", "")).strip()
+    if action == "show_collection":
+        total = payload.get("total", 0)
+        filters = payload.get("filters_applied", [])
+        filters_text = ", ".join(str(item) for item in filters[:4]) if isinstance(filters, list) else ""
+        return f"展示检索结果 {total} 张" + (f"，过滤条件：{filters_text}" if filters_text else "")
+
+    primary_style = payload.get("primary_style")
+    if isinstance(primary_style, dict) and primary_style.get("style_name"):
+        style_name = str(primary_style.get("style_name", "")).strip()
+        retrieval_plan = payload.get("retrieval_plan", {})
+        query_en = ""
+        if isinstance(retrieval_plan, dict):
+            query_en = str(retrieval_plan.get("retrieval_query_en", "")).strip()
+        return f"识别核心风格 {style_name}" + (f"，英文检索词：{query_en}" if query_en else "")
+
+    analysis = payload.get("analysis")
+    if isinstance(analysis, dict):
+        summary = str(analysis.get("summary_zh", "")).strip()
+        query_en = str(analysis.get("retrieval_query_en", "")).strip()
+        if summary or query_en:
+            return f"视觉分析：{summary}" + (f"；英文检索词：{query_en}" if query_en else "")
+
+    message = str(payload.get("message", "")).strip()
+    if message:
+        return message
+
+    status = str(payload.get("status", "")).strip()
+    if status:
+        return f"工具返回状态：{status}"
+
+    return ""
+
+
+def _summarize_blocks_for_bootstrap(blocks: list[dict[str, Any]]) -> str:
+    text = " ".join(_extract_text_from_blocks(blocks).split())
+    if text:
+        return text
+
+    for block in blocks:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+
+        content = block.get("content")
+        if not isinstance(content, str) or not content:
+            continue
+
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            payload = None
+
+        if isinstance(payload, dict):
+            summary = _summarize_tool_payload(payload)
+            if summary:
+                return summary
+
+    return ""
 
 
 def _extract_category_hints_from_payload(payload: dict[str, Any]) -> list[str]:
@@ -463,10 +527,17 @@ def _compose_agent_input(
     *,
     fallback_image_count: int = 0,
     turn_playbook: str = "",
+    compaction_bootstrap: str = "",
 ) -> str:
     image_count = len(_extract_image_blocks(blocks))
     text = _extract_text_from_blocks(blocks)
-    prefix = f"{turn_playbook}\n\n" if turn_playbook else ""
+    prefix_parts = []
+    if turn_playbook:
+        prefix_parts.append(turn_playbook)
+    if compaction_bootstrap:
+        prefix_parts.append(compaction_bootstrap)
+    prefix = "\n\n".join(prefix_parts)
+    prefix = f"{prefix}\n\n" if prefix else ""
 
     if image_count > 0:
         hint = (
@@ -487,6 +558,35 @@ def _compose_agent_input(
         return f"{prefix}{body}" if prefix else body
 
     return f"{prefix}{text}" if prefix else text
+
+
+def _format_compaction_bootstrap(bootstrap: dict[str, Any] | None) -> str:
+    if not bootstrap:
+        return ""
+
+    summary = bootstrap.get("summary", {})
+    summary_text = str(summary.get("summary", "")).strip() if isinstance(summary, dict) else ""
+    recent_messages = bootstrap.get("recent_messages", [])
+    if not summary_text and not recent_messages:
+        return ""
+
+    lines = ["[COMPACT_CONVERSATION]"]
+    if summary_text:
+        lines.append("以下是本会话较早轮次的压缩摘要，请继承其上下文继续完成当前任务：")
+        lines.append(summary_text)
+
+    if isinstance(recent_messages, list) and recent_messages:
+        lines.append("以下是最近保留的原始轮次：")
+        for idx, message in enumerate(recent_messages[-6:], start=1):
+            if not isinstance(message, dict):
+                continue
+            role = "用户" if message.get("role") == "user" else "助手"
+            text = _summarize_blocks_for_bootstrap(message.get("content", []))
+            if text:
+                lines.append(f"{idx}. {role}：{text[:280]}")
+
+    lines.append("[/COMPACT_CONVERSATION]")
+    return "\n".join(lines)
 
 
 # ── Chat endpoints ──
@@ -510,14 +610,28 @@ async def chat_endpoint(
             content={"success": False, "error": "会话不存在"},
         )
 
-    thread_id = get_thread_id(user.id, req.session_id)
-
     raw_content_blocks = _normalize_message_content(req.content)
     if not raw_content_blocks:
         return JSONResponse(
             status_code=400,
             content={"success": False, "error": "消息内容不能为空"},
         )
+
+    await asyncio.to_thread(maybe_compact_session, req.session_id, user.id)
+    session = await asyncio.to_thread(get_session, req.session_id)
+    if not session or session.get("user_id") != user.id:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "会话不存在"},
+        )
+
+    thread_id = get_thread_id(user.id, req.session_id, int(session.get("thread_version", 1) or 1))
+    compaction_bootstrap = await asyncio.to_thread(
+        get_compaction_bootstrap_payload,
+        req.session_id,
+        user.id,
+        thread_version=int(session.get("thread_version", 1) or 1),
+    )
 
     content_blocks = await asyncio.to_thread(
         _persist_inline_media_blocks,
@@ -557,6 +671,7 @@ async def chat_endpoint(
         raw_content_blocks,
         fallback_image_count=len(fallback_image_blocks),
         turn_playbook=build_turn_playbook(turn_context),
+        compaction_bootstrap=_format_compaction_bootstrap(compaction_bootstrap),
     )
     query_context = merge_query_contexts(
         get_session_query_context(thread_id),
@@ -566,7 +681,7 @@ async def chat_endpoint(
 
     # Touch session + auto-title (run sync DB ops in thread pool)
     await asyncio.to_thread(touch_session, req.session_id)
-    await asyncio.to_thread(auto_title_session, req.session_id, _extract_text_from_blocks(raw_content_blocks))
+    await asyncio.to_thread(auto_title_session, req.session_id, raw_content_blocks)
     await asyncio.to_thread(
         set_session_execution_status,
         req.session_id,
@@ -599,6 +714,11 @@ async def chat_endpoint(
                     stream_result.content_blocks,
                     metadata={"stop_reason": stream_result.stop_reason},
                 )
+            await asyncio.to_thread(
+                clear_compaction_bootstrap,
+                req.session_id,
+                thread_version=int(session.get("thread_version", 1) or 1),
+            )
             await asyncio.to_thread(
                 set_session_execution_status,
                 req.session_id,
@@ -1019,7 +1139,7 @@ async def websocket_chat(websocket: WebSocket):
 
     # Register connection
     await ws_manager.connect(user.id, websocket, session_id)
-    thread_id = get_thread_id(user.id, session_id)
+    thread_id = get_thread_id(user.id, session_id, 1)
     await asyncio.to_thread(touch_session, session_id)
 
     # Route incoming Redis broadcast messages to this websocket
@@ -1059,6 +1179,19 @@ async def websocket_chat(websocket: WebSocket):
                 if not content_blocks:
                     await websocket.send_json({"type": "error", "message": "消息内容不能为空"})
                     continue
+
+                await asyncio.to_thread(maybe_compact_session, session_id, user.id)
+                session = await asyncio.to_thread(get_session, session_id)
+                if not session or session.get("user_id") != user.id:
+                    await websocket.send_json({"type": "error", "message": "会话不存在"})
+                    continue
+                thread_id = get_thread_id(user.id, session_id, int(session.get("thread_version", 1) or 1))
+                compaction_bootstrap = await asyncio.to_thread(
+                    get_compaction_bootstrap_payload,
+                    session_id,
+                    user.id,
+                    thread_version=int(session.get("thread_version", 1) or 1),
+                )
 
                 content_blocks = await asyncio.to_thread(
                     _persist_inline_media_blocks,
@@ -1101,6 +1234,7 @@ async def websocket_chat(websocket: WebSocket):
                     raw_content_blocks,
                     fallback_image_count=len(fallback_image_blocks),
                     turn_playbook=build_turn_playbook(turn_context),
+                    compaction_bootstrap=_format_compaction_bootstrap(compaction_bootstrap),
                 )
                 query_context = merge_query_contexts(
                     get_session_query_context(thread_id),
@@ -1108,7 +1242,7 @@ async def websocket_chat(websocket: WebSocket):
                 )
                 set_query_context(thread_id, query_context)
                 history = msg.get("history", [])
-                await asyncio.to_thread(auto_title_session, session_id, _extract_text_from_blocks(raw_content_blocks))
+                await asyncio.to_thread(auto_title_session, session_id, raw_content_blocks)
                 await asyncio.to_thread(
                     set_session_execution_status,
                     session_id,
@@ -1137,6 +1271,11 @@ async def websocket_chat(websocket: WebSocket):
                         stream_result.content_blocks,
                         metadata={"stop_reason": stream_result.stop_reason},
                     )
+                await asyncio.to_thread(
+                    clear_compaction_bootstrap,
+                    session_id,
+                    thread_version=int(session.get("thread_version", 1) or 1),
+                )
                 await asyncio.to_thread(
                     set_session_execution_status,
                     session_id,

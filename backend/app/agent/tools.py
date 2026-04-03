@@ -141,9 +141,10 @@ def _session_id_from_config(config: RunnableConfig | None) -> str | None:
     if not config:
         return None
     thread_id = get_thread_id(config)
-    if ":" not in thread_id:
+    parts = thread_id.split(":")
+    if len(parts) < 2:
         return None
-    return thread_id.split(":", 1)[1]
+    return parts[1]
 
 
 def _serialize_search_session(session: dict) -> dict:

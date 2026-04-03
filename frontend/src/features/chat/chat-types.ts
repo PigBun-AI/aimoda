@@ -7,10 +7,15 @@ export interface ChatSession {
   status?: string
   is_pinned?: boolean
   pinned_at?: string | null
+  title_source?: 'default' | 'heuristic' | 'manual' | string
+  title_locked?: boolean
   execution_status?: 'idle' | 'running' | 'completed' | 'error'
   last_run_started_at?: string | null
   last_run_completed_at?: string | null
   last_run_error?: string | null
+  message_count?: number
+  thread_version?: number
+  active_summary_version?: number
   created_at: string
   updated_at: string
 }

@@ -215,5 +215,6 @@
   "toolFashionVision": "Fashion Vision Analysis",
   "toolResultCount": "{{count}} results",
   "expandArgs": "Show args",
-  "collapseArgs": "Hide args"
+  "collapseArgs": "Hide args",
+  "imageSearchSessionTitle": "Image search"
 }

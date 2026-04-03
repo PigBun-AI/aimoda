@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useLayoutEffect } from 'react'
 import type { ChatMessage, ContentBlock, ToolStep, DrawerData, ImageResult, ChatSession, ChatComposerInput } from './chat-types'
 import { sendChatSSE, fetchSearchSessionById, listSessions, createSession, deleteSessionApi, getSessionMessages } from './chat-api'
 import { useSessionStore } from './session-store'
+import { deriveSessionTitleFromBlocks } from './session-title'
 import { normalizeContentBlocks } from './content-blocks'
 
 function toolResultLooksLikeError(content: string): boolean {
@@ -69,7 +70,9 @@ export function useChat(sessionId: string | null) {
     if (content.length === 0 || !sid || streamingSessionIds.includes(sid)) return
 
     setStreamingSessionIds(current => (current.includes(sid) ? current : [...current, sid]))
-    primeSessionForImmediateRun(sid)
+    primeSessionForImmediateRun(sid, {
+      title: deriveSessionTitleFromBlocks(content),
+    })
     markSessionExecutionStatus(sid, 'running')
 
     const userMsg: ChatMessage = {

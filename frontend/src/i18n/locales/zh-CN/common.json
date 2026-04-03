@@ -215,5 +215,6 @@
   "toolFashionVision": "时尚视觉分析",
   "toolResultCount": "{{count}} 张结果",
   "expandArgs": "展开参数",
-  "collapseArgs": "收起"
+  "collapseArgs": "收起",
+  "imageSearchSessionTitle": "图片检索"
 }
