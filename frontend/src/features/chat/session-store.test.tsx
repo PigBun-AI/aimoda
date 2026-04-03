@@ -235,4 +235,54 @@ describe('session store', () => {
       title_source: 'manual',
     })
   })
+
+  it('preserves an optimistic heuristic title when a stale poll still returns the default title', async () => {
+    const { result } = renderHook(() => useSessionStore())
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: '新对话',
+        title_source: 'default',
+        title_locked: false,
+        message_count: 0,
+        execution_status: 'idle',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    act(() => {
+      primeSessionForImmediateRun('session-1', { title: '蓝色连衣裙' })
+    })
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: '新对话',
+        title_source: 'default',
+        title_locked: false,
+        message_count: 0,
+        execution_status: 'idle',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:01.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    expect(result.current.sessions[0]).toMatchObject({
+      title: '蓝色连衣裙',
+      title_source: 'heuristic',
+      message_count: 1,
+    })
+  })
 })

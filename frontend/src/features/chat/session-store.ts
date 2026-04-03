@@ -135,28 +135,51 @@ function mergeNotifications(current: SessionNotification[], incoming: SessionNot
 function reconcileFetchedSession(previous: ChatSession | undefined, incoming: ChatSession): ChatSession {
   if (!previous) return incoming
 
+  const previousUpdatedAt = sessionTime(previous.updated_at)
   const previousStartedAt = sessionTime(previous.last_run_started_at)
+  const incomingUpdatedAt = sessionTime(incoming.updated_at)
   const incomingStartedAt = sessionTime(incoming.last_run_started_at)
+  const previousTitleSource = previous.title_source ?? 'default'
+  const incomingTitleSource = incoming.title_source ?? 'default'
+
+  let next = incoming
+
+  const shouldPreserveOptimisticTitle =
+    previousUpdatedAt > incomingUpdatedAt &&
+    previous.title !== incoming.title &&
+    (previousTitleSource === 'heuristic' || previous.title_locked || previousTitleSource === 'manual') &&
+    incomingTitleSource === 'default'
+
+  if (shouldPreserveOptimisticTitle) {
+    next = {
+      ...incoming,
+      title: previous.title,
+      title_source: previous.title_source,
+      title_locked: previous.title_locked,
+      message_count: Math.max(previous.message_count ?? 0, incoming.message_count ?? 0),
+      updated_at: previous.updated_at,
+    }
+  }
 
   if (
     previous.execution_status === 'running' &&
-    incoming.execution_status === 'idle' &&
+    next.execution_status === 'idle' &&
     previousStartedAt > incomingStartedAt
   ) {
     return {
-      ...incoming,
+      ...next,
       execution_status: previous.execution_status,
       last_run_started_at: previous.last_run_started_at,
       last_run_completed_at: previous.last_run_completed_at,
       last_run_error: previous.last_run_error,
       updated_at:
-        sessionTime(previous.updated_at) > sessionTime(incoming.updated_at)
+        previousUpdatedAt > sessionTime(next.updated_at)
           ? previous.updated_at
-          : incoming.updated_at,
+          : next.updated_at,
     }
   }
 
-  return incoming
+  return next
 }
 
 // ── Actions ──
