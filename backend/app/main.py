@@ -10,6 +10,7 @@ from .config import settings
 from .database import initialize_database
 from .exceptions import AppError
 from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries, report_mcp_internal
+from .services.report_upload_job_service import recover_report_upload_jobs
 
 
 def _init_pg_report_schema():
@@ -78,6 +79,21 @@ def _init_pg_chat_schema():
             )
 
 
+def _recover_report_upload_jobs():
+    """Fail stale in-flight upload jobs left behind by restarts."""
+    import logging
+
+    try:
+        recovered = recover_report_upload_jobs()
+        if recovered:
+            logging.getLogger(__name__).warning(
+                "Marked %d stale report upload jobs as failed during startup",
+                recovered,
+            )
+    except Exception as e:
+        logging.getLogger(__name__).warning("Failed to recover report upload jobs: %s", e)
+
+
 def get_real_ip(request: Request) -> str:
     """Get real IP supporting Cloudflare proxy."""
     cf_ip = request.headers.get("cf-connecting-ip")
@@ -95,6 +111,7 @@ limiter = Limiter(key_func=get_real_ip)
 initialize_database()    # SQLite (users, sessions, subscriptions, etc.)
 _init_pg_report_schema() # PostgreSQL (reports, report_views)
 _init_pg_chat_schema()   # PostgreSQL (chat_sessions, messages, artifacts)
+_recover_report_upload_jobs()
 
 app = FastAPI(title="Fashion Report API", version="1.0.0")
 app.state.limiter = limiter

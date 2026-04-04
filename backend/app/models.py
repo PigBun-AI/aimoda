@@ -12,6 +12,7 @@ RedemptionCodeType = Literal["1week", "1month", "3months", "1year"]
 RedemptionCodeStatus = Literal["unused", "used", "expired"]
 SubscriptionStatus = Literal["active", "expired"]
 ActivityAction = Literal["login", "view_report", "redeem_code", "upload_report"]
+ReportUploadJobStatus = Literal["pending", "processing", "completed", "failed"]
 
 FREE_USER_VIEW_LIMIT = 3
 
@@ -87,6 +88,21 @@ class ReportMetadata(BaseModel):
     season: str
     year: int
     look_count: int
+
+
+class ReportUploadJobRecord(CamelModel):
+    id: str
+    filename: str
+    status: ReportUploadJobStatus
+    uploaded_by: int
+    file_size_bytes: int
+    report_id: int | None = None
+    report_slug: str | None = None
+    error_message: str | None = None
+    created_at: str
+    updated_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
 
 
 # --- Redemption Code ---

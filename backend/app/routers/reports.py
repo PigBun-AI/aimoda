@@ -2,7 +2,6 @@ import json
 import math
 import mimetypes
 import posixpath
-import tempfile
 from urllib.parse import quote, unquote, urlsplit
 from typing import Annotated
 
@@ -27,10 +26,13 @@ from ..services.report_service import (
     get_report_spec,
     get_reports,
     delete_report_with_files,
-    upload_report_archive,
 )
 from ..services.auth_token import issue_report_preview_token, verify_report_preview_token
 from ..services.oss_service import get_oss_service
+from ..services.report_upload_job_service import (
+    enqueue_report_upload_job,
+    get_report_upload_job,
+)
 from ..services.report_view_service import get_view_status
 from ..repositories.activity_repo import log_activity
 
@@ -82,6 +84,12 @@ def _can_access_report_preview(user: AuthenticatedUser, report_id: int) -> bool:
     return has_viewed_report(user.id, report_id)
 
 
+def _can_access_upload_job(user: AuthenticatedUser, uploaded_by: int) -> bool:
+    if user.role in ("admin", "editor"):
+        return True
+    return user.id == uploaded_by
+
+
 @router.get("")
 def list_reports(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
@@ -110,6 +118,20 @@ def view_status(user: Annotated[AuthenticatedUser, Depends(get_current_user)]):
 @router.get("/spec")
 def report_spec():
     return {"success": True, "data": get_report_spec()}
+
+
+@router.get("/upload-jobs/{job_id}")
+def get_upload_job_status(
+    job_id: str,
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin", "editor"]))],
+):
+    job = get_report_upload_job(job_id)
+    if not job:
+        return {"success": False, "error": "未找到对应上传任务"}
+    if not _can_access_upload_job(user, job.uploaded_by):
+        return {"success": False, "error": "无权查看该上传任务"}
+
+    return {"success": True, "data": job.model_dump(by_alias=True)}
 
 
 @router.get("/{report_id}")
@@ -189,7 +211,7 @@ def preview_report_asset(
     )
 
 
-@router.post("/upload", status_code=201)
+@router.post("/upload", status_code=202)
 async def upload_report(
     user: Annotated[AuthenticatedUser, Depends(require_role(["admin", "editor"]))],
     file: UploadFile = File(...),
@@ -197,28 +219,20 @@ async def upload_report(
     if not file.filename:
         return {"success": False, "error": "未提供上传文件"}
 
-    # Save uploaded file to temp location
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_path = tmp.name
+    content = await file.read()
+    if not content:
+        return {"success": False, "error": "上传文件为空"}
 
-    report = upload_report_archive(archive_path=tmp_path, uploaded_by=user.id)
+    job = enqueue_report_upload_job(
+        filename=file.filename,
+        file_bytes=content,
+        uploaded_by=user.id,
+    )
 
     return {
         "success": True,
-        "message": "报告上传成功",
-        "report": {
-            "id": report.id,
-            "slug": report.slug,
-            "title": report.title,
-            "brand": report.brand,
-            "season": f"{report.season} {report.year}",
-            "lookCount": report.look_count,
-            "indexUrl": report.index_url,
-            "overviewUrl": report.overview_url,
-            "coverUrl": report.cover_url,
-        },
+        "message": "报告上传任务已开始处理",
+        "data": job.model_dump(by_alias=True),
     }
 
 

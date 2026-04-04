@@ -87,3 +87,52 @@ CREATE INDEX IF NOT EXISTS idx_report_views_user_viewed_at ON report_views(user_
 
 COMMENT ON TABLE report_views IS
     'Tracks per-user report views for free-tier view limit enforcement.';
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3. report_upload_jobs — Async report upload lifecycle tracking
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS report_upload_jobs (
+    id              TEXT PRIMARY KEY,
+    filename        TEXT NOT NULL,
+    status          TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    uploaded_by     INTEGER NOT NULL,
+    file_size_bytes BIGINT NOT NULL DEFAULT 0,
+    report_id       INTEGER REFERENCES reports(id) ON DELETE SET NULL,
+    report_slug     TEXT,
+    error_message   TEXT,
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION report_upload_jobs_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'report_upload_jobs_updated_at'
+    ) THEN
+        CREATE TRIGGER report_upload_jobs_updated_at
+            BEFORE UPDATE ON report_upload_jobs
+            FOR EACH ROW EXECUTE FUNCTION report_upload_jobs_set_updated_at();
+    END IF;
+END;
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_report_upload_jobs_uploaded_by_created_at
+    ON report_upload_jobs(uploaded_by, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_report_upload_jobs_status_created_at
+    ON report_upload_jobs(status, created_at DESC);
+
+COMMENT ON TABLE report_upload_jobs IS
+    'Async report upload jobs for long-running OSS extraction/upload flows.';
