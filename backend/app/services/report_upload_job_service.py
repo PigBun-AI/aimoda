@@ -5,7 +5,6 @@ Async report upload job service.
 from __future__ import annotations
 
 import logging
-import tempfile
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
