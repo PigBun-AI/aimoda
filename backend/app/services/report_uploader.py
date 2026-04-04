@@ -135,8 +135,9 @@ def _select_cover_image(report_root: Path, manifest: dict | None, uploaded_files
             if candidate.exists():
                 return candidate
 
-    images = [f for f in uploaded_files if f.suffix.lower() in IMAGE_EXTENSIONS]
-    return images[0] if images else None
+    # Do not fall back to an arbitrary image. Report list cards should only use
+    # an explicit cover screenshot / cover asset that represents the report home.
+    return None
 
 
 def upload_report_to_oss(report_root: Path, slug: str) -> ReportOSSResult:

@@ -2,11 +2,13 @@ import json
 import math
 import mimetypes
 import posixpath
+import re
 from urllib.parse import quote, unquote, urlsplit
 from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Response, UploadFile, File, Query
 from fastapi.responses import Response as FastAPIResponse
+from fastapi.responses import RedirectResponse
 
 import oss2
 
@@ -40,6 +42,23 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 REPORT_PREVIEW_COOKIE_NAME = "aimoda_report_preview"
 REPORT_PREVIEW_THUMB_MAX_EDGE = 1280
 REPORT_PREVIEW_THUMB_QUALITY = 85
+REPORT_HTML_URL_ATTR_PATTERN = re.compile(
+    r'(?P<prefix>\b(?:src|href|poster|data-src|data-original|data-full|data-image)=["\'])'
+    r'(?P<url>[^"\']+)'
+    r'(?P<suffix>["\'])',
+    re.IGNORECASE,
+)
+REPORT_HTML_SRCSET_PATTERN = re.compile(
+    r'(?P<prefix>\bsrcset=["\'])'
+    r'(?P<value>[^"\']+)'
+    r'(?P<suffix>["\'])',
+    re.IGNORECASE,
+)
+REPORT_CSS_URL_PATTERN = re.compile(
+    r'url\((?P<quote>["\']?)(?P<url>[^)"\']+)(?P=quote)\)',
+    re.IGNORECASE,
+)
+EXTERNAL_URL_PREFIXES = ("http://", "https://", "//", "data:", "mailto:", "tel:", "javascript:", "#")
 
 
 def _should_secure_preview_cookie() -> bool:
@@ -82,6 +101,10 @@ def _is_html_asset(normalized_path: str, media_type: str) -> bool:
     return normalized_path.endswith((".html", ".htm")) or media_type.startswith("text/html")
 
 
+def _is_css_asset(normalized_path: str, media_type: str) -> bool:
+    return normalized_path.endswith(".css") or media_type.startswith("text/css")
+
+
 def _is_resizable_image(media_type: str) -> bool:
     return media_type.startswith("image/") and media_type not in {"image/svg+xml", "image/gif"}
 
@@ -93,6 +116,104 @@ def _build_oss_image_process(max_edge: int) -> str:
         f"/quality,q_{REPORT_PREVIEW_THUMB_QUALITY}"
         "/auto-orient,1"
     )
+
+
+def _append_oss_process(url: str, process: str) -> str:
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}x-oss-process={quote(process, safe='')}"
+
+
+def _build_public_report_asset_url(report, normalized_path: str, *, process: str | None = None) -> str:
+    oss = get_oss_service()
+    oss_path = f"{report.oss_prefix.rstrip('/')}/{normalized_path}"
+    public_url = oss.get_url(oss_path)
+    if process:
+        return _append_oss_process(public_url, process)
+    return public_url
+
+
+def _resolve_report_asset_ref_path(current_asset_path: str, raw_url: str) -> str | None:
+    candidate = (raw_url or "").strip()
+    if not candidate or candidate.startswith(EXTERNAL_URL_PREFIXES) or candidate.startswith("?"):
+        return None
+
+    parsed = urlsplit(candidate)
+    path = (parsed.path or "").strip()
+    if not path:
+        return None
+
+    if path.startswith("/"):
+        joined = posixpath.normpath(path.lstrip("/"))
+    else:
+        base_dir = posixpath.dirname(current_asset_path)
+        joined = posixpath.normpath(posixpath.join(base_dir, path))
+
+    if not joined or joined in {".", ".."} or joined.startswith("../") or "/../" in f"/{joined}":
+        return None
+    return joined.lstrip("/")
+
+
+def _rewrite_html_public_asset_urls(html: bytes, report, current_asset_path: str) -> bytes:
+    html_text = html.decode("utf-8")
+
+    def _replace_attr(match: re.Match[str]) -> str:
+        raw_url = match.group("url")
+        resolved = _resolve_report_asset_ref_path(current_asset_path, raw_url)
+        if not resolved:
+            return match.group(0)
+
+        media_type = mimetypes.guess_type(resolved)[0] or ""
+        if not media_type.startswith("image/"):
+            return match.group(0)
+
+        public_url = _build_public_report_asset_url(report, resolved)
+        return f"{match.group('prefix')}{public_url}{match.group('suffix')}"
+
+    def _replace_srcset(match: re.Match[str]) -> str:
+        rewritten_items: list[str] = []
+        changed = False
+
+        for item in match.group("value").split(","):
+            token = item.strip()
+            if not token:
+                continue
+            parts = token.split()
+            raw_url = parts[0]
+            resolved = _resolve_report_asset_ref_path(current_asset_path, raw_url)
+            if resolved:
+                media_type = mimetypes.guess_type(resolved)[0] or ""
+                if media_type.startswith("image/"):
+                    parts[0] = _build_public_report_asset_url(report, resolved)
+                    changed = True
+            rewritten_items.append(" ".join(parts))
+
+        if not changed:
+            return match.group(0)
+        return f"{match.group('prefix')}{', '.join(rewritten_items)}{match.group('suffix')}"
+
+    rewritten = REPORT_HTML_URL_ATTR_PATTERN.sub(_replace_attr, html_text)
+    rewritten = REPORT_HTML_SRCSET_PATTERN.sub(_replace_srcset, rewritten)
+    return rewritten.encode("utf-8")
+
+
+def _rewrite_css_public_asset_urls(css: bytes, report, current_asset_path: str) -> bytes:
+    css_text = css.decode("utf-8")
+
+    def _replace(match: re.Match[str]) -> str:
+        raw_url = match.group("url")
+        resolved = _resolve_report_asset_ref_path(current_asset_path, raw_url)
+        if not resolved:
+            return match.group(0)
+
+        media_type = mimetypes.guess_type(resolved)[0] or ""
+        if not media_type.startswith("image/"):
+            return match.group(0)
+
+        quote_char = match.group("quote") or ""
+        public_url = _build_public_report_asset_url(report, resolved)
+        return f"url({quote_char}{public_url}{quote_char})"
+
+    return REPORT_CSS_URL_PATTERN.sub(_replace, css_text).encode("utf-8")
 
 
 def _inject_report_preview_patch(html: bytes, report_id: int) -> bytes:
@@ -317,21 +438,29 @@ def preview_report_asset(
         raise AppError("当前预览凭证无权访问该报告", 403)
 
     normalized_path = _normalize_preview_asset_path(asset_path)
+    guessed_media_type = mimetypes.guess_type(normalized_path)[0] or ""
+
+    if _is_resizable_image(guessed_media_type):
+        process = _build_oss_image_process(max_edge) if max_edge else None
+        return RedirectResponse(
+            url=_build_public_report_asset_url(report, normalized_path, process=process),
+            status_code=307,
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
     oss_path = f"{report.oss_prefix.rstrip('/')}/{normalized_path}"
     oss = get_oss_service()
-    process: str | None = None
 
     try:
-        if max_edge:
-            guessed_media_type = mimetypes.guess_type(normalized_path)[0] or ""
-            if _is_resizable_image(guessed_media_type):
-                process = _build_oss_image_process(max_edge)
-        content, content_type = oss.download_file_with_meta_processed(oss_path, process=process)
+        content, content_type = oss.download_file_with_meta_processed(oss_path)
     except oss2.exceptions.NoSuchKey as exc:
         raise AppError("报告资源不存在", 404) from exc
 
-    media_type = content_type or mimetypes.guess_type(normalized_path)[0] or "application/octet-stream"
+    media_type = content_type or guessed_media_type or "application/octet-stream"
+    if _is_css_asset(normalized_path, media_type):
+        content = _rewrite_css_public_asset_urls(content, report, normalized_path)
     if _is_html_asset(normalized_path, media_type):
+        content = _rewrite_html_public_asset_urls(content, report, normalized_path)
         content = _inject_report_preview_patch(content, report_id)
 
     return FastAPIResponse(

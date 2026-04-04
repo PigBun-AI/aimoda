@@ -48,30 +48,30 @@ export function ReportsPage() {
                   <Link key={report.id} to={`/reports/${report.id}`} className="group">
                     <Card className="h-full cursor-pointer overflow-hidden">
                       <div className="flex h-full flex-col sm:flex-row">
-                        <div className="relative overflow-hidden bg-accent sm:w-[38%] sm:shrink-0">
-                        <img
-                          src={report.coverImageUrl}
-                          alt={report.title}
-                          className="h-56 w-full object-cover transition-transform duration-normal group-hover:scale-105 sm:h-full"
-                          loading="lazy"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement
-                            target.style.display = 'none'
-                            target.nextElementSibling?.classList.remove('hidden')
-                          }}
-                        />
-                        {/* Placeholder when image fails */}
-                        <div className="hidden h-56 w-full items-center justify-center bg-accent sm:h-full">
-                          <svg className="h-12 w-12 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                        {/* Status Badge */}
-                        {status && (
-                          <Badge variant={status.variant} className="absolute right-2 top-2 sm:right-3 sm:top-3 text-xs">
-                            {status.label}
-                          </Badge>
-                        )}
+                        <div className="relative flex min-h-56 items-center justify-center overflow-hidden bg-gradient-to-br from-accent via-accent to-muted/50 p-3 sm:min-h-full sm:w-[38%] sm:shrink-0 sm:p-4">
+                          <img
+                            src={report.coverImageUrl}
+                            alt={report.title}
+                            className="h-56 w-full object-contain object-center transition-transform duration-normal group-hover:scale-[1.02] sm:h-full"
+                            loading="lazy"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement
+                              target.style.display = 'none'
+                              target.nextElementSibling?.classList.remove('hidden')
+                            }}
+                          />
+                          {/* Placeholder when image fails */}
+                          <div className="hidden h-56 w-full items-center justify-center rounded-[calc(var(--radius-md)-4px)] bg-accent/80 sm:h-full">
+                            <svg className="h-12 w-12 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          {/* Status Badge */}
+                          {status && (
+                            <Badge variant={status.variant} className="absolute right-2 top-2 sm:right-3 sm:top-3 text-xs">
+                              {status.label}
+                            </Badge>
+                          )}
                         </div>
 
                         <div className="flex min-w-0 flex-1 flex-col justify-between p-4 sm:p-5">

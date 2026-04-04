@@ -100,15 +100,15 @@ export function ArticlesPage() {
                       to={`/reports/${report.id}`}
                       className="sm:flex-shrink-0"
                     >
-                      <div className="w-full h-48 sm:w-24 sm:h-24 rounded-md overflow-hidden bg-gray-100 dark:bg-gray-800">
+                      <div className="flex h-48 w-full items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-accent via-accent to-muted/50 p-2 sm:h-24 sm:w-24">
                         {report.coverImageUrl ? (
                           <img
                             src={report.coverImageUrl}
                             alt={report.title}
-                            className="w-full h-full object-cover hover:scale-105 transition-transform"
+                            className="h-full w-full object-contain object-center transition-transform hover:scale-[1.03]"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400">
+                          <div className="flex h-full w-full items-center justify-center rounded-sm bg-accent/80 text-gray-400">
                             <ExternalLink className="w-6 h-6" />
                           </div>
                         )}
