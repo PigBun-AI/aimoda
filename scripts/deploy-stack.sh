@@ -43,6 +43,13 @@ if docker compose --env-file "$ENV_FILE" -p "$PROJECT_NAME" ps nginx >/dev/null 
   docker compose --env-file "$ENV_FILE" -p "$PROJECT_NAME" restart nginx
 fi
 
+POST_DEPLOY_SCRIPT="$ROOT_DIR/scripts/post-deploy.${TARGET_ENV}.sh"
+if [[ -x "$POST_DEPLOY_SCRIPT" ]]; then
+  echo
+  echo "Running post-deploy hook: $POST_DEPLOY_SCRIPT"
+  ROOT_DIR="$ROOT_DIR" ENV_FILE="$ENV_FILE" PROJECT_NAME="$PROJECT_NAME" "$POST_DEPLOY_SCRIPT"
+fi
+
 echo
 echo "Running containers:"
 docker compose --env-file "$ENV_FILE" -p "$PROJECT_NAME" ps
