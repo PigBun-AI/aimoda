@@ -61,6 +61,7 @@ def test_legacy_report_without_overview_is_still_valid(tmp_path):
         "<html><head><title>Zimmermann Fall 2026 RTW</title></head><body></body></html>",
         encoding="utf-8",
     )
+    (report_root / "cover.jpg").write_bytes(b"cover")
     (report_root / "look-001.jpg").write_bytes(b"img1")
 
     validate_report_directory(report_root)
@@ -73,9 +74,35 @@ def test_legacy_report_without_overview_is_still_valid(tmp_path):
     assert metadata.look_count == 1
 
 
+def test_manifest_cover_image_missing_raises(tmp_path):
+    report_root = tmp_path / "broken-cover-report"
+    report_root.mkdir()
+    (report_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "broken-cover-report",
+                "brand": "Broken",
+                "season": "AW",
+                "year": 2026,
+                "entryHtml": "pages/report.html",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (report_root / "pages").mkdir()
+    (report_root / "pages" / "report.html").write_text("<html></html>", encoding="utf-8")
+
+    with pytest.raises(AppError) as exc:
+        validate_report_directory(report_root)
+
+    assert "coverImage" in str(exc.value)
+
+
 def test_manifest_entry_html_missing_raises(tmp_path):
     report_root = tmp_path / "broken-report"
     report_root.mkdir()
+    (report_root / "assets").mkdir()
+    (report_root / "assets" / "cover.jpg").write_bytes(b"cover")
     (report_root / "manifest.json").write_text(
         json.dumps(
             {
@@ -84,6 +111,7 @@ def test_manifest_entry_html_missing_raises(tmp_path):
                 "season": "AW",
                 "year": 2026,
                 "entryHtml": "pages/missing.html",
+                "coverImage": "assets/cover.jpg",
             }
         ),
         encoding="utf-8",
@@ -93,3 +121,17 @@ def test_manifest_entry_html_missing_raises(tmp_path):
         validate_report_directory(report_root)
 
     assert "entryHtml" in str(exc.value)
+
+
+def test_legacy_report_without_cover_raises(tmp_path):
+    report_root = tmp_path / "zimmermann-fall-2026"
+    report_root.mkdir()
+    (report_root / "index.html").write_text(
+        "<html><head><title>Zimmermann Fall 2026 RTW</title></head><body></body></html>",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AppError) as exc:
+        validate_report_directory(report_root)
+
+    assert "缺少封面图" in str(exc.value)

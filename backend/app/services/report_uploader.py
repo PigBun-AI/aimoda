@@ -6,7 +6,7 @@ Core flow:
   2. Upload every file except the manifest itself to OSS with the same relative path
   3. Use manifest.entryHtml (or legacy index.html) as the iframe entry URL
   4. Treat overview.html as optional
-  5. Select and upload cover image when available
+  5. Require and upload the explicit cover image
 """
 
 from __future__ import annotations
@@ -21,12 +21,12 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from .oss_service import get_oss_service, OSSService
-from .report_cover_service import generate_report_cover
 from .report_scanner import (
     MANIFEST_FILENAMES,
     load_report_manifest,
     resolve_report_entry_html,
     resolve_report_overview_html,
+    validate_report_directory,
 )
 
 logger = logging.getLogger(__name__)
@@ -147,6 +147,7 @@ def upload_report_to_oss(report_root: Path, slug: str) -> ReportOSSResult:
     oss = get_oss_service()
     oss_prefix = f"reports/{slug}/"
     manifest = load_report_manifest(report_root)
+    validate_report_directory(report_root)
     _normalize_html_asset_paths(report_root)
 
     upload_files = _scan_upload_files(report_root)
@@ -169,8 +170,6 @@ def upload_report_to_oss(report_root: Path, slug: str) -> ReportOSSResult:
     if cover_img is not None:
         cover_rel = cover_img.relative_to(report_root).as_posix()
         cover_url = path_map.get(cover_rel)
-    else:
-        cover_url = generate_report_cover(index_url, slug)
 
     logger.info(
         "Uploaded %d files (%d images) for report %s (%.1f MB)",

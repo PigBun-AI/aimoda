@@ -116,27 +116,3 @@ def create_report(
         ).fetchone()
         conn.commit()
     return _map_report(row)
-
-
-def list_all_reports() -> list[ReportRecord]:
-    with _get_pg_conn() as conn:
-        rows = conn.execute(
-            f"SELECT {_REPORT_COLUMNS} FROM reports ORDER BY id DESC",
-        ).fetchall()
-    return [_map_report(r) for r in rows]
-
-
-def update_report_cover_url(report_id: int, cover_url: str | None) -> ReportRecord | None:
-    with _get_pg_conn() as conn:
-        row = conn.execute(
-            f"""
-            UPDATE reports
-            SET cover_url = %s,
-                updated_at = NOW()
-            WHERE id = %s
-            RETURNING {_REPORT_COLUMNS}
-            """,
-            (cover_url, report_id),
-        ).fetchone()
-        conn.commit()
-    return _map_report(row) if row else None

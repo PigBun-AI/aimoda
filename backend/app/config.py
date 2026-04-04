@@ -54,12 +54,6 @@ class Settings(BaseSettings):
     OSS_ENDPOINT: str = "oss-cn-hangzhou.aliyuncs.com"
     OSS_PUBLIC_BASE: str | None = None
     REPORT_PREVIEW_TOKEN_TTL_SECONDS: int = 900
-    REPORT_COVER_GENERATION_ENABLED: bool = True
-    REPORT_COVER_BROWSERLESS_URL: str | None = None
-    REPORT_COVER_BROWSERLESS_TOKEN: str | None = None
-    REPORT_COVER_WIDTH: int = 1600
-    REPORT_COVER_HEIGHT: int = 900
-    REPORT_COVER_TIMEOUT_SECONDS: float = 30.0
 
     model_config = {
         "env_file": ".env",

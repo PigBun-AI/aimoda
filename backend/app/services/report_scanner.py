@@ -91,8 +91,15 @@ def resolve_report_overview_html(directory: Path, manifest: dict[str, Any] | Non
     return path if path.exists() else None
 
 
-def _infer_look_count_from_files(directory: Path) -> int:
-    return sum(1 for f in directory.rglob("*") if f.is_file() and f.suffix.lower() in IMAGE_EXTENSIONS)
+def _infer_look_count_from_files(directory: Path, excluded_paths: set[Path] | None = None) -> int:
+    excluded = {path.resolve() for path in (excluded_paths or set())}
+    return sum(
+        1
+        for f in directory.rglob("*")
+        if f.is_file()
+        and f.suffix.lower() in IMAGE_EXTENSIONS
+        and f.resolve() not in excluded
+    )
 
 
 def _infer_look_count_from_features(directory: Path, manifest: dict[str, Any]) -> int | None:
@@ -110,6 +117,25 @@ def _infer_look_count_from_features(directory: Path, manifest: dict[str, Any]) -
     if isinstance(payload, list):
         return len(payload)
     raise AppError("featuresFile 顶层必须是 object 或 array", 400)
+
+
+def _resolve_required_cover_image(directory: Path, manifest: dict[str, Any] | None = None) -> Path:
+    if manifest:
+        cover = manifest.get("coverImage") or manifest.get("cover_image")
+        if not cover:
+            raise AppError("manifest 缺少必填字段 coverImage", 400)
+        path = _resolve_package_path(directory, cover, "coverImage")
+        if not path.exists():
+            raise AppError(f"manifest.coverImage 指向的文件不存在: {cover}", 400)
+        return path
+
+    for name in ("cover.jpg", "cover.jpeg", "cover.png", "cover.webp"):
+        for parent in (directory, directory / "assets", directory / "images"):
+            candidate = parent / name
+            if candidate.exists():
+                return candidate
+
+    raise AppError("缺少封面图：请在报告包中提供 cover.jpg 或 manifest.coverImage", 400)
 
 
 def _infer_metadata_from_slug(slug: str) -> dict[str, Any]:
@@ -137,12 +163,13 @@ def _infer_metadata_from_slug(slug: str) -> dict[str, Any]:
 def validate_report_directory(directory: Path) -> None:
     manifest = load_report_manifest(directory)
     if manifest:
-        for field in ("slug", "brand", "season", "year", "entryHtml"):
+        for field in ("slug", "brand", "season", "year", "entryHtml", "coverImage"):
             if manifest.get(field) in (None, ""):
                 raise AppError(f"manifest 缺少必填字段 {field}", 400)
 
         resolve_report_entry_html(directory, manifest)
         resolve_report_overview_html(directory, manifest)
+        _resolve_required_cover_image(directory, manifest)
 
         pages = manifest.get("pages")
         if pages is not None:
@@ -153,7 +180,7 @@ def validate_report_directory(directory: Path) -> None:
                 if not page_path.exists():
                     raise AppError(f"manifest.pages 指向的文件不存在: {page}", 400)
 
-        for field in ("coverImage", "featuresFile"):
+        for field in ("featuresFile",):
             value = manifest.get(field)
             if value:
                 path = _resolve_package_path(directory, value, field)
@@ -163,6 +190,7 @@ def validate_report_directory(directory: Path) -> None:
 
     if not (directory / "index.html").exists():
         raise AppError("缺少必需文件 index.html", 400)
+    _resolve_required_cover_image(directory, None)
 
 
 def _extract_manifest_metadata(directory: Path, manifest: dict[str, Any]) -> ReportMetadata:
@@ -198,7 +226,8 @@ def _extract_manifest_metadata(directory: Path, manifest: dict[str, Any]) -> Rep
     else:
         look_count = _infer_look_count_from_features(directory, manifest)
         if look_count is None:
-            look_count = _infer_look_count_from_files(directory)
+            cover_path = _resolve_required_cover_image(directory, manifest)
+            look_count = _infer_look_count_from_files(directory, {cover_path})
 
     return ReportMetadata(
         slug=slug,
@@ -227,7 +256,8 @@ def extract_report_metadata(directory: Path) -> ReportMetadata:
         raise AppError("无法从 index.html 提取标题", 400)
 
     meta = _infer_metadata_from_slug(slug)
-    look_count = _infer_look_count_from_files(directory)
+    cover_path = _resolve_required_cover_image(directory)
+    look_count = _infer_look_count_from_files(directory, {cover_path})
 
     return ReportMetadata(
         slug=slug,

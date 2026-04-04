@@ -1,11 +1,11 @@
 REPORT_SPEC = {
     "version": "2.0.0",
-    "updatedAt": "2026-04-03",
-    "description": "AiModa Fashion Report Zip 规范 - 以 manifest + entryHtml 为核心",
+    "updatedAt": "2026-04-05",
+    "description": "AiModa Fashion Report Zip 规范 - 以 manifest + entryHtml + required cover 为核心",
     "folderStructure": {
         "root": "{report-root}/",
-        "required": ["manifest.json", "entryHtml"],
-        "optional": ["additional html pages", "assets/", "cover image", "features file"],
+        "required": ["manifest.json", "entryHtml", "cover image"],
+        "optional": ["additional html pages", "assets/", "features file"],
         "recommendedLayout": {
             "manifest": "manifest.json",
             "pagesDir": "pages/",
@@ -13,12 +13,11 @@ REPORT_SPEC = {
         },
     },
     "manifest": {
-        "requiredFields": ["slug", "title", "brand", "season", "year", "entryHtml"],
+        "requiredFields": ["slug", "title", "brand", "season", "year", "entryHtml", "coverImage"],
         "optionalFields": [
             "reportType",
             "pages",
             "overviewHtml",
-            "coverImage",
             "featuresFile",
             "lookCount",
             "version",
@@ -48,12 +47,12 @@ REPORT_SPEC = {
         "assetDirectories": ["assets/", "images/"],
         "formats": [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".json", ".css", ".js"],
         "inlineImages": "除极小图标外，不建议将正文图片以 data URI/base64 内嵌到 HTML",
-        "coverImage": "可选；若提供，建议使用 assets/cover.jpg",
+        "coverImage": "必填；建议使用 assets/cover.jpg，列表封面直接使用该文件",
     },
     "uploadBehavior": {
         "preserveRelativePaths": True,
         "entryUrlSource": "manifest.entryHtml",
         "overviewOptional": True,
-        "legacyFallback": "兼容旧格式：无 manifest.json 时，回退为 index.html 入口",
+        "legacyFallback": "兼容旧格式：无 manifest.json 时，要求根目录提供 index.html + cover.jpg",
     },
 }

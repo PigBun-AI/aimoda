@@ -22,14 +22,15 @@ Always call `mcp__wwwd-reports__get_report_spec` before packaging a report.
 
 ## Current Zip Spec
 
-The platform now uses **manifest + entryHtml + relative-path assets**.
+The platform now uses **manifest + entryHtml + coverImage + relative-path assets**.
 
 ### Required
 
 ```text
 {report-root}/
 ├── manifest.json
-└── {entryHtml declared in manifest}
+├── {entryHtml declared in manifest}
+└── {coverImage declared in manifest}
 ```
 
 ### Recommended
@@ -68,6 +69,7 @@ The platform now uses **manifest + entryHtml + relative-path assets**.
 
 ## Packaging Rules
 
+- `coverImage` is required; package an explicit cover file instead of expecting backend generation
 - `overview.html` is optional and no longer required
 - Any number of HTML files is allowed
 - All local references must use zip-internal relative paths
