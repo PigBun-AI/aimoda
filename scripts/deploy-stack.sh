@@ -31,6 +31,11 @@ fi
 
 cd "$ROOT_DIR"
 echo "Deploying $TARGET_ENV stack ($PROJECT_NAME) from $ROOT_DIR"
+
+# A previously failed deploy can leave behind a created-but-unmanaged container
+# with the same Compose name, which then blocks `up --build` on retry.
+docker rm -f "${PROJECT_NAME}-report-cover-browser-1" >/dev/null 2>&1 || true
+
 docker compose --env-file "$ENV_FILE" -p "$PROJECT_NAME" up -d --build --remove-orphans
 
 # nginx resolves Compose service hostnames at process start. When frontend/api are
