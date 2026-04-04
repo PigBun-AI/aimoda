@@ -16,6 +16,8 @@ services:
       ACCESS_TOKEN_EXPIRES_IN: ${ACCESS_TOKEN_EXPIRES_IN:-2h}
       REFRESH_TOKEN_EXPIRES_IN: ${REFRESH_TOKEN_EXPIRES_IN:-7d}
       UPLOAD_TMP_DIR: /tmp/fashion-report-uploads
+      REPORT_MCP_INTERNAL_TOKEN: ${REPORT_MCP_INTERNAL_TOKEN:-aimoda-report-mcp-internal-token}
+      REPORT_MCP_SERVICE_USER_ID: ${REPORT_MCP_SERVICE_USER_ID:-1}
       # Agent / Chat
       QDRANT_URL: ${QDRANT_URL:-http://220.168.84.134:16333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
@@ -198,6 +200,8 @@ services:
     environment:
       PORT: '18770'
       BACKEND_URL: http://api:3000
+      BACKEND_INTERNAL_TOKEN: ${REPORT_MCP_INTERNAL_TOKEN:-aimoda-report-mcp-internal-token}
+      BACKEND_INTERNAL_SERVICE_NAME: fashion-report-mcp
     depends_on:
       api:
         condition: service_healthy

@@ -4,8 +4,8 @@
  *
  * 3 个工具:
  *   get_report_spec  — 返回报告打包规范
- *   upload_report    — 上传报告 zip（代理到 backend）
- *   list_reports     — 查询报告列表（代理到 backend）
+ *   upload_report    — 上传报告 zip（代理到 backend internal capability）
+ *   list_reports     — 查询报告列表（代理到 backend internal capability）
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -15,134 +15,115 @@ import { z } from "zod";
 import { CONFIG } from "./config.js";
 import { authMiddleware } from "./auth.js";
 
-// ── Inline report spec ──────────────────────────────────────────
-const REPORT_SPEC = `# AiModa Fashion Report Zip Spec v2
+type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
+type JsonObject = { [key: string]: JsonValue };
 
-AiModa 正式报告上传规范。平台以 manifest + entryHtml + 相对路径资源为核心。
-
----
-
-## 1. 核心原则
-
-- 平台只强制要求一个主入口 HTML，不再强制 overview.html
-- 报告可以包含任意数量的 HTML 页面
-- 所有 HTML / CSS / JS / 图片 / JSON 必须使用 zip 内部相对路径引用
-- 正文图片应以文件形式放在 zip 内，不建议把大图以 data URI/base64 内嵌到 HTML
-- 上传后平台会保留 zip 内相对目录结构，并以 manifest.json.entryHtml 作为主入口
-
----
-
-## 2. 推荐目录结构
-
-\`\`\`text
-{report-root}/
-├── manifest.json
-├── pages/
-│   ├── report.html
-│   └── *.html
-├── assets/
-│   ├── cover.jpg
-│   ├── look-001.jpg
-│   ├── styles.css
-│   └── ...
-└── image-features.json
-\`\`\`
-
-说明：
-- pages/、assets/ 是推荐目录，不是唯一合法目录
-- 旧格式若没有 manifest.json，平台仍可回退使用根目录 index.html
-
----
-
-## 3. manifest.json 必填字段
-
-\`\`\`json
-{
-  "specVersion": "2.0",
-  "slug": "murmur-aw-2026-27-v5-2",
-  "title": "Murmur 2026-27 秋冬 时装周快报",
-  "brand": "Murmur",
-  "season": "AW",
-  "year": 2026,
-  "entryHtml": "pages/report.html"
-}
-\`\`\`
-
-可选字段：
-- pages
-- overviewHtml
-- coverImage
-- featuresFile
-- lookCount
-
----
-
-## 4. 上传前检查清单
-
-- [ ] zip 根目录中存在 manifest.json（新格式）
-- [ ] manifest.json.entryHtml 指向真实文件
-- [ ] 所有本地资源引用都为 zip 内相对路径
-- [ ] 正文图片未以内联 base64 大图方式嵌入
-- [ ] slug / title / brand / season / year 已填写
-- [ ] overviewHtml 缺失不会阻止上传
-
----
-
-## 5. 平台上传行为
-
-1. 读取 manifest.json
-2. 校验 entryHtml 和其他声明路径
-3. 保留 zip 内相对目录结构上传到 OSS
-4. 以 entryHtml 对应文件作为主 iframe 地址
-5. overviewHtml 为可选
-6. 没有 manifest.json 时回退为 legacy index.html`;
-
-// ── Parse CLI args ──────────────────────────────────────────────
 const args = process.argv.slice(2);
-const transportArg = args.find((a) => a.startsWith("--transport="));
+const transportArg = args.find((arg) => arg.startsWith("--transport="));
 const transportMode = transportArg?.split("=")[1] ?? "http";
 
-// ── Backend proxy helpers ───────────────────────────────────────
+function logEvent(event: string, payload: Record<string, unknown> = {}) {
+  console.log(JSON.stringify({
+    ts: new Date().toISOString(),
+    service: "fashion-report-mcp",
+    event,
+    ...payload,
+  }));
+}
+
+function formatErrorPayload(payload: unknown): string {
+  if (typeof payload === "string") return payload;
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return String(payload);
+  }
+}
+
+function internalHeaders(extraHeaders: Record<string, string> = {}) {
+  return {
+    "X-Internal-Token": CONFIG.BACKEND_INTERNAL_TOKEN,
+    "X-Internal-Service": CONFIG.BACKEND_INTERNAL_SERVICE_NAME,
+    ...extraHeaders,
+  };
+}
+
+async function callInternalApi<T>(
+  path: string,
+  init: RequestInit,
+  meta: Record<string, unknown>,
+): Promise<T> {
+  const start = Date.now();
+  const response = await fetch(`${CONFIG.BACKEND_URL}${path}`, {
+    ...init,
+    headers: internalHeaders((init.headers ?? {}) as Record<string, string>),
+  });
+
+  const rawText = await response.text();
+  let payload: unknown = rawText;
+  try {
+    payload = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    payload = rawText;
+  }
+
+  logEvent("backend_call", {
+    path,
+    status: response.status,
+    ok: response.ok,
+    duration_ms: Date.now() - start,
+    ...meta,
+  });
+
+  if (!response.ok) {
+    throw new Error(`${meta.operation ?? path} failed (${response.status}): ${formatErrorPayload(payload)}`);
+  }
+
+  return payload as T;
+}
+
+async function proxyGetReportSpec() {
+  const payload = await callInternalApi<{ success: boolean; spec: JsonObject }>(
+    "/api/internal/report-mcp/spec",
+    { method: "GET" },
+    { operation: "get_report_spec" },
+  );
+  return payload.spec;
+}
 
 async function proxyListReports(slug?: string, page = 1, limit = 20) {
-  const url = slug
-    ? `${CONFIG.BACKEND_URL}/api/reports?slug=${encodeURIComponent(slug)}`
-    : `${CONFIG.BACKEND_URL}/api/reports?page=${page}&limit=${limit}`;
+  const query = slug
+    ? `slug=${encodeURIComponent(slug)}`
+    : `page=${page}&limit=${limit}`;
 
-  const resp = await fetch(url);
-  if (!resp.ok) throw new Error(`Backend returned ${resp.status}`);
-  return resp.json();
+  return callInternalApi<JsonObject>(
+    `/api/internal/report-mcp/reports?${query}`,
+    { method: "GET" },
+    { operation: "list_reports", slug: slug ?? null, page, limit },
+  );
 }
 
 async function proxyUploadReport(zipBase64: string, filename: string) {
-  // Convert base64 to binary and POST as multipart
   const buffer = Buffer.from(zipBase64, "base64");
-  const boundary = "----MCP" + Date.now();
-  const parts: Buffer[] = [];
+  const boundary = `----MCP${Date.now()}`;
+  const body = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/zip\r\n\r\n`,
+    ),
+    buffer,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
 
-  // File part
-  parts.push(Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/zip\r\n\r\n`
-  ));
-  parts.push(buffer);
-  parts.push(Buffer.from(`\r\n--${boundary}--\r\n`));
-
-  const body = Buffer.concat(parts);
-
-  const resp = await fetch(`${CONFIG.BACKEND_URL}/api/mcp/upload`, {
-    method: "POST",
-    headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
-    body,
-  });
-
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Upload failed (${resp.status}): ${text}`);
-  }
-  return resp.json();
+  return callInternalApi<JsonObject>(
+    "/api/internal/report-mcp/upload",
+    {
+      method: "POST",
+      headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    },
+    { operation: "upload_report", filename, size_bytes: buffer.length },
+  );
 }
-
-// ── MCP Server ──────────────────────────────────────────────────
 
 function createServer(): McpServer {
   const server = new McpServer({
@@ -156,9 +137,26 @@ function createServer(): McpServer {
 返回: 文件夹结构、命名规范、必需文件说明、上传流程、检查清单。
 适用场景: Agent 生成报告前应先查阅此规范。`,
     {},
-    async () => ({
-      content: [{ type: "text" as const, text: REPORT_SPEC }],
-    }),
+    async () => {
+      try {
+        const result = await proxyGetReportSpec();
+        logEvent("tool_result", { tool: "get_report_spec", ok: true });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        logEvent("tool_result", { tool: "get_report_spec", ok: false, error: (err as Error).message });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({ success: false, error: (err as Error).message }),
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
   );
 
   server.tool(
@@ -170,18 +168,20 @@ function createServer(): McpServer {
       file_base64: z.string().describe("zip 文件的 base64 编码"),
       filename: z.string().optional().default("report.zip").describe("文件名"),
     },
-    async (args) => {
+    async (toolArgs) => {
       try {
-        const result = await proxyUploadReport(
-          args.file_base64,
-          args.filename ?? "report.zip",
-        );
+        const result = await proxyUploadReport(toolArgs.file_base64, toolArgs.filename ?? "report.zip");
+        logEvent("tool_result", { tool: "upload_report", ok: true, filename: toolArgs.filename ?? "report.zip" });
         return {
-          content: [
-            { type: "text" as const, text: JSON.stringify(result, null, 2) },
-          ],
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (err) {
+        logEvent("tool_result", {
+          tool: "upload_report",
+          ok: false,
+          filename: toolArgs.filename ?? "report.zip",
+          error: (err as Error).message,
+        });
         return {
           content: [
             {
@@ -205,15 +205,28 @@ function createServer(): McpServer {
       page: z.number().optional().default(1).describe("页码"),
       limit: z.number().optional().default(20).describe("每页条数"),
     },
-    async (args) => {
+    async (toolArgs) => {
       try {
-        const result = await proxyListReports(args.slug, args.page, args.limit);
+        const result = await proxyListReports(toolArgs.slug, toolArgs.page, toolArgs.limit);
+        logEvent("tool_result", {
+          tool: "list_reports",
+          ok: true,
+          slug: toolArgs.slug ?? null,
+          page: toolArgs.page,
+          limit: toolArgs.limit,
+        });
         return {
-          content: [
-            { type: "text" as const, text: JSON.stringify(result, null, 2) },
-          ],
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (err) {
+        logEvent("tool_result", {
+          tool: "list_reports",
+          ok: false,
+          slug: toolArgs.slug ?? null,
+          page: toolArgs.page,
+          limit: toolArgs.limit,
+          error: (err as Error).message,
+        });
         return {
           content: [
             {
@@ -230,7 +243,16 @@ function createServer(): McpServer {
   return server;
 }
 
-// ── Startup ──────────────────────────────────────────────────────
+async function mountTransport(req: any, res: any) {
+  const server = createServer();
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on("close", () => {
+    transport.close();
+    server.close();
+  });
+  await server.connect(transport);
+  await transport.handleRequest(req, res, req.body);
+}
 
 async function main() {
   if (transportMode === "stdio") {
@@ -238,45 +260,42 @@ async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error("📋 fashion-report-mcp running via stdio");
-  } else {
-    const express = await import("express");
-    const app = express.default();
-    app.use(express.default.json({ limit: "100mb" }));
-
-    app.get("/health", (_req, res) => {
-      res.json({ status: "ok", service: "fashion-report-mcp", version: "1.0.0" });
-    });
-
-    app.post("/mcp", authMiddleware, async (req, res) => {
-      const server = createServer();
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      res.on("close", () => { transport.close(); server.close(); });
-      await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
-    });
-
-    app.get("/mcp", authMiddleware, async (req, res) => {
-      const server = createServer();
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      res.on("close", () => { transport.close(); server.close(); });
-      await server.connect(transport);
-      await transport.handleRequest(req, res);
-    });
-
-    app.delete("/mcp", authMiddleware, async (req, res) => {
-      const server = createServer();
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-      res.on("close", () => { transport.close(); server.close(); });
-      await server.connect(transport);
-      await transport.handleRequest(req, res);
-    });
-
-    app.listen(CONFIG.PORT, "0.0.0.0", () => {
-      console.log(`📋 fashion-report-mcp HTTP server listening on :${CONFIG.PORT}`);
-      console.log(`   POST /mcp    — MCP endpoint (requires X-API-Key)`);
-      console.log(`   GET  /health — Health check`);
-    });
+    return;
   }
+
+  const express = await import("express");
+  const app = express.default();
+  app.use(express.default.json({ limit: "100mb" }));
+
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", service: "fashion-report-mcp", version: "1.0.0" });
+  });
+
+  app.post("/mcp", authMiddleware, async (req, res) => {
+    await mountTransport(req, res);
+  });
+
+  app.get("/mcp", authMiddleware, async (req, res) => {
+    await mountTransport(req, res);
+  });
+
+  app.delete("/mcp", authMiddleware, async (req, res) => {
+    await mountTransport(req, res);
+  });
+
+  app.listen(CONFIG.PORT, "0.0.0.0", () => {
+    logEvent("startup", {
+      port: CONFIG.PORT,
+      backend_url: CONFIG.BACKEND_URL,
+      internal_service_name: CONFIG.BACKEND_INTERNAL_SERVICE_NAME,
+    });
+    console.log(`📋 fashion-report-mcp HTTP server listening on :${CONFIG.PORT}`);
+    console.log("   POST /mcp    — MCP endpoint (requires X-API-Key)");
+    console.log("   GET  /health — Health check");
+  });
 }
 
-main().catch((err) => { console.error(`Fatal: ${err}`); process.exit(1); });
+main().catch((err) => {
+  console.error(`Fatal: ${err}`);
+  process.exit(1);
+});

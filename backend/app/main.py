@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from .config import settings
 from .database import initialize_database
 from .exceptions import AppError
-from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries
+from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries, report_mcp_internal
 
 
 def _init_pg_report_schema():
@@ -177,6 +177,7 @@ app.include_router(admin.router, prefix="/api")
 app.include_router(redemption_codes.admin_router, prefix="/api")
 app.include_router(redemption_codes.user_router, prefix="/api")
 app.include_router(mcp.router, prefix="/api")
+app.include_router(report_mcp_internal.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(oss.router, prefix="/api")
 app.include_router(galleries.router, prefix="/api")

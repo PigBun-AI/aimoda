@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import Depends, Header, Request
 
+from .config import settings
 from .exceptions import AppError
 from .models import AuthenticatedUser, UserRole, FREE_USER_VIEW_LIMIT
 from .services.auth_token import verify_access_token
@@ -32,6 +33,16 @@ def get_current_user(authorization: Annotated[str | None, Header()] = None) -> A
         raise AppError("会话已失效，请重新登录", 401)
 
     return user
+
+
+def require_report_mcp_internal_service(
+    x_internal_token: Annotated[str | None, Header(alias="X-Internal-Token")] = None,
+    x_internal_service: Annotated[str | None, Header(alias="X-Internal-Service")] = None,
+) -> str:
+    """Dependency: verify service-to-service token for the report MCP adapter."""
+    if not x_internal_token or x_internal_token != settings.REPORT_MCP_INTERNAL_TOKEN:
+        raise AppError("无效的内部服务令牌", 401)
+    return x_internal_service or "unknown"
 
 
 def require_role(allowed_roles: list[UserRole]):
