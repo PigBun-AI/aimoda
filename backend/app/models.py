@@ -96,6 +96,7 @@ class ReportUploadJobRecord(CamelModel):
     status: ReportUploadJobStatus
     uploaded_by: int
     file_size_bytes: int
+    source_object_key: str | None = None
     report_id: int | None = None
     report_slug: str | None = None
     error_message: str | None = None

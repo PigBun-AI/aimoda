@@ -2,9 +2,12 @@
 /**
  * aimoda-fashion-report-mcp — 报告管理 MCP 服务
  *
- * 3 个工具:
+ * 工具:
  *   get_report_spec  — 返回报告打包规范
- *   upload_report    — 上传报告 zip（代理到 backend internal capability）
+ *   prepare_report_upload  — 创建直传 OSS 上传任务
+ *   complete_report_upload — 通知后端开始异步处理
+ *   get_report_upload_status — 查询异步处理状态
+ *   upload_report    — 旧版代理上传（已废弃）
  *   list_reports     — 查询报告列表（代理到 backend internal capability）
  */
 
@@ -125,6 +128,45 @@ async function proxyUploadReport(zipBase64: string, filename: string) {
   );
 }
 
+async function proxyPrepareReportUpload(filename: string, fileSizeBytes: number, contentType = "application/zip") {
+  return callInternalApi<JsonObject>(
+    "/api/internal/report-mcp/upload/prepare",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        filename,
+        file_size_bytes: fileSizeBytes,
+        content_type: contentType,
+      }),
+    },
+    { operation: "prepare_report_upload", filename, size_bytes: fileSizeBytes },
+  );
+}
+
+async function proxyCompleteReportUpload(jobId: string, objectKey?: string) {
+  return callInternalApi<JsonObject>(
+    "/api/internal/report-mcp/upload/complete",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        job_id: jobId,
+        object_key: objectKey ?? null,
+      }),
+    },
+    { operation: "complete_report_upload", job_id: jobId, object_key: objectKey ?? null },
+  );
+}
+
+async function proxyGetReportUploadStatus(jobId: string) {
+  return callInternalApi<JsonObject>(
+    `/api/internal/report-mcp/upload-jobs/${encodeURIComponent(jobId)}`,
+    { method: "GET" },
+    { operation: "get_report_upload_status", job_id: jobId },
+  );
+}
+
 function createServer(): McpServer {
   const server = new McpServer({
     name: "aimoda-fashion-report",
@@ -160,10 +202,113 @@ function createServer(): McpServer {
   );
 
   server.tool(
+    "prepare_report_upload",
+    `创建报告 ZIP 的直传 OSS 上传任务。
+返回: job 信息 + 预签名 PUT URL + 必需 headers + objectKey。
+调用方应将 zip 文件直接上传到返回的 upload.url，然后再调用 complete_report_upload。`,
+    {
+      filename: z.string().min(1).describe("zip 文件名"),
+      file_size_bytes: z.number().int().positive().describe("zip 文件大小（字节）"),
+      content_type: z.string().optional().default("application/zip").describe("上传内容类型"),
+    },
+    async (toolArgs) => {
+      try {
+        const result = await proxyPrepareReportUpload(
+          toolArgs.filename,
+          toolArgs.file_size_bytes,
+          toolArgs.content_type ?? "application/zip",
+        );
+        logEvent("tool_result", {
+          tool: "prepare_report_upload",
+          ok: true,
+          filename: toolArgs.filename,
+          size_bytes: toolArgs.file_size_bytes,
+        });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        logEvent("tool_result", {
+          tool: "prepare_report_upload",
+          ok: false,
+          filename: toolArgs.filename,
+          size_bytes: toolArgs.file_size_bytes,
+          error: (err as Error).message,
+        });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: (err as Error).message }) }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "complete_report_upload",
+    `在调用方完成 OSS 直传后，通知平台开始异步处理报告。
+输入: prepare_report_upload 返回的 job_id；可选回传 object_key 做一致性校验。
+返回: 当前 job 状态（通常为 processing）。`,
+    {
+      job_id: z.string().min(1).describe("prepare_report_upload 返回的 job_id"),
+      object_key: z.string().optional().describe("可选，prepare_report_upload 返回的 objectKey"),
+    },
+    async (toolArgs) => {
+      try {
+        const result = await proxyCompleteReportUpload(toolArgs.job_id, toolArgs.object_key);
+        logEvent("tool_result", { tool: "complete_report_upload", ok: true, job_id: toolArgs.job_id });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        logEvent("tool_result", {
+          tool: "complete_report_upload",
+          ok: false,
+          job_id: toolArgs.job_id,
+          error: (err as Error).message,
+        });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: (err as Error).message }) }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "get_report_upload_status",
+    `查询报告异步上传/处理任务状态。
+输入: job_id
+返回: pending / processing / completed / failed，以及成功后的 report_id / report_slug。`,
+    {
+      job_id: z.string().min(1).describe("上传任务 job_id"),
+    },
+    async (toolArgs) => {
+      try {
+        const result = await proxyGetReportUploadStatus(toolArgs.job_id);
+        logEvent("tool_result", { tool: "get_report_upload_status", ok: true, job_id: toolArgs.job_id });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        logEvent("tool_result", {
+          tool: "get_report_upload_status",
+          ok: false,
+          job_id: toolArgs.job_id,
+          error: (err as Error).message,
+        });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify({ success: false, error: (err as Error).message }) }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
     "upload_report",
-    `上传报告 zip 压缩包到 WWWD 平台。
-输入: base64 编码的 zip 文件 + 文件名。
-服务端自动: 解压 → 提取元数据 → 上传 OSS → 写入数据库。`,
+    `【已废弃】旧版代理上传报告 zip 到平台。
+该方式会把 base64 大文件放进 MCP/Cloudflare 链路，存在超时风险。
+请改用 prepare_report_upload → 直传 OSS → complete_report_upload → get_report_upload_status。`,
     {
       file_base64: z.string().describe("zip 文件的 base64 编码"),
       filename: z.string().optional().default("report.zip").describe("文件名"),

@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import mimetypes
+import re
 from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
@@ -93,6 +94,11 @@ class OSSService:
             reports/zimmermann-fall-2026/index.html
         """
         return f"reports/{slug}/{filename}"
+
+    @staticmethod
+    def report_upload_staging_path(job_id: str, filename: str) -> str:
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", PurePosixPath(filename).name or "report.zip")
+        return f"report-uploads/{job_id}/{safe_name}"
 
     # ── Upload ───────────────────────────────────────────────────────────────────
 
@@ -176,6 +182,11 @@ class OSSService:
         content_type = headers.get("Content-Type") or headers.get("content-type")
         return content, content_type
 
+    def download_file_to_path(self, oss_path: str, destination: str) -> None:
+        """Download an OSS object directly to a local file."""
+        bucket = self._get_bucket()
+        bucket.get_object_to_file(oss_path, destination)
+
     def get_signed_url(
         self,
         oss_path: str,
@@ -184,6 +195,19 @@ class OSSService:
         """Generate a time-limited signed URL for private buckets."""
         bucket = self._get_bucket()
         return bucket.sign_url("GET", oss_path, expires_seconds)
+
+    def get_signed_upload_url(
+        self,
+        oss_path: str,
+        *,
+        expires_seconds: int = 900,
+        content_type: str = "application/zip",
+    ) -> tuple[str, dict[str, str]]:
+        """Generate a signed PUT URL for direct-to-OSS uploads."""
+        bucket = self._get_bucket()
+        headers = {"Content-Type": content_type}
+        signed_url = bucket.sign_url("PUT", oss_path, expires_seconds, headers=headers)
+        return signed_url, headers
 
     def get_url(self, oss_path: str, public_base_url: str | None = None) -> str:
         """Get the public-facing URL for a file."""

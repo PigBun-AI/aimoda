@@ -208,12 +208,17 @@ OpenClaw Agent 通过 MCP 工具与平台交互，流程如下：
 │  └─────────────────┘                  └──────┬──────┘  │   │
 │                                                │          │   │
 │                                                ▼          │   │
-│                                    3. upload_report ──────┘   │
-│                                         │                    │
+│                              3. prepare_report_upload ───┐    │
+│                                                           │    │
+│                              4. 直传 zip 到 OSS ─────────┤    │
+│                                                           │    │
+│                              5. complete_report_upload ──┘    │
+│                                         │                     │
 │                                         ▼                     │
 │                              ┌─────────────────────┐          │
 │                              │ 平台 API             │          │
-│                              │ - 解压/验证          │          │
+│                              │ - 校验 staging 对象  │          │
+│                              │ - 异步解压/验证      │          │
 │                              │ - 提取元数据         │          │
 │                              │ - 注册到数据库       │          │
 │                              └─────────────────────┘          │
@@ -225,7 +230,10 @@ OpenClaw Agent 通过 MCP 工具与平台交互，流程如下：
 | 工具 | 功能 | 优先级 |
 |------|------|--------|
 | `get_report_spec` | 查询最新的文件夹结构规范 + iframe 解析规则 | P0 |
-| `upload_report` | 上传 zip 文件，自动解压、验证、注册 | P1 |
+| `prepare_report_upload` | 创建直传 OSS 的上传任务，返回预签名 URL | P1 |
+| `complete_report_upload` | 直传完成后通知平台开始异步处理 | P1 |
+| `get_report_upload_status` | 查询异步任务状态与最终报告结果 | P1 |
+| `upload_report` | 旧版代理上传，保留兼容但不推荐 | Deprecated |
 
 ### get_report_spec 返回规范
 
@@ -263,36 +271,66 @@ interface ReportSpec {
 }
 ```
 
-### upload_report API
+### 两段式上传 API
 
-```http
-POST /api/reports/upload
-Content-Type: multipart/form-data
-Authorization: Bearer <token>
+#### 1) prepare_report_upload
 
-Body:
-  - file: zip 压缩包（推荐包含 manifest.json + entryHtml + 相对路径资源）
-
-Response (成功):
+```json
 {
   "success": true,
-  "message": "报告上传成功",
-  "report": {
-    "id": 1,
-    "slug": "zimmermann-fall-2026",
-    "title": "Zimmermann Fall 2026 RTW",
-    "brand": "Zimmermann",
-    "season": "Fall 2026",
-    "lookCount": 52
+  "job": {
+    "id": "job-123",
+    "status": "pending"
+  },
+  "upload": {
+    "method": "PUT",
+    "url": "https://oss-signed-url",
+    "headers": {
+      "Content-Type": "application/zip"
+    },
+    "objectKey": "report-uploads/job-123/report.zip",
+    "expiresAt": "2026-04-05T12:00:00Z"
   }
 }
+```
 
-Response (失败):
+#### 2) 调用方直传到 OSS
+
+- 使用 `upload.method` / `upload.url` / `upload.headers`
+- 将 zip 二进制直接上传到 OSS
+- 不再经过 Cloudflare / 平台应用层中转
+
+#### 3) complete_report_upload
+
+```json
 {
-  "success": false,
-  "error": "缺少必需文件 index.html"
+  "success": true,
+  "message": "报告处理任务已启动",
+  "job": {
+    "id": "job-123",
+    "status": "processing"
+  }
 }
 ```
+
+#### 4) get_report_upload_status
+
+```json
+{
+  "success": false,
+  "job": {
+    "id": "job-123",
+    "status": "failed",
+    "errorMessage": "manifest.json 缺失"
+  }
+}
+```
+
+这个设计把“控制面”和“数据面”分离：
+
+- MCP / 平台 API：只做任务编排、鉴权、状态查询
+- OSS：承担大文件传输
+- Backend Worker：承担异步解压、校验、入库
 
 ### 当前实现
 
@@ -300,8 +338,10 @@ MVP 阶段采用**文件方案**（复制到共享目录 + chokidar 扫描），
 
 ```javascript
 // backend/src/routes/reports.js 预留下传接口
-router.post('/upload', uploadMiddleware, reportController.upload);  // 未来实现
-router.get('/spec', reportController.getSpec);                        // 可提前实现
+router.post('/upload/prepare', reportController.prepareUpload);
+router.post('/upload/complete', reportController.completeUpload);
+router.get('/upload-jobs/:jobId', reportController.getUploadJob);
+router.get('/spec', reportController.getSpec);
 ```
 
 ### 升级信号

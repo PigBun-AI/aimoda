@@ -23,6 +23,7 @@ def _job(status: str = "pending") -> ReportUploadJobRecord:
         status=status,
         uploaded_by=2,
         file_size_bytes=128,
+        source_object_key=None,
         report_id=None,
         report_slug=None,
         error_message=None,

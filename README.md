@@ -77,7 +77,10 @@ docker-compose --env-file .env.production up -d --build
 平台提供 MCP 工具供 AI Agent 使用：
 
 - `get_report_spec` - 获取报告生成规范
-- `upload_report` - 上传报告压缩包
+- `prepare_report_upload` - 创建 OSS 直传上传任务
+- `complete_report_upload` - 通知平台开始异步处理报告
+- `get_report_upload_status` - 查询异步处理任务状态
+- `upload_report` - 旧版代理上传，仅建议本地调试时使用
 
 ## License
 

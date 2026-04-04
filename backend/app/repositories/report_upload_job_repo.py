@@ -21,32 +21,39 @@ def _map_job(row) -> ReportUploadJobRecord:
         status=row[2],
         uploaded_by=row[3],
         file_size_bytes=row[4],
-        report_id=row[5],
-        report_slug=row[6],
-        error_message=row[7],
-        started_at=row[8].isoformat() if row[8] else None,
-        completed_at=row[9].isoformat() if row[9] else None,
-        created_at=row[10].isoformat() if row[10] else "",
-        updated_at=row[11].isoformat() if row[11] else "",
+        source_object_key=row[5],
+        report_id=row[6],
+        report_slug=row[7],
+        error_message=row[8],
+        started_at=row[9].isoformat() if row[9] else None,
+        completed_at=row[10].isoformat() if row[10] else None,
+        created_at=row[11].isoformat() if row[11] else "",
+        updated_at=row[12].isoformat() if row[12] else "",
     )
 
 
 _JOB_COLUMNS = """
-    id, filename, status, uploaded_by, file_size_bytes,
+    id, filename, status, uploaded_by, file_size_bytes, source_object_key,
     report_id, report_slug, error_message, started_at, completed_at,
     created_at, updated_at
 """
 
 
-def create_upload_job(job_id: str, filename: str, uploaded_by: int, file_size_bytes: int) -> ReportUploadJobRecord:
+def create_upload_job(
+    job_id: str,
+    filename: str,
+    uploaded_by: int,
+    file_size_bytes: int,
+    source_object_key: str | None = None,
+) -> ReportUploadJobRecord:
     with _get_pg_conn() as conn:
         row = conn.execute(
             f"""
-            INSERT INTO report_upload_jobs (id, filename, status, uploaded_by, file_size_bytes)
-            VALUES (%s, %s, 'pending', %s, %s)
+            INSERT INTO report_upload_jobs (id, filename, status, uploaded_by, file_size_bytes, source_object_key)
+            VALUES (%s, %s, 'pending', %s, %s, %s)
             RETURNING {_JOB_COLUMNS}
             """,
-            (job_id, filename, uploaded_by, file_size_bytes),
+            (job_id, filename, uploaded_by, file_size_bytes, source_object_key),
         ).fetchone()
         conn.commit()
     return _map_job(row)

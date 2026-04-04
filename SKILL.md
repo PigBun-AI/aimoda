@@ -80,5 +80,15 @@ The platform now uses **manifest + entryHtml + relative-path assets**.
 2. Build the report folder and `manifest.json`
 3. Verify `entryHtml` exists and all relative paths resolve
 4. Zip the report root
-5. Call `mcp__wwwd-reports__upload_report`
-6. Call `mcp__wwwd-reports__list_reports` to verify publish success
+5. Call `mcp__wwwd-reports__prepare_report_upload`
+6. Upload the zip directly to the returned OSS `upload.url` using HTTP `PUT` and the returned headers
+7. Call `mcp__wwwd-reports__complete_report_upload`
+8. Poll `mcp__wwwd-reports__get_report_upload_status` until status is `completed`
+9. Call `mcp__wwwd-reports__list_reports` to verify publish success
+
+## Two-Phase Upload Notes
+
+- Do not send large zip payloads through MCP JSON directly unless you are doing local debugging
+- `prepare_report_upload` returns a short-lived signed OSS URL; upload before `expiresAt`
+- `complete_report_upload` only starts backend processing after the OSS object is present
+- `get_report_upload_status` is the source of truth for `pending` / `processing` / `completed` / `failed`

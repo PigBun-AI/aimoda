@@ -197,13 +197,23 @@
 
 上传时平台将：
 
-1. 读取 `manifest.json`
-2. 校验必填字段和路径存在性
-3. 保留 zip 内相对目录结构上传到 OSS
-4. 以 `entryHtml` 对应文件作为主入口 URL
-5. 如果存在其他 HTML 页面，一并上传
-6. 如果存在 `coverImage`，返回其 URL
-7. `overviewHtml` 缺失不视为错误
+1. 先创建上传任务，返回一个短时有效的 OSS 直传 URL
+2. 调用方将 zip 二进制直接上传到 OSS staging object
+3. 上传完成后调用 complete 接口，平台才开始异步处理
+4. 后端 Worker 下载 staging zip、读取 `manifest.json`
+5. 校验必填字段和路径存在性
+6. 保留 zip 内相对目录结构上传到正式 OSS 路径
+7. 以 `entryHtml` 对应文件作为主入口 URL
+8. 如果存在其他 HTML 页面，一并上传
+9. 如果存在 `coverImage`，返回其 URL
+10. `overviewHtml` 缺失不视为错误
+
+### 7.1 为什么改成两段式
+
+- 避免大 zip 穿过 MCP / Cloudflare / JSON-RPC 链路导致 524 超时
+- 把“大文件传输”和“业务处理”解耦
+- 上传失败时可以只重试直传或只重试 complete，不必整条链路重来
+- 更适合 OpenClaw 这类 Agent 通过 MCP 编排、通过 HTTP 直传 OSS 的模式
 
 ---
 
@@ -216,6 +226,7 @@ OpenClaw 不是定义上传协议的一方，它的职责是：
 3. 生成 `manifest.json`
 4. 把图片从 HTML base64 内嵌改为 zip 内文件引用（推荐）
 5. 保证所有页面和资源都用相对路径互相引用
+6. 调用 `prepare_report_upload` → 直传 OSS → `complete_report_upload` → 轮询 `get_report_upload_status`
 
 ---
 

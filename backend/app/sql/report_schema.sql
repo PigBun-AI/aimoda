@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS report_upload_jobs (
     status          TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
     uploaded_by     INTEGER NOT NULL,
     file_size_bytes BIGINT NOT NULL DEFAULT 0,
+    source_object_key TEXT,
     report_id       INTEGER REFERENCES reports(id) ON DELETE SET NULL,
     report_slug     TEXT,
     error_message   TEXT,
@@ -118,6 +119,14 @@ $$ LANGUAGE plpgsql;
 
 DO $$
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'report_upload_jobs' AND column_name = 'source_object_key'
+    ) THEN
+        ALTER TABLE report_upload_jobs ADD COLUMN source_object_key TEXT;
+    END IF;
+
     IF NOT EXISTS (
         SELECT 1 FROM pg_trigger WHERE tgname = 'report_upload_jobs_updated_at'
     ) THEN
