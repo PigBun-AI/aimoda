@@ -38,6 +38,8 @@ from ..repositories.activity_repo import log_activity
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 REPORT_PREVIEW_COOKIE_NAME = "aimoda_report_preview"
+REPORT_PREVIEW_THUMB_MAX_EDGE = 1024
+REPORT_PREVIEW_THUMB_QUALITY = 85
 
 
 def _should_secure_preview_cookie() -> bool:
@@ -74,6 +76,125 @@ def _normalize_preview_asset_path(asset_path: str) -> str:
     if not cleaned or cleaned in {".", ".."} or cleaned.startswith("../") or "/../" in f"/{cleaned}":
         raise AppError("非法的报告资源路径", 400)
     return cleaned
+
+
+def _is_html_asset(normalized_path: str, media_type: str) -> bool:
+    return normalized_path.endswith((".html", ".htm")) or media_type.startswith("text/html")
+
+
+def _is_resizable_image(media_type: str) -> bool:
+    return media_type.startswith("image/") and media_type not in {"image/svg+xml", "image/gif"}
+
+
+def _build_oss_image_process(max_edge: int) -> str:
+    return (
+        "image/resize,"
+        f"m_lfit,w_{max_edge},h_{max_edge}"
+        f"/quality,q_{REPORT_PREVIEW_THUMB_QUALITY}"
+        "/auto-orient,1"
+    )
+
+
+def _inject_report_preview_patch(html: bytes, report_id: int) -> bytes:
+    patch_script = f"""
+<script data-aimoda-report-preview-patch>
+(() => {{
+  const selector = '.hero-image, .img-item img, img.img-item';
+  const previewPrefix = `/api/reports/{report_id}/preview/`;
+  const thumbMaxEdge = '{REPORT_PREVIEW_THUMB_MAX_EDGE}';
+
+  const isOptimizable = (value) => {{
+    if (!value) return false;
+    try {{
+      const url = new URL(value, window.location.href);
+      const pathname = url.pathname || '';
+      return url.origin === window.location.origin
+        && pathname.startsWith(previewPrefix)
+        && !pathname.endsWith('.svg')
+        && !pathname.endsWith('.gif');
+    }} catch (_error) {{
+      return false;
+    }}
+  }};
+
+  const withThumbParams = (value) => {{
+    const url = new URL(value, window.location.href);
+    url.searchParams.set('max_edge', thumbMaxEdge);
+    return url.toString();
+  }};
+
+  const optimizeImages = () => {{
+    document.querySelectorAll(selector).forEach((img, index) => {{
+      const resolvedSrc = img.currentSrc || img.src;
+      if (!isOptimizable(resolvedSrc)) return;
+
+      if (!img.dataset.fullresSrc) {{
+        img.dataset.fullresSrc = resolvedSrc;
+      }}
+
+      if (img.classList.contains('hero-image')) {{
+        img.loading = 'eager';
+        img.fetchPriority = index === 0 ? 'high' : 'auto';
+      }} else {{
+        img.loading = 'lazy';
+      }}
+      img.decoding = 'async';
+
+      const thumbSrc = withThumbParams(img.dataset.fullresSrc);
+      if (img.src !== thumbSrc) {{
+        img.src = thumbSrc;
+      }}
+    }});
+  }};
+
+  getAllImages = function getAllImagesPatched() {{
+    return Array.from(document.querySelectorAll(selector)).map((img, index) => ({{
+      src: img.dataset.fullresSrc || img.currentSrc || img.src,
+      alt: img.alt || `Image ${{index + 1}}`,
+    }}));
+  }};
+
+  downloadImage = function downloadImagePatched() {{
+    const img = allImages?.[currentIndex];
+    if (!img) return;
+    const link = document.createElement('a');
+    link.href = img.src;
+    link.download = (img.alt || 'image') + '.jpg';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }};
+
+  const bindMissingLightboxListeners = () => {{
+    const images = Array.from(document.querySelectorAll(selector));
+    images.forEach((img) => {{
+      if (img.matches('.hero-image, .img-item img')) return;
+      if (img.dataset.aimodaLightboxBound === '1') return;
+      img.dataset.aimodaLightboxBound = '1';
+      img.style.cursor = 'zoom-in';
+      img.addEventListener('click', (event) => {{
+        event.stopPropagation();
+        const currentImages = Array.from(document.querySelectorAll(selector));
+        const lightboxIndex = currentImages.indexOf(img);
+        if (lightboxIndex >= 0 && typeof window.openLightbox === 'function') {{
+          window.openLightbox(lightboxIndex);
+        }}
+      }});
+    }});
+  }};
+
+  optimizeImages();
+  bindMissingLightboxListeners();
+}})();
+</script>
+"""
+    html_text = html.decode("utf-8")
+    if "data-aimoda-report-preview-patch" in html_text:
+        return html
+    if "</body>" in html_text:
+        return html_text.replace("</body>", f"{patch_script}</body>", 1).encode("utf-8")
+    return f"{html_text}{patch_script}".encode("utf-8")
 
 
 def _can_access_report_preview(user: AuthenticatedUser, report_id: int) -> bool:
@@ -175,6 +296,7 @@ def get_single_report(
 def preview_report_asset(
     report_id: int,
     asset_path: str,
+    max_edge: Annotated[int | None, Query(ge=256, le=2048)] = None,
     preview_token: Annotated[str | None, Cookie(alias=REPORT_PREVIEW_COOKIE_NAME)] = None,
 ):
     if not preview_token:
@@ -197,13 +319,21 @@ def preview_report_asset(
     normalized_path = _normalize_preview_asset_path(asset_path)
     oss_path = f"{report.oss_prefix.rstrip('/')}/{normalized_path}"
     oss = get_oss_service()
+    process: str | None = None
 
     try:
-        content, content_type = oss.download_file_with_meta(oss_path)
+        if max_edge:
+            guessed_media_type = mimetypes.guess_type(normalized_path)[0] or ""
+            if _is_resizable_image(guessed_media_type):
+                process = _build_oss_image_process(max_edge)
+        content, content_type = oss.download_file_with_meta_processed(oss_path, process=process)
     except oss2.exceptions.NoSuchKey as exc:
         raise AppError("报告资源不存在", 404) from exc
 
     media_type = content_type or mimetypes.guess_type(normalized_path)[0] or "application/octet-stream"
+    if _is_html_asset(normalized_path, media_type):
+        content = _inject_report_preview_patch(content, report_id)
+
     return FastAPIResponse(
         content=content,
         media_type=media_type,

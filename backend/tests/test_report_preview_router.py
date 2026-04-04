@@ -60,8 +60,9 @@ def test_get_single_report_sets_preview_cookie_and_preview_url(monkeypatch):
 
 def test_preview_report_asset_returns_content(monkeypatch):
     class FakeOSS:
-        def download_file_with_meta(self, oss_path: str):
+        def download_file_with_meta_processed(self, oss_path: str, *, process: str | None = None):
             assert oss_path == "reports/murmur-aw-2026-27-v5-2/assets/look-001.jpg"
+            assert process is None
             return b"image-bytes", "image/jpeg"
 
     monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
@@ -80,6 +81,57 @@ def test_preview_report_asset_returns_content(monkeypatch):
     assert response.body == b"image-bytes"
     assert response.headers["content-type"].startswith("image/jpeg")
     assert response.headers["cache-control"] == "private, max-age=300"
+
+
+def test_preview_report_asset_injects_html_patch(monkeypatch):
+    class FakeOSS:
+        def download_file_with_meta_processed(self, oss_path: str, *, process: str | None = None):
+            assert oss_path == "reports/murmur-aw-2026-27-v5-2/pages/report.html"
+            assert process is None
+            return b"<html><body><img src=\"../assets/look-001.jpg\"></body></html>", "text/html; charset=utf-8"
+
+    monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
+    monkeypatch.setattr(reports_router, "verify_report_preview_token", lambda token: _user())
+    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id: True)
+    monkeypatch.setattr(reports_router, "has_viewed_report", lambda user_id, report_id: True)
+    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: None)
+    monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
+
+    response = reports_router.preview_report_asset(
+        report_id=7,
+        asset_path="pages/report.html",
+        preview_token="preview-token",
+    )
+
+    body = response.body.decode("utf-8")
+    assert 'data-aimoda-report-preview-patch' in body
+    assert "max_edge" in body
+    assert response.headers["content-type"].startswith("text/html")
+
+
+def test_preview_report_asset_uses_oss_resize_for_thumbnail(monkeypatch):
+    class FakeOSS:
+        def download_file_with_meta_processed(self, oss_path: str, *, process: str | None = None):
+            assert oss_path == "reports/murmur-aw-2026-27-v5-2/assets/look-001.jpg"
+            assert process == "image/resize,m_lfit,w_1024,h_1024/quality,q_85/auto-orient,1"
+            return b"thumb-bytes", "image/jpeg"
+
+    monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
+    monkeypatch.setattr(reports_router, "verify_report_preview_token", lambda token: _user())
+    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id: True)
+    monkeypatch.setattr(reports_router, "has_viewed_report", lambda user_id, report_id: True)
+    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: None)
+    monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
+
+    response = reports_router.preview_report_asset(
+        report_id=7,
+        asset_path="assets/look-001.jpg",
+        max_edge=1024,
+        preview_token="preview-token",
+    )
+
+    assert response.body == b"thumb-bytes"
+    assert response.headers["content-type"].startswith("image/jpeg")
 
 
 def test_preview_report_asset_rejects_viewer_without_report_access(monkeypatch):

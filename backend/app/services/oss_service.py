@@ -160,8 +160,17 @@ class OSSService:
 
     def download_file_with_meta(self, oss_path: str) -> tuple[bytes, str | None]:
         """Download a file and return (content, content_type)."""
+        return self.download_file_with_meta_processed(oss_path)
+
+    def download_file_with_meta_processed(
+        self,
+        oss_path: str,
+        *,
+        process: str | None = None,
+    ) -> tuple[bytes, str | None]:
+        """Download a file and return (content, content_type), optionally via OSS process."""
         bucket = self._get_bucket()
-        result = bucket.get_object(oss_path)
+        result = bucket.get_object(oss_path, process=process)
         content = result.read()
         headers = getattr(result, "headers", {}) or {}
         content_type = headers.get("Content-Type") or headers.get("content-type")
