@@ -253,6 +253,7 @@ export async function getReportById(id: string): Promise<ReportDetail> {
     year: number
     lookCount: number
     indexUrl: string
+    previewUrl?: string
     overviewUrl: string | null
     coverUrl: string | null
     ossPrefix: string
@@ -271,7 +272,7 @@ export async function getReportById(id: string): Promise<ReportDetail> {
     updatedAt: data.updatedAt,
     coverImageUrl: data.coverUrl || `/reports/${data.slug}/cover.jpg`,
     description: `${data.brand} ${data.season} ${data.year} RTW 趋势报告，包含 ${data.lookCount} 个造型`,
-    iframeUrl: data.indexUrl || `/reports/${data.slug}/index.html`,
+    iframeUrl: data.previewUrl || data.indexUrl || `/reports/${data.slug}/index.html`,
     tags: [data.brand, data.season, String(data.year), 'RTW']
   }
 }

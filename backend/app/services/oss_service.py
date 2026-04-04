@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import mimetypes
+from urllib.parse import urlsplit
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from typing import BinaryIO
@@ -101,6 +102,7 @@ class OSSService:
         file_content: BinaryIO | bytes,
         content_type: str | None = None,
         metadata: dict | None = None,
+        public_base_url: str | None = None,
     ) -> str:
         """Upload a file and return the OSS URL."""
         bucket = self._get_bucket()
@@ -122,7 +124,7 @@ class OSSService:
         if result.status not in (200, 204):
             raise RuntimeError(f"OSS upload failed with status {result.status}")
 
-        return self.get_url(oss_path)
+        return self.get_url(oss_path, public_base_url=public_base_url)
 
     def upload_avatar(
         self,
@@ -156,6 +158,15 @@ class OSSService:
         result = bucket.get_object(oss_path)
         return result.read()
 
+    def download_file_with_meta(self, oss_path: str) -> tuple[bytes, str | None]:
+        """Download a file and return (content, content_type)."""
+        bucket = self._get_bucket()
+        result = bucket.get_object(oss_path)
+        content = result.read()
+        headers = getattr(result, "headers", {}) or {}
+        content_type = headers.get("Content-Type") or headers.get("content-type")
+        return content, content_type
+
     def get_signed_url(
         self,
         oss_path: str,
@@ -165,9 +176,16 @@ class OSSService:
         bucket = self._get_bucket()
         return bucket.sign_url("GET", oss_path, expires_seconds)
 
-    def get_url(self, oss_path: str) -> str:
+    def get_url(self, oss_path: str, public_base_url: str | None = None) -> str:
         """Get the public-facing URL for a file."""
-        bucket = self._get_bucket()
+        base_url = (
+            public_base_url
+            or settings.OSS_PUBLIC_BASE
+            or f"https://{self.bucket_name}.{self.endpoint}"
+        ).rstrip("/")
+        parsed = urlsplit(base_url)
+        if parsed.scheme and parsed.netloc:
+            return f"{base_url}/{oss_path}"
         return f"https://{self.bucket_name}.{self.endpoint}/{oss_path}"
 
     # ── Delete ───────────────────────────────────────────────────────────────────

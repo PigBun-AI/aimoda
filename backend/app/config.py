@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     OSS_ACCESS_KEY_SECRET: str = ""
     OSS_BUCKET_NAME: str = ""
     OSS_ENDPOINT: str = "oss-cn-hangzhou.aliyuncs.com"
+    OSS_PUBLIC_BASE: str | None = None
+    REPORT_PREVIEW_TOKEN_TTL_SECONDS: int = 900
 
     model_config = {
         "env_file": ".env",

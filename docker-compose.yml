@@ -40,6 +40,7 @@ services:
       OSS_ACCESS_KEY_SECRET: ${OSS_ACCESS_KEY_SECRET:-}
       OSS_BUCKET_NAME: ${OSS_BUCKET_NAME:-}
       OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-shenzhen.aliyuncs.com}
+      OSS_PUBLIC_BASE: ${OSS_PUBLIC_BASE:-}
     volumes:
       - db:/data
       - reports:/reports

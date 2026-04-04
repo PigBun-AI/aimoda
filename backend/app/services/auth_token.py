@@ -51,6 +51,23 @@ def issue_tokens(user: SafeUser, session_id: int | None = None) -> AuthTokens:
     )
 
 
+def issue_report_preview_token(user: AuthenticatedUser) -> str:
+    now = datetime.now(timezone.utc)
+    payload: dict = {
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role,
+        "type": "report_preview",
+        "jti": str(uuid.uuid4()),
+        "iat": now,
+        "exp": now + timedelta(seconds=settings.REPORT_PREVIEW_TOKEN_TTL_SECONDS),
+    }
+    if user.session_id is not None:
+        payload["sessionId"] = user.session_id
+
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
+
+
 def verify_access_token(token: str) -> AuthenticatedUser:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
@@ -58,6 +75,23 @@ def verify_access_token(token: str) -> AuthenticatedUser:
         raise ValueError(f"Invalid token: {e}") from e
 
     if payload.get("type") != "access":
+        raise ValueError("Invalid token type")
+
+    return AuthenticatedUser(
+        id=int(payload["sub"]),
+        email=payload["email"],
+        role=payload["role"],
+        session_id=payload.get("sessionId"),
+    )
+
+
+def verify_report_preview_token(token: str) -> AuthenticatedUser:
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+    except jwt.PyJWTError as e:
+        raise ValueError(f"Invalid token: {e}") from e
+
+    if payload.get("type") != "report_preview":
         raise ValueError("Invalid token type")
 
     return AuthenticatedUser(
