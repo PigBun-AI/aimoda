@@ -38,7 +38,7 @@ from ..repositories.activity_repo import log_activity
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 REPORT_PREVIEW_COOKIE_NAME = "aimoda_report_preview"
-REPORT_PREVIEW_THUMB_MAX_EDGE = 1024
+REPORT_PREVIEW_THUMB_MAX_EDGE = 1280
 REPORT_PREVIEW_THUMB_QUALITY = 85
 
 

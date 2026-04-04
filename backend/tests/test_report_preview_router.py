@@ -113,7 +113,7 @@ def test_preview_report_asset_uses_oss_resize_for_thumbnail(monkeypatch):
     class FakeOSS:
         def download_file_with_meta_processed(self, oss_path: str, *, process: str | None = None):
             assert oss_path == "reports/murmur-aw-2026-27-v5-2/assets/look-001.jpg"
-            assert process == "image/resize,m_lfit,w_1024,h_1024/quality,q_85/auto-orient,1"
+            assert process == "image/resize,m_lfit,w_1280,h_1280/quality,q_85/auto-orient,1"
             return b"thumb-bytes", "image/jpeg"
 
     monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
@@ -126,7 +126,7 @@ def test_preview_report_asset_uses_oss_resize_for_thumbnail(monkeypatch):
     response = reports_router.preview_report_asset(
         report_id=7,
         asset_path="assets/look-001.jpg",
-        max_edge=1024,
+        max_edge=1280,
         preview_token="preview-token",
     )
 
