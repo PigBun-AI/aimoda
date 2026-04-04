@@ -45,19 +45,39 @@ def _capture_report_cover(index_url: str) -> bytes:
     payload = {
         "url": index_url,
         "gotoOptions": {
-            "waitUntil": "networkidle2",
+            "waitUntil": "load",
             "timeout": int(settings.REPORT_COVER_TIMEOUT_SECONDS * 1000),
         },
+        "waitForSelector": {
+            "selector": "img, h1, .hero-image, .report-hero",
+            "timeout": min(int(settings.REPORT_COVER_TIMEOUT_SECONDS * 1000), 15000),
+            "visible": True,
+        },
+        "waitForTimeout": 1500,
         "bestAttempt": True,
+        "viewport": {
+            "width": settings.REPORT_COVER_WIDTH,
+            "height": settings.REPORT_COVER_HEIGHT,
+            "deviceScaleFactor": 1,
+        },
         "options": {
             "type": "png",
             "fullPage": False,
         },
+        "addScriptTag": [
+            {
+                "content": (
+                    "document.querySelectorAll('img[loading=\"lazy\"]').forEach((img)=>{img.loading='eager';});"
+                    "window.scrollTo(0, 0);"
+                )
+            }
+        ],
         "addStyleTag": [
             {
                 "content": (
                     "html,body{margin:0!important;padding:0!important;overflow:hidden!important;"
                     "background:#ffffff!important;}"
+                    "img{content-visibility:auto;}"
                 )
             }
         ],
