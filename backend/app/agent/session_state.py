@@ -110,6 +110,32 @@ def count_session(client, session) -> int:
     return result.count
 
 
+def get_session_page(client, session, *, offset: int = 0, limit: int = 20):
+    """Fetch one ranked page for the current session.
+
+    For semantic sessions, we page directly in Qdrant vector search so the UI can
+    keep loading beyond the initial preview window. For non-semantic sessions we
+    fall back to scroll+slice because ordering is not similarity-sensitive.
+    """
+    collection = get_collection()
+    qdrant_filter = build_session_filter(session)
+
+    if session["q_emb"] is not None:
+        results = client.query_points(
+            collection_name=collection,
+            query=session["q_emb"],
+            using=session["vector_type"],
+            query_filter=qdrant_filter,
+            limit=limit,
+            offset=offset,
+            with_payload=True,
+        )
+        return [p for p in results.points]
+
+    results = scroll_all(client, collection, scroll_filter=qdrant_filter)
+    return results[offset: offset + limit]
+
+
 def apply_session_filters(client, session):
     """Apply all current filters and return actual results."""
     collection = get_collection()

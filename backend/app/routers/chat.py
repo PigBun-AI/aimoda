@@ -48,7 +48,8 @@ from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
 from ..agent.qdrant_utils import get_qdrant, format_result, get_collection, encode_image
 from ..agent.session_state import (
-    apply_session_filters,
+    count_session,
+    get_session_page,
     get_session as get_agent_session,
     set_session as set_agent_session,
 )
@@ -773,10 +774,8 @@ async def search_session_endpoint(
         raise HTTPException(status_code=400, detail="Invalid search request payload")
 
     client = get_qdrant()
-
-    results = apply_session_filters(client, session)
-
-    page = results[req.offset: req.offset + req.limit]
+    total = count_session(client, session)
+    page = get_session_page(client, session, offset=req.offset, limit=req.limit)
 
     formatted_page = []
     for p in page:
@@ -787,10 +786,10 @@ async def search_session_endpoint(
 
     return {
         "images": formatted_page,
-        "total": len(results),
+        "total": total,
         "offset": req.offset,
         "limit": req.limit,
-        "has_more": req.offset + req.limit < len(results),
+        "has_more": req.offset + req.limit < total,
     }
 
 

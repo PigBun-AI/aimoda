@@ -35,6 +35,7 @@ from .session_state import (
     build_session_filter,
     count_session,
     apply_session_filters,
+    get_session_page,
     available_values,
 )
 from .harness import (
@@ -794,10 +795,11 @@ def peek_collection(
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
-    results = apply_session_filters(client, session)
+    total = count_session(client, session)
+    results = get_session_page(client, session, offset=0, limit=limit)
 
     peek_results = []
-    for p in results[:limit]:
+    for p in results:
         garment_details = []
         for g in p.payload.get("garments", []):
             detail = g.get("name", "")
@@ -821,7 +823,7 @@ def peek_collection(
         })
 
     return json.dumps({
-        "total": len(results),
+        "total": total,
         "message": f"Peeked at top {len(peek_results)} images.",
         "peek_results": peek_results
     }, ensure_ascii=False)
@@ -843,8 +845,7 @@ def show_collection(
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
-    results = apply_session_filters(client, session)
-    count = len(results)
+    count = count_session(client, session)
 
     filter_summary = []
     for f in session["filters"]:
@@ -858,7 +859,7 @@ def show_collection(
     serializable_session = _serialize_search_session(session)
 
     sample_images = []
-    for point in results[:8]:
+    for point in get_session_page(client, session, offset=0, limit=8):
         item = format_result(point.payload, getattr(point, "score", 0))
         sample_images.append(item)
 
@@ -883,7 +884,7 @@ def show_collection(
         "search_request_id": search_request_id,
         "total": count,
         "filters_applied": filter_summary,
-        "message": f"Sent query to UI to display {count} images. Filters applied: {len(filter_summary)}.",
+        "message": f"Showing {count} matching images in paginated results. Filters applied: {len(filter_summary)}.",
         "sample_images": sample_images,
     }, ensure_ascii=False)
 

@@ -21,7 +21,7 @@ from pydantic import BaseModel
 from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
 from ..agent.qdrant_utils import get_qdrant, format_result
-from ..agent.session_state import apply_session_filters
+from ..agent.session_state import count_session, get_session_page
 
 router = APIRouter(prefix="/dev", tags=["dev"])
 
@@ -97,10 +97,8 @@ async def dev_search_session_endpoint(req: DevSearchSessionRequest):
     """Search using session state directly — bypasses JWT auth."""
     client = get_qdrant()
     session = req.model_dump()
-
-    results = apply_session_filters(client, session)
-
-    page = results[req.offset: req.offset + req.limit]
+    total = count_session(client, session)
+    page = get_session_page(client, session, offset=req.offset, limit=req.limit)
 
     formatted_page = []
     for p in page:
@@ -111,8 +109,8 @@ async def dev_search_session_endpoint(req: DevSearchSessionRequest):
 
     return {
         "images": formatted_page,
-        "total": len(results),
+        "total": total,
         "offset": req.offset,
         "limit": req.limit,
-        "has_more": req.offset + req.limit < len(results),
+        "has_more": req.offset + req.limit < total,
     }
