@@ -88,9 +88,19 @@ def _extract_archive(archive_path: Path, dest: Path) -> None:
 
 
 def _resolve_report_root(extraction_dir: Path) -> Path:
-    """If extracted into a single subfolder, use that as root."""
+    """If extracted into a single subfolder, use that as root.
+
+    Only descend when the archive root contains no real files. This avoids
+    mis-detecting valid flat zips like:
+
+      manifest.json
+      pages/report.html
+
+    where `pages/` would otherwise look like the only child directory.
+    """
     children = [c for c in extraction_dir.iterdir() if c.is_dir()]
-    if len(children) == 1:
+    root_files = [c for c in extraction_dir.iterdir() if c.is_file()]
+    if len(children) == 1 and not root_files:
         return children[0]
     return extraction_dir
 
