@@ -12,7 +12,7 @@
 
 ```
 Agent A (风格采集)    ──HTTP──▶  style-knowledge-mcp (:18750)  ──▶  Qdrant
-Agent B (报告生成)    ──HTTP──▶  wwwd-reports (:80/api/mcp)
+Agent B (报告生成)    ──HTTP──▶  wwwd-reports (:80/api/report-mcp)
 Agent C (全流程)      ──HTTP──▶  两个 MCP 都连
 ```
 

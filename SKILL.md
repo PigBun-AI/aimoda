@@ -9,7 +9,7 @@ metadata:
       packages: []
     mcp:
       server: "wwwd-reports"
-      url: "https://www-d.net/api/mcp"
+      url: "https://ai-moda.ai/api/report-mcp"
 ---
 
 # WWWD Reports
