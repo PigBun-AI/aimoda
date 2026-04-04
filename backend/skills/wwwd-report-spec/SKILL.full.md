@@ -180,6 +180,8 @@
 - `coverImage` 必填
 - 调用方必须自行准备封面图并随 zip 一起上传
 - 推荐放在 `assets/cover.jpg`
+- `coverImage` 必须是报告第一页/首屏截图，不是任意独立海报图
+- 建议输出为 `16:9`，例如 `1280x720`
 - 平台不再自动截图/自动生成封面
 - 平台不会再因为没有 `overview.html` 阻止上传
 
@@ -229,7 +231,7 @@ OpenClaw 不是定义上传协议的一方，它的职责是：
 2. 把报告整理为符合本 spec 的 zip
 3. 生成 `manifest.json`
 4. 把图片从 HTML base64 内嵌改为 zip 内文件引用（推荐）
-5. 准备显式 `coverImage` 文件，并在 manifest 中正确声明
+5. 准备显式 `coverImage` 文件，并确保它就是报告第一页/首屏截图
 6. 保证所有页面和资源都用相对路径互相引用
 7. 调用 `prepare_report_upload` → 直传 OSS → `complete_report_upload` → 轮询 `get_report_upload_status`
 
@@ -241,6 +243,7 @@ OpenClaw 不是定义上传协议的一方，它的职责是：
 - [ ] `slug/title/brand/season/year/entryHtml/coverImage` 已填写
 - [ ] `entryHtml` 指向真实文件
 - [ ] `coverImage` 指向真实文件
+- [ ] `coverImage` 与报告第一页/首屏内容一致
 - [ ] 如有 `pages`，每个页面都真实存在
 - [ ] 如有 `featuresFile`，路径真实存在
 - [ ] 所有 HTML/CSS/JS 资源引用都为 zip 内相对路径

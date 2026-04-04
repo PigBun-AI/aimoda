@@ -69,7 +69,8 @@ The platform now uses **manifest + entryHtml + coverImage + relative-path assets
 
 ## Packaging Rules
 
-- `coverImage` is required; package an explicit cover file instead of expecting backend generation
+- `coverImage` is required; it must be a screenshot of the report first page / first screen, not an arbitrary poster image
+- Use a `16:9` cover when possible, e.g. `1280x720`
 - `overview.html` is optional and no longer required
 - Any number of HTML files is allowed
 - All local references must use zip-internal relative paths

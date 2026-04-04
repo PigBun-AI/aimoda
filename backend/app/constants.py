@@ -47,7 +47,7 @@ REPORT_SPEC = {
         "assetDirectories": ["assets/", "images/"],
         "formats": [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".json", ".css", ".js"],
         "inlineImages": "除极小图标外，不建议将正文图片以 data URI/base64 内嵌到 HTML",
-        "coverImage": "必填；建议使用 assets/cover.jpg，列表封面直接使用该文件",
+        "coverImage": "必填；必须是报告第一页/首屏截图，建议使用 16:9 的 assets/cover.jpg，列表封面直接使用该文件",
     },
     "uploadBehavior": {
         "preserveRelativePaths": True,
