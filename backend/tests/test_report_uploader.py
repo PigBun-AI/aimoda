@@ -96,3 +96,43 @@ def test_upload_report_uses_oss_public_base_when_configured(tmp_path, monkeypatc
 
     assert result.index_url == "https://static.ai-moda.ai/reports/report-preview-test/pages/report.html"
     assert fake_oss.uploads[0][3] is None
+
+
+def test_upload_report_rewrites_root_level_assets_for_nested_html(tmp_path, monkeypatch):
+    report_root = tmp_path / "report"
+    (report_root / "pages").mkdir(parents=True)
+    (report_root / "assets").mkdir()
+    (report_root / "pages" / "report.html").write_text(
+        '<html><body><img src="assets/image_0000.jpg" alt="look"></body></html>',
+        encoding="utf-8",
+    )
+    (report_root / "assets" / "image_0000.jpg").write_bytes(b"image")
+    (report_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "specVersion": "2.0",
+                "slug": "rewrite-assets-report",
+                "title": "Rewrite Assets",
+                "brand": "Aimoda",
+                "season": "AW",
+                "year": 2026,
+                "entryHtml": "pages/report.html",
+                "coverImage": "assets/image_0000.jpg",
+                "lookCount": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    fake_oss = FakeOSS()
+    monkeypatch.setattr(report_uploader, "get_oss_service", lambda: fake_oss)
+    monkeypatch.setattr(oss_service.settings, "OSS_PUBLIC_BASE", None)
+
+    report_uploader.upload_report_to_oss(report_root, "rewrite-assets-report")
+
+    uploaded_html = next(
+        content
+        for path, _content_type, content, _public_base in fake_oss.uploads
+        if path.endswith("/pages/report.html")
+    ).decode("utf-8")
+    assert 'src="../assets/image_0000.jpg"' in uploaded_html

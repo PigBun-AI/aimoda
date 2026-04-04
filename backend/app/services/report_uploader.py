@@ -13,8 +13,12 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import os
+import re
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from .oss_service import get_oss_service, OSSService
 from .report_scanner import (
@@ -27,6 +31,8 @@ from .report_scanner import (
 logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
+HTML_REF_ATTR_PATTERN = re.compile(r'(?P<prefix>\b(?:src|href)=["\'])(?P<url>[^"\']+)(?P<suffix>["\'])', re.IGNORECASE)
+EXTERNAL_URL_PREFIXES = ("http://", "https://", "//", "data:", "mailto:", "tel:", "javascript:", "#", "?")
 
 
 @dataclass
@@ -51,6 +57,51 @@ def _scan_upload_files(report_root: Path) -> list[Path]:
             continue
         files.append(f)
     return sorted(files)
+
+
+def _normalize_html_asset_paths(report_root: Path) -> None:
+    """Rewrite broken root-relative-ish HTML asset refs to valid relative paths.
+
+    Some report packages place the entry HTML under `pages/` but reference sibling
+    top-level assets as `assets/foo.jpg`. Browsers resolve that to
+    `pages/assets/foo.jpg`, which breaks. We only rewrite refs when:
+      1. the current relative target does not exist, and
+      2. the same path exists from the report root.
+    """
+
+    for html_path in report_root.rglob("*.html"):
+        original = html_path.read_text(encoding="utf-8")
+        parent_dir = html_path.parent
+        changed = False
+
+        def _replace(match: re.Match[str]) -> str:
+            nonlocal changed
+            raw_url = match.group("url").strip()
+            if not raw_url or raw_url.startswith(EXTERNAL_URL_PREFIXES):
+                return match.group(0)
+
+            parsed = urlsplit(raw_url)
+            rel_path = parsed.path.strip()
+            if not rel_path or rel_path.startswith("../"):
+                return match.group(0)
+
+            current_target = parent_dir / rel_path
+            if current_target.exists():
+                return match.group(0)
+
+            root_target = report_root / rel_path
+            if not root_target.exists():
+                return match.group(0)
+
+            rewritten = PurePosixPath(os.path.relpath(root_target, start=parent_dir)).as_posix()
+            rebuilt_url = urlunsplit(("", "", rewritten, parsed.query, parsed.fragment))
+            changed = True
+            return f"{match.group('prefix')}{rebuilt_url}{match.group('suffix')}"
+
+        normalized = HTML_REF_ATTR_PATTERN.sub(_replace, original)
+        if changed and normalized != original:
+            html_path.write_text(normalized, encoding="utf-8")
+            logger.info("Normalized broken asset refs in %s", html_path.relative_to(report_root).as_posix())
 
 
 def _upload_files(oss: OSSService, report_root: Path, slug: str, files: list[Path]) -> dict[str, str]:
@@ -94,6 +145,7 @@ def upload_report_to_oss(report_root: Path, slug: str) -> ReportOSSResult:
     oss = get_oss_service()
     oss_prefix = f"reports/{slug}/"
     manifest = load_report_manifest(report_root)
+    _normalize_html_asset_paths(report_root)
 
     upload_files = _scan_upload_files(report_root)
     path_map = _upload_files(oss, report_root, slug, upload_files)
