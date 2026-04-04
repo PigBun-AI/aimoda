@@ -237,7 +237,7 @@ export async function getReports(page = 1, limit = 12): Promise<PaginatedReports
   return {
     reports: payload.data.map((report: ReportSummary & { coverUrl?: string }) => ({
       ...report,
-      coverImageUrl: report.coverUrl || `/reports/${report.slug}/cover.jpg`,
+      coverImageUrl: report.coverUrl || `/report-files/${report.slug}/cover.jpg`,
     })),
     ...payload.meta
   }
@@ -270,9 +270,9 @@ export async function getReportById(id: string): Promise<ReportDetail> {
     season: data.season,
     status: 'published',
     updatedAt: data.updatedAt,
-    coverImageUrl: data.coverUrl || `/reports/${data.slug}/cover.jpg`,
+    coverImageUrl: data.coverUrl || `/report-files/${data.slug}/cover.jpg`,
     description: `${data.brand} ${data.season} ${data.year} RTW 趋势报告，包含 ${data.lookCount} 个造型`,
-    iframeUrl: data.previewUrl || data.indexUrl || `/reports/${data.slug}/index.html`,
+    iframeUrl: data.previewUrl || data.indexUrl || `/report-files/${data.slug}/index.html`,
     tags: [data.brand, data.season, String(data.year), 'RTW']
   }
 }

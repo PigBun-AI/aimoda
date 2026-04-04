@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from .oss_service import get_oss_service, OSSService
+from .report_cover_service import generate_report_cover
 from .report_scanner import (
     MANIFEST_FILENAMES,
     load_report_manifest,
@@ -168,6 +169,8 @@ def upload_report_to_oss(report_root: Path, slug: str) -> ReportOSSResult:
     if cover_img is not None:
         cover_rel = cover_img.relative_to(report_root).as_posix()
         cover_url = path_map.get(cover_rel)
+    else:
+        cover_url = generate_report_cover(index_url, slug)
 
     logger.info(
         "Uploaded %d files (%d images) for report %s (%.1f MB)",

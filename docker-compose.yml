@@ -41,6 +41,12 @@ services:
       OSS_BUCKET_NAME: ${OSS_BUCKET_NAME:-}
       OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-shenzhen.aliyuncs.com}
       OSS_PUBLIC_BASE: ${OSS_PUBLIC_BASE:-}
+      REPORT_COVER_GENERATION_ENABLED: ${REPORT_COVER_GENERATION_ENABLED:-true}
+      REPORT_COVER_BROWSERLESS_URL: ${REPORT_COVER_BROWSERLESS_URL:-http://report-cover-browser:3000}
+      REPORT_COVER_BROWSERLESS_TOKEN: ${REPORT_COVER_BROWSERLESS_TOKEN:-aimoda-report-cover}
+      REPORT_COVER_WIDTH: ${REPORT_COVER_WIDTH:-1600}
+      REPORT_COVER_HEIGHT: ${REPORT_COVER_HEIGHT:-900}
+      REPORT_COVER_TIMEOUT_SECONDS: ${REPORT_COVER_TIMEOUT_SECONDS:-30}
     volumes:
       - db:/data
       - reports:/reports
@@ -49,6 +55,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      report-cover-browser:
+        condition: service_started
     deploy:
       resources:
         limits:
@@ -129,6 +137,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    restart: unless-stopped
+
+  report-cover-browser:
+    image: ghcr.io/browserless/chromium:latest
+    environment:
+      TOKEN: ${REPORT_COVER_BROWSERLESS_TOKEN:-aimoda-report-cover}
+      CONCURRENT: 2
+      TIMEOUT: 60000
+      EXIT_ON_HEALTH_FAILURE: true
+      CORS: true
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     restart: unless-stopped
 
   style-knowledge-mcp:

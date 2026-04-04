@@ -51,6 +51,7 @@ def test_upload_report_preserves_relative_paths_and_uses_manifest_entry(tmp_path
 
     fake_oss = FakeOSS()
     monkeypatch.setattr(report_uploader, "get_oss_service", lambda: fake_oss)
+    monkeypatch.setattr(report_uploader, "generate_report_cover", lambda index_url, slug: None)
     monkeypatch.setattr(oss_service.settings, "OSS_PUBLIC_BASE", None)
 
     result = report_uploader.upload_report_to_oss(report_root, "murmur-aw-2026-27-v5-2")
@@ -90,6 +91,7 @@ def test_upload_report_uses_oss_public_base_when_configured(tmp_path, monkeypatc
 
     fake_oss = FakeOSS()
     monkeypatch.setattr(report_uploader, "get_oss_service", lambda: fake_oss)
+    monkeypatch.setattr(report_uploader, "generate_report_cover", lambda index_url, slug: None)
     monkeypatch.setattr(oss_service.settings, "OSS_PUBLIC_BASE", "https://static.ai-moda.ai")
 
     result = report_uploader.upload_report_to_oss(report_root, "report-preview-test")
@@ -126,6 +128,7 @@ def test_upload_report_rewrites_root_level_assets_for_nested_html(tmp_path, monk
 
     fake_oss = FakeOSS()
     monkeypatch.setattr(report_uploader, "get_oss_service", lambda: fake_oss)
+    monkeypatch.setattr(report_uploader, "generate_report_cover", lambda index_url, slug: None)
     monkeypatch.setattr(oss_service.settings, "OSS_PUBLIC_BASE", None)
 
     report_uploader.upload_report_to_oss(report_root, "rewrite-assets-report")
@@ -162,7 +165,12 @@ def test_upload_report_requires_explicit_cover_instead_of_random_image(tmp_path,
     fake_oss = FakeOSS()
     monkeypatch.setattr(report_uploader, "get_oss_service", lambda: fake_oss)
     monkeypatch.setattr(oss_service.settings, "OSS_PUBLIC_BASE", None)
+    monkeypatch.setattr(
+        report_uploader,
+        "generate_report_cover",
+        lambda index_url, slug: f"https://oss.example.com/reports/{slug}/assets/generated-cover-16x9.jpg",
+    )
 
     result = report_uploader.upload_report_to_oss(report_root, "no-cover-report")
 
-    assert result.cover_url is None
+    assert result.cover_url == "https://oss.example.com/reports/no-cover-report/assets/generated-cover-16x9.jpg"
