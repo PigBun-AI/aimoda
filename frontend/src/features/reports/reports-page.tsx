@@ -94,8 +94,8 @@ export function ReportsPage() {
                       className="group block h-full text-left"
                     >
                       <Card className="h-full overflow-hidden bg-card">
-                        <div className="flex min-h-[35rem] flex-col">
-                          <div className="relative min-h-[24rem] flex-1 border-b border-border bg-[#f1f1ed] dark:bg-[#141414]">
+                        <div className="flex h-full flex-col">
+                          <div className="relative aspect-video border-b border-border bg-[#f1f1ed] dark:bg-[#141414]">
                             <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 py-4 sm:px-6">
                               <span className="type-kicker text-muted-foreground">
                                 {report.season}
@@ -108,7 +108,7 @@ export function ReportsPage() {
                             <img
                               src={report.coverImageUrl}
                               alt={report.title}
-                              className="h-full w-full object-contain object-center px-6 py-12 transition-transform duration-normal group-hover:scale-[1.012] sm:px-8 sm:py-14"
+                              className="h-full w-full object-cover object-center transition-transform duration-normal group-hover:scale-[1.012]"
                               loading="lazy"
                               onError={(event) => {
                                 const target = event.target as HTMLImageElement
