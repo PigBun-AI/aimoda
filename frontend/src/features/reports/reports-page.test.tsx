@@ -50,8 +50,8 @@ describe('ReportsPage', () => {
     )
 
     expect(screen.getByText('测试报告')).toBeInTheDocument()
-    expect(screen.getByText('Brand · AW26')).toBeInTheDocument()
-    expect(screen.getByText('Published')).toBeInTheDocument()
+    expect(screen.getByText('Archive issue #01')).toBeInTheDocument()
+    expect(screen.getByText('HTML report')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /测试报告/i })).toHaveAttribute('href', '/api/reports/1/preview/index.html')
   })
 })
