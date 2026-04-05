@@ -6,6 +6,8 @@ def _map_user(row) -> UserRecord:
     return UserRecord(
         id=row["id"],
         email=row["email"],
+        phone=row["phone"],
+        phone_verified_at=row["phone_verified_at"],
         password_hash=row["password_hash"],
         role=row["role"],
         created_at=row["created_at"],
@@ -16,6 +18,12 @@ def _map_user(row) -> UserRecord:
 def find_user_by_email(email: str) -> UserRecord | None:
     db = get_db()
     row = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    return _map_user(row) if row else None
+
+
+def find_user_by_phone(phone: str) -> UserRecord | None:
+    db = get_db()
+    row = db.execute("SELECT * FROM users WHERE phone = ?", (phone,)).fetchone()
     return _map_user(row) if row else None
 
 
@@ -45,11 +53,21 @@ def count_users_by_role() -> dict[str, int]:
     return {r["role"]: r["count"] for r in rows}
 
 
-def create_user(email: str, password_hash: str, role: UserRole) -> UserRecord:
+def create_user(
+    *,
+    email: str | None,
+    password_hash: str | None,
+    role: UserRole,
+    phone: str | None = None,
+    phone_verified_at: str | None = None,
+) -> UserRecord:
     db = get_db()
     cursor = db.execute(
-        "INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)",
-        (email, password_hash, role),
+        """
+        INSERT INTO users (email, phone, phone_verified_at, password_hash, role)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (email, phone, phone_verified_at, password_hash, role),
     )
     db.commit()
     row = db.execute("SELECT * FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()

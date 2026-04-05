@@ -9,7 +9,7 @@ if [[ -z "$TARGET_ENV" ]]; then
   exit 1
 fi
 
-ENV_FILE="$ROOT_DIR/env/server.${TARGET_ENV}.env"
+ENV_FILE="$ROOT_DIR/env/${TARGET_ENV}.env"
 PROJECT_NAME=$(grep -E ^COMPOSE_PROJECT_NAME= "$ENV_FILE" | cut -d= -f2-)
 
 cd "$ROOT_DIR"

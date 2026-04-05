@@ -30,17 +30,17 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
   const hasFilters = data.filters_applied.length > 0
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-normal shadow-sm">
+    <div className="overflow-hidden border border-border bg-card animate-in fade-in slide-in-from-bottom-1 duration-normal">
       {/* Header */}
-      <div className="px-3 sm:px-4 py-3 sm:py-4 flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 px-4 py-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-sm bg-primary/10 flex items-center justify-center shrink-0">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-accent">
             <Images size={15} className="text-primary" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-foreground">{t('searchResultTitle')}</span>
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-primary/15 text-primary">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('searchResultTitle')}</span>
+              <span className="border border-border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
                 {t('imageCountWithUnit', { count: data.total })}
               </span>
             </div>
@@ -53,7 +53,7 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
                 {data.filters_applied.slice(0, 4).map((f, i) => (
                   <span
                     key={i}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
+                    className="border border-border bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-muted-foreground"
                   >
                     {formatFilterTag(f)}
                   </span>
@@ -72,7 +72,7 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
           {data.total > 0 && data.search_request_id && (
             <button
               onClick={() => onOpenDrawer(data.search_request_id)}
-              className="inline-flex items-center gap-1 text-xs bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-full transition-all font-medium shadow-sm whitespace-nowrap"
+              className="inline-flex items-center gap-1 border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap text-background transition-colors hover:bg-background hover:text-foreground"
             >
               {t('viewAll')}
               <ArrowRight size={10} />
@@ -82,14 +82,14 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
       </div>
 
           {previewImages.length > 0 && data.search_request_id && (
-            <div
+          <div
               className="px-4 pb-4 cursor-pointer"
               onClick={() => onOpenDrawer(data.search_request_id)}
             >
-          <div className="border border-border/60 bg-muted/25 p-2.5">
+          <div className="border border-border bg-muted/25 p-2.5">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-foreground/75">{t('resultPreview')}</span>
-              <span className="text-[10px] text-muted-foreground">{t('topImageCount', { count: 4 })}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/75">{t('resultPreview')}</span>
+              <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{t('topImageCount', { count: 4 })}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {previewImages.map((img, i) => (
@@ -108,7 +108,7 @@ function PreviewThumbnail({ img }: { img: ImageResult }) {
   return (
     <div className="space-y-1 min-w-0">
       <div
-        className="bg-muted overflow-hidden group relative border border-border/60"
+        className="group relative overflow-hidden border border-border bg-muted"
         style={{ aspectRatio: '1 / 2' }}
       >
         <FashionImage image={img} className="w-full h-full" />

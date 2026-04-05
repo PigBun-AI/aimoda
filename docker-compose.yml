@@ -1,4 +1,4 @@
-name: ${COMPOSE_PROJECT_NAME:-aimoda-2026}
+name: ${COMPOSE_PROJECT_NAME:-aimoda-dev}
 
 services:
   api:
@@ -26,6 +26,13 @@ services:
       LLM_MODEL: ${LLM_MODEL:-qwen3.5-flash}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-32768}
+      FALLBACK_LLM_ENABLED: ${FALLBACK_LLM_ENABLED:-true}
+      FALLBACK_LLM_PROVIDER: ${FALLBACK_LLM_PROVIDER:-anthropic}
+      FALLBACK_LLM_MODEL: ${FALLBACK_LLM_MODEL:-MiniMax-M2.7-highspeed}
+      FALLBACK_LLM_API_KEY: ${FALLBACK_LLM_API_KEY:-}
+      FALLBACK_LLM_BASE_URL: ${FALLBACK_LLM_BASE_URL:-https://api.minimaxi.com/anthropic}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
       VLM_MODEL: ${VLM_MODEL:-qwen3.5-flash}
@@ -41,9 +48,25 @@ services:
       OSS_BUCKET_NAME: ${OSS_BUCKET_NAME:-}
       OSS_ENDPOINT: ${OSS_ENDPOINT:-oss-cn-shenzhen.aliyuncs.com}
       OSS_PUBLIC_BASE: ${OSS_PUBLIC_BASE:-}
+      SMS_PROVIDER: ${SMS_PROVIDER:-mock}
+      ALIYUN_SMS_ACCESS_KEY_ID: ${ALIYUN_SMS_ACCESS_KEY_ID:-}
+      ALIYUN_SMS_ACCESS_KEY_SECRET: ${ALIYUN_SMS_ACCESS_KEY_SECRET:-}
+      ALIYUN_SMS_ENDPOINT: ${ALIYUN_SMS_ENDPOINT:-dysmsapi.aliyuncs.com}
+      ALIYUN_SMS_SIGN_NAME: ${ALIYUN_SMS_SIGN_NAME:-深圳市像素澎湃科技}
+      ALIYUN_SMS_TEMPLATE_CODE: ${ALIYUN_SMS_TEMPLATE_CODE:-SMS_498250051}
+      API_WORKERS: ${API_WORKERS:-4}
+      API_BACKLOG: ${API_BACKLOG:-1024}
+      API_KEEP_ALIVE_TIMEOUT: ${API_KEEP_ALIVE_TIMEOUT:-30}
     volumes:
       - db:/data
       - reports:/reports
+    cpus: ${API_CPUS:-6}
+    mem_limit: ${API_MEM_LIMIT:-6g}
+    mem_reservation: ${API_MEM_RESERVATION:-2g}
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,11 +75,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 1G
+          cpus: '${API_CPUS:-6}'
+          memory: ${API_MEM_LIMIT:-6g}
         reservations:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '${API_CPU_RESERVATION:-2}'
+          memory: ${API_MEM_RESERVATION:-2g}
     healthcheck:
       test: ['CMD', 'python', '-c', 'import urllib.request; urllib.request.urlopen("http://localhost:3000/api/health")']
       interval: 30s
@@ -73,14 +96,17 @@ services:
       POSTGRES_DB: fashion_chat
     volumes:
       - pgdata:/var/lib/postgresql/data
+    cpus: ${POSTGRES_CPUS:-2}
+    mem_limit: ${POSTGRES_MEM_LIMIT:-2g}
+    mem_reservation: ${POSTGRES_MEM_RESERVATION:-1g}
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 512M
+          cpus: '${POSTGRES_CPUS:-2}'
+          memory: ${POSTGRES_MEM_LIMIT:-2g}
         reservations:
-          cpus: '0.25'
-          memory: 128M
+          cpus: '${POSTGRES_CPU_RESERVATION:-1}'
+          memory: ${POSTGRES_MEM_RESERVATION:-1g}
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U fashion -d fashion_chat']
       interval: 10s
@@ -91,14 +117,17 @@ services:
 
   redis:
     image: redis:7-alpine
+    cpus: ${REDIS_CPUS:-1}
+    mem_limit: ${REDIS_MEM_LIMIT:-1g}
+    mem_reservation: ${REDIS_MEM_RESERVATION:-256m}
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '${REDIS_CPUS:-1}'
+          memory: ${REDIS_MEM_LIMIT:-1g}
         reservations:
-          cpus: '0.1'
-          memory: 64M
+          cpus: '${REDIS_CPU_RESERVATION:-0.25}'
+          memory: ${REDIS_MEM_RESERVATION:-256m}
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -115,14 +144,17 @@ services:
         VITE_COVER_ASSET_BASE_URL: ${COVER_ASSET_BASE_URL:-}
     volumes:
       - reports:/reports:ro
+    cpus: ${FRONTEND_CPUS:-1}
+    mem_limit: ${FRONTEND_MEM_LIMIT:-768m}
+    mem_reservation: ${FRONTEND_MEM_RESERVATION:-256m}
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 512M
+          cpus: '${FRONTEND_CPUS:-1}'
+          memory: ${FRONTEND_MEM_LIMIT:-768m}
         reservations:
-          cpus: '0.25'
-          memory: 128M
+          cpus: '${FRONTEND_CPU_RESERVATION:-0.25}'
+          memory: ${FRONTEND_MEM_RESERVATION:-256m}
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1/']
       interval: 30s
@@ -147,14 +179,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    cpus: ${STYLE_MCP_CPUS:-1}
+    mem_limit: ${STYLE_MCP_MEM_LIMIT:-768m}
+    mem_reservation: ${STYLE_MCP_MEM_RESERVATION:-256m}
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '${STYLE_MCP_CPUS:-1}'
+          memory: ${STYLE_MCP_MEM_LIMIT:-768m}
         reservations:
-          cpus: '0.1'
-          memory: 64M
+          cpus: '${STYLE_MCP_CPU_RESERVATION:-0.25}'
+          memory: ${STYLE_MCP_MEM_RESERVATION:-256m}
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18750/health']
       interval: 30s
@@ -178,14 +213,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    cpus: ${GALLERY_MCP_CPUS:-1}
+    mem_limit: ${GALLERY_MCP_MEM_LIMIT:-768m}
+    mem_reservation: ${GALLERY_MCP_MEM_RESERVATION:-256m}
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '${GALLERY_MCP_CPUS:-1}'
+          memory: ${GALLERY_MCP_MEM_LIMIT:-768m}
         reservations:
-          cpus: '0.1'
-          memory: 64M
+          cpus: '${GALLERY_MCP_CPU_RESERVATION:-0.25}'
+          memory: ${GALLERY_MCP_MEM_RESERVATION:-256m}
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18760/health']
       interval: 30s
@@ -206,14 +244,17 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    cpus: ${REPORT_MCP_CPUS:-0.5}
+    mem_limit: ${REPORT_MCP_MEM_LIMIT:-256m}
+    mem_reservation: ${REPORT_MCP_MEM_RESERVATION:-128m}
     deploy:
       resources:
         limits:
-          cpus: '0.3'
-          memory: 128M
+          cpus: '${REPORT_MCP_CPUS:-0.5}'
+          memory: ${REPORT_MCP_MEM_LIMIT:-256m}
         reservations:
-          cpus: '0.1'
-          memory: 64M
+          cpus: '${REPORT_MCP_CPU_RESERVATION:-0.25}'
+          memory: ${REPORT_MCP_MEM_RESERVATION:-128m}
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18770/health']
       interval: 30s
@@ -234,14 +275,21 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - reports:/reports:ro
+    cpus: ${NGINX_CPUS:-1}
+    mem_limit: ${NGINX_MEM_LIMIT:-768m}
+    mem_reservation: ${NGINX_MEM_RESERVATION:-256m}
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '${NGINX_CPUS:-1}'
+          memory: ${NGINX_MEM_LIMIT:-768m}
         reservations:
-          cpus: '0.1'
-          memory: 64M
+          cpus: '${NGINX_CPU_RESERVATION:-0.25}'
+          memory: ${NGINX_MEM_RESERVATION:-256m}
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1/']
       interval: 30s

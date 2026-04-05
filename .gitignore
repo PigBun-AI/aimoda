@@ -24,6 +24,8 @@ backend/data/
 .env.local
 .env.*.local
 backend/.env
+env/*.env
+!env/*.env.example
 
 # Backups
 backups/

@@ -12,6 +12,14 @@ describe('deriveSessionTitleFromBlocks', () => {
     ).toBe('蓝色的连衣裙，优雅通勤一点')
   })
 
+  it('strips greeting and helper phrases from the provisional title', () => {
+    expect(
+      deriveSessionTitleFromBlocks([
+        { type: 'text', text: '你好，请帮我找一些极简风格的白色衬衫' },
+      ]),
+    ).toBe('一些极简风格的白色衬衫')
+  })
+
   it('falls back to image search title for image-only turns', () => {
     void i18n.changeLanguage('zh-CN')
     expect(

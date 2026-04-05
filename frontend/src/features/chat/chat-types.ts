@@ -7,9 +7,11 @@ export interface ChatSession {
   status?: string
   is_pinned?: boolean
   pinned_at?: string | null
-  title_source?: 'default' | 'heuristic' | 'manual' | string
+  title_source?: 'default' | 'heuristic' | 'ai' | 'manual' | string
   title_locked?: boolean
   execution_status?: 'idle' | 'running' | 'completed' | 'error'
+  current_run_id?: string | null
+  last_run_id?: string | null
   last_run_started_at?: string | null
   last_run_completed_at?: string | null
   last_run_error?: string | null
@@ -48,6 +50,7 @@ export type DocumentSource = DocumentSourceFile | DocumentSourceUrl
 // ContentBlock — Claude Code style inline blocks
 export type ContentBlock =
   | { type: 'text'; text: string }
+  | { type: 'reasoning'; text: string }
   | { type: 'image'; source: ImageSource; mime_type?: string; file_name?: string; alt_text?: string }
   | { type: 'document'; source: DocumentSource; mime_type?: string; file_name?: string; title?: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown>; status?: 'running' | 'done' }
@@ -137,6 +140,7 @@ export interface ChatMessage {
 // SSE event types — upgraded to two-layer block streaming format
 export type SSEEvent =
   | { type: 'content_block_start'; index: number; block_type: 'text' }
+  | { type: 'content_block_start'; index: number; block_type: 'reasoning' }
   | { type: 'content_block_start'; index: number; block_type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'content_block_start'; index: number; block_type: 'tool_result'; tool_use_id: string; content?: string; images?: unknown[]; metadata?: Record<string, unknown> }
   | { type: 'content_block_delta'; index: number; delta: string | Record<string, unknown> }

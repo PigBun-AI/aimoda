@@ -7,6 +7,7 @@ import './i18n'
 import '@/index.css'
 import { router } from '@/app/router'
 import { ApiError } from '@/lib/api'
+import { initializeTheme } from '@/lib/theme-store'
 import { AuthProvider } from '@/features/auth/auth-store'
 
 const ENABLE_DEV_AUTO_LOGIN = import.meta.env.VITE_ENABLE_DEV_AUTO_LOGIN === 'true'
@@ -46,6 +47,7 @@ export const queryClient = new QueryClient({
 })
 
 ensureLoggedIn().then(() => {
+  initializeTheme()
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>

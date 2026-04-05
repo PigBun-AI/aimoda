@@ -40,6 +40,7 @@ from .session_state import (
 )
 from .harness import (
     infer_active_category,
+    get_turn_context,
     note_invalid_filter_attempt,
     clear_invalid_filter_attempt,
     update_session_semantics,
@@ -136,6 +137,25 @@ def _structured_argument_error(
         "retry_same_call": False,
         "suggested_strategy": "Provide a concrete non-empty filter value before retrying.",
     }, ensure_ascii=False)
+
+
+def _normalize_optional_tool_string(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip()
+        return normalized or None
+    if isinstance(value, (int, float, bool)):
+        normalized = str(value).strip()
+        return normalized or None
+    return None
+
+
+def _should_autobind_brand_dimension(thread_id: str, *, value: str | None = None, brand: str | None = None) -> bool:
+    context = get_turn_context(thread_id) or {}
+    if not context.get("brand_only_request"):
+        return False
+    return bool((value and value.strip()) or (brand and brand.strip()))
 
 
 def _session_id_from_config(config: RunnableConfig | None) -> str | None:
@@ -528,8 +548,8 @@ def start_collection(
 
 @tool
 def add_filter(
-    dimension: str,
-    value: str,
+    dimension: Optional[str],
+    value: Optional[str],
     category: Optional[str] = None,
     config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
@@ -552,23 +572,24 @@ def add_filter(
     client = get_qdrant()
     thread_id = get_thread_id(config)
 
-    dimension = (dimension or "").strip().lower()
-    value = value if isinstance(value, str) else None
+    dimension = (_normalize_optional_tool_string(dimension) or "").lower()
+    value = _normalize_optional_tool_string(value)
+    if not dimension and _should_autobind_brand_dimension(thread_id, value=value):
+        dimension = "brand"
     if not dimension:
         return _structured_argument_error(
             dimension="",
             value=value,
             reason="Filter dimension must be a non-empty string.",
         )
-    if value is None or not value.strip():
+    if value is None:
         return _structured_argument_error(
             dimension=dimension,
             value=value,
             reason=f'Filter "{dimension}" requires a concrete non-empty value.',
         )
-    value = value.strip()
     if category:
-        category = category.strip().lower() or None
+        category = (_normalize_optional_tool_string(category) or "").lower() or None
 
     GARMENT_TAG_DIMS = {"color", "fabric", "pattern", "silhouette"}
     GARMENT_NESTED_DIMS = {"sleeve_length", "sleeve", "garment_length", "length", "collar"}
@@ -959,7 +980,7 @@ def explore_colors(
 
 @tool
 def analyze_trends(
-    dimension: str,
+    dimension: Optional[str],
     categories: Optional[list[str]] = None,
     fabric: Optional[str] = None,
     color: Optional[str] = None,
@@ -970,6 +991,7 @@ def analyze_trends(
     year_min: Optional[int] = None,
     top_n: int = 30,
     search: Optional[str] = None,
+    config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
     """Analyze TRENDS and statistics. Counts and ranks — does NOT search images.
 
@@ -983,6 +1005,21 @@ def analyze_trends(
         search: Optional fuzzy search term — only show values containing this text.
             Example: search="hound" will match "houndstooth", "hound's tooth", etc.
     """
+    thread_id = get_thread_id(config) if config else ""
+    dimension = (_normalize_optional_tool_string(dimension) or "").lower()
+    brand = _normalize_optional_tool_string(brand)
+    search = _normalize_optional_tool_string(search)
+
+    if not dimension and thread_id and _should_autobind_brand_dimension(thread_id, value=search, brand=brand):
+        dimension = "brand"
+
+    if not dimension:
+        return _structured_argument_error(
+            dimension="",
+            value=search or brand,
+            reason="Trend analysis dimension must be a non-empty string.",
+        )
+
     collection = get_collection()
     client = get_qdrant()
 

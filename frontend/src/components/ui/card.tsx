@@ -6,7 +6,7 @@ const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(({ class
   <div
     ref={ref}
     className={cn(
-      '@container rounded-lg bg-card border border-border shadow-sm transition-all duration-300 hover:shadow-md',
+      '@container rounded-[var(--radius)] bg-card border border-border shadow-token-sm transition-colors duration-300 hover:border-foreground/30',
       className,
     )}
     {...props}
@@ -22,7 +22,7 @@ CardHeader.displayName = 'CardHeader'
 const CardTitle = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLHeadingElement>>(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn('text-xl font-semibold leading-tight tracking-tight text-card-foreground', className)}
+    className={cn('font-serif text-xl font-semibold leading-tight tracking-tight text-card-foreground', className)}
     {...props}
   />
 ))

@@ -14,19 +14,55 @@ Conversation state is also persisted by LangGraph's checkpointer
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Any
 
 import psycopg
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
+from ..llm_factory import build_llm_with_fallback
 
 DEFAULT_SESSION_TITLE = "新对话"
 IMAGE_SEARCH_SESSION_TITLE = "图片检索"
 SESSION_TITLE_MAX_LEN = 24
 COMPACTION_MESSAGE_THRESHOLD = 18
 COMPACTION_RECENT_MESSAGE_WINDOW = 6
+TITLE_GENERATION_MAX_TOKENS = 48
+
+_TITLE_PREFIX_PATTERNS = [
+    re.compile(r"^(你好|您好|hi|hello|hey)[，,！!。.\s]*", re.IGNORECASE),
+    re.compile(
+        r"^(请问一下|请问|麻烦你|麻烦|请帮我|请你帮我|帮我|可以帮我|能不能帮我|能否帮我|"
+        r"我想请你|我想让你|我想要|我想看|我想找|我想|我需要|想找|帮我找|请帮我找|"
+        r"请你找|请你帮我找)[，,\s]*",
+        re.IGNORECASE,
+    ),
+    re.compile(r"^(介绍一下|介绍下|演示一下|演示下|示范一下|示范下)[，,\s]*", re.IGNORECASE),
+]
+_TITLE_VERB_PREFIX_PATTERN = re.compile(r"^(找|搜|搜索|检索|查找|看看|看一下|看下)[：:\s]*", re.IGNORECASE)
+_TITLE_PREFIX_LABEL_PATTERN = re.compile(r"^(标题|title)\s*[:：\-]\s*", re.IGNORECASE)
+_THINK_BLOCK_PATTERN = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
+_GENERIC_TITLE_VALUES = {
+    "你好",
+    "您好",
+    "hi",
+    "hello",
+    "hey",
+    "请问",
+    "请问一下",
+    "帮我",
+    "请帮我",
+    "我想",
+    "我需要",
+    DEFAULT_SESSION_TITLE,
+}
+_GENERIC_TITLE_PATTERNS = [
+    re.compile(r"^(分析一下|分析下|介绍一下|介绍下)"),
+    re.compile(r"这个(风格|款式|搭配|单品)$"),
+]
 
 
 def _get_pg_conn():
@@ -77,6 +113,79 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text or "")
+
+
+def _compact_text(value: str) -> str:
+    return " ".join((value or "").strip().split())
+
+
+def _strip_title_lead_in(text: str) -> str:
+    next_text = _compact_text(text)
+    if not next_text:
+        return ""
+
+    previous = None
+    while previous != next_text:
+        previous = next_text
+        for pattern in _TITLE_PREFIX_PATTERNS:
+            next_text = pattern.sub("", next_text).strip()
+    next_text = _TITLE_VERB_PREFIX_PATTERN.sub("", next_text).strip()
+    return next_text
+
+
+def _sanitize_generated_title(raw: str, *, max_length: int = SESSION_TITLE_MAX_LEN) -> str:
+    cleaned = _compact_text(_strip_reasoning_markup(raw))
+    if not cleaned:
+        return ""
+
+    cleaned = _TITLE_PREFIX_LABEL_PATTERN.sub("", cleaned)
+    cleaned = cleaned.strip().strip("\"'“”‘’`")
+    cleaned = cleaned.splitlines()[0].strip()
+    cleaned = _strip_title_lead_in(cleaned) or cleaned
+    cleaned = cleaned.rstrip("，,。.!！？?：:；;、/ ")
+    return cleaned[:max_length].strip()
+
+
+def _strip_reasoning_markup(raw: str) -> str:
+    text = str(raw or "")
+    if not text:
+        return ""
+
+    cleaned = _THINK_BLOCK_PATTERN.sub(" ", text)
+
+    if re.search(r"<think>", cleaned, re.IGNORECASE):
+        if not re.search(r"</think>", cleaned, re.IGNORECASE):
+            return ""
+        cleaned = re.split(r"</think>", cleaned, maxsplit=1, flags=re.IGNORECASE)[-1]
+
+    cleaned = re.sub(r"</?think>", " ", cleaned, flags=re.IGNORECASE)
+    return _compact_text(cleaned)
+
+
+def _is_generic_title(title: str) -> bool:
+    candidate = _compact_text(title)
+    if not candidate:
+        return True
+    normalized = candidate.lower()
+    if normalized in _GENERIC_TITLE_VALUES:
+        return True
+    if any(pattern.search(candidate) for pattern in _GENERIC_TITLE_PATTERNS):
+        return True
+    return len(candidate) <= 2
+
+
+def _extract_first_text(blocks: list[dict] | None) -> str:
+    for block in blocks or []:
+        if not isinstance(block, dict) or block.get("type") != "text":
+            continue
+        text = _compact_text(str(block.get("text", "")))
+        if text:
+            return text
+    return ""
+
+
 def _normalize_session_config(model_config: dict | None) -> dict:
     config = dict(model_config or {})
     ui = dict(config.get("ui", {}) if isinstance(config.get("ui"), dict) else {})
@@ -89,6 +198,8 @@ def _normalize_session_config(model_config: dict | None) -> dict:
     ui.setdefault("title_locked", False)
 
     runtime.setdefault("execution_status", "idle")
+    runtime.setdefault("current_run_id", None)
+    runtime.setdefault("last_run_id", None)
     runtime.setdefault("last_run_started_at", None)
     runtime.setdefault("last_run_completed_at", None)
     runtime.setdefault("last_run_error", None)
@@ -122,6 +233,8 @@ def _session_ui_state(model_config: dict | None) -> dict:
         "title_source": str(ui.get("title_source", "default") or "default"),
         "title_locked": bool(ui.get("title_locked", False)),
         "execution_status": runtime.get("execution_status", "idle"),
+        "current_run_id": runtime.get("current_run_id"),
+        "last_run_id": runtime.get("last_run_id"),
         "last_run_started_at": runtime.get("last_run_started_at"),
         "last_run_completed_at": runtime.get("last_run_completed_at"),
         "last_run_error": runtime.get("last_run_error"),
@@ -153,6 +266,7 @@ def _merge_session_state(
     *,
     pinned: bool | None = None,
     execution_status: str | None = None,
+    run_id: str | None = None,
     error_message: str | None = None,
 ) -> dict:
     config = _normalize_session_config(model_config)
@@ -164,13 +278,21 @@ def _merge_session_state(
         ui["pinned_at"] = _iso_now() if pinned else None
 
     if execution_status is not None:
+        active_run_id = str(run_id or runtime.get("current_run_id") or runtime.get("last_run_id") or uuid.uuid4())
         runtime["execution_status"] = execution_status
         if execution_status == "running":
+            runtime["current_run_id"] = active_run_id
+            runtime["last_run_id"] = active_run_id
             runtime["last_run_started_at"] = _iso_now()
             runtime["last_run_error"] = None
         elif execution_status in {"completed", "error"}:
+            runtime["current_run_id"] = None
+            runtime["last_run_id"] = active_run_id
             runtime["last_run_completed_at"] = _iso_now()
             runtime["last_run_error"] = error_message if execution_status == "error" else None
+        elif execution_status == "idle":
+            runtime["current_run_id"] = None
+            runtime["last_run_id"] = active_run_id
 
     config["ui"] = ui
     config["runtime"] = runtime
@@ -226,7 +348,7 @@ def _serialize_session(
 
 
 def _sanitize_title_text(raw: str, *, max_length: int = SESSION_TITLE_MAX_LEN) -> str:
-    cleaned = " ".join((raw or "").strip().split())
+    cleaned = _compact_text(raw)
     if not cleaned:
         return ""
     return cleaned[:max_length]
@@ -242,17 +364,122 @@ def derive_session_title_from_blocks(blocks: list[dict] | None) -> str:
             continue
         block_type = block.get("type")
         if block_type == "text":
-            text = _sanitize_title_text(str(block.get("text", "")))
+            text = _sanitize_generated_title(str(block.get("text", "")))
             if text:
                 text_parts.append(text)
         elif block_type == "image":
             image_count += 1
 
     if text_parts:
-        return _sanitize_title_text(text_parts[0])
+        first = text_parts[0]
+        return first if not _is_generic_title(first) else _sanitize_title_text(text_parts[0])
     if image_count > 0:
         return IMAGE_SEARCH_SESSION_TITLE
     return ""
+
+
+def derive_session_title_from_turn(
+    user_blocks: list[dict] | None,
+    assistant_blocks: list[dict] | None = None,
+) -> str:
+    user_title = derive_session_title_from_blocks(user_blocks)
+    if user_title and not _is_generic_title(user_title):
+        return user_title
+
+    for block in assistant_blocks or []:
+        if not isinstance(block, dict) or block.get("type") != "tool_result":
+            continue
+
+        content = block.get("content")
+        if not isinstance(content, str) or not content:
+            continue
+
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            payload = None
+
+        if not isinstance(payload, dict):
+            continue
+
+        primary_style = payload.get("primary_style")
+        if isinstance(primary_style, dict):
+            style_name = _sanitize_generated_title(str(primary_style.get("style_name", "")), max_length=18)
+            if style_name:
+                return _sanitize_generated_title(f"{style_name}风格解析")
+
+        summary = _summarize_tool_payload(payload)
+        if summary:
+            derived = _sanitize_generated_title(summary, max_length=18)
+            if derived and not _is_generic_title(derived):
+                return derived
+
+    return user_title or ""
+
+
+def _build_title_generation_llm():
+    return build_llm_with_fallback(
+        temperature=0,
+        max_tokens=TITLE_GENERATION_MAX_TOKENS,
+    )
+
+
+def _extract_ai_text_content(value: Any) -> str:
+    if isinstance(value, str):
+        return _strip_reasoning_markup(value)
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(_strip_reasoning_markup(item))
+            elif isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(_strip_reasoning_markup(item["text"]))
+            else:
+                text = getattr(item, "text", None)
+                if isinstance(text, str):
+                    parts.append(_strip_reasoning_markup(text))
+        return "\n".join(part for part in parts if part)
+    return _strip_reasoning_markup(str(value or ""))
+
+
+def _generate_ai_session_title(
+    *,
+    user_blocks: list[dict] | None,
+    assistant_blocks: list[dict] | None,
+) -> str | None:
+    if settings.ENV == "test" or not settings.LLM_API_KEY:
+        return None
+
+    user_summary = _summarize_content_blocks_for_memory(user_blocks or [])
+    assistant_summary = _summarize_content_blocks_for_memory(assistant_blocks or [])
+    if not user_summary and not assistant_summary:
+        return None
+
+    target_language = "中文" if _contains_cjk(f"{user_summary}{assistant_summary}") else "English"
+    model = _build_title_generation_llm()
+    response = model.invoke([
+        SystemMessage(
+            content=(
+                "你是 aimoda 的会话标题生成器。"
+                "请基于用户首轮需求和助手首轮结果，生成一个专业、简洁、可检索的会话标题。"
+                "只输出标题本身，不要解释，不要引号，不要编号。"
+                "避免问候语、请帮我、我想、示例、测试等空泛措辞。"
+                "中文标题控制在 8 到 18 个字；英文标题控制在 2 到 6 个词。"
+            )
+        ),
+        HumanMessage(
+            content=(
+                f"输出语言：{target_language}\n"
+                f"用户首轮需求：{user_summary or '无'}\n"
+                f"助手首轮结果：{assistant_summary or '无'}\n"
+                "请输出一个最终会话标题。"
+            )
+        ),
+    ])
+    title = _sanitize_generated_title(_extract_ai_text_content(getattr(response, "content", "")))
+    if not title or _is_generic_title(title):
+        return None
+    return title
 
 
 def build_runtime_thread_id(user_id: int, session_id: str, thread_version: int = 1) -> str:
@@ -442,6 +669,7 @@ def set_session_execution_status(
     session_id: str,
     *,
     execution_status: str,
+    run_id: str | None = None,
     error_message: str | None = None,
 ) -> None:
     """Persist runtime execution state for a session."""
@@ -456,6 +684,7 @@ def set_session_execution_status(
         next_config = _merge_session_state(
             _normalize_session_config(dict(row[0]) if row[0] else {}),
             execution_status=execution_status,
+            run_id=run_id,
             error_message=error_message,
         )
         conn.execute(
@@ -550,6 +779,73 @@ def auto_title_session(session_id: str, content_blocks: list[dict] | None) -> st
     return title
 
 
+def finalize_session_title(
+    session_id: str,
+    user_blocks: list[dict] | None,
+    assistant_blocks: list[dict] | None,
+) -> str | None:
+    """Upgrade the provisional title after the first assistant response."""
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT title, message_count, model_config
+            FROM chat_sessions
+            WHERE id = %s
+            """,
+            (_uuid(session_id),),
+        ).fetchone()
+        if not row:
+            return None
+
+        current_title = str(row[0] or "")
+        message_count = int(row[1] or 0)
+        config = _normalize_session_config(dict(row[2]) if row[2] else {})
+        ui = dict(config.get("ui", {}) if isinstance(config.get("ui"), dict) else {})
+
+        if ui.get("title_locked"):
+            return current_title or None
+        if message_count > 2:
+            return current_title or None
+
+        next_title = None
+        title_source = "heuristic"
+
+        try:
+            next_title = _generate_ai_session_title(
+                user_blocks=user_blocks,
+                assistant_blocks=assistant_blocks,
+            )
+            if next_title:
+                title_source = "ai"
+        except Exception:
+            next_title = None
+
+        if not next_title:
+            next_title = derive_session_title_from_turn(user_blocks, assistant_blocks)
+
+        next_title = _sanitize_generated_title(next_title or "")
+        if not next_title or _is_generic_title(next_title):
+            return current_title or None
+        if next_title == current_title and ui.get("title_source") == title_source:
+            return current_title or None
+
+        ui["title_source"] = title_source
+        ui["title_locked"] = False
+        config["ui"] = ui
+
+        conn.execute(
+            """
+            UPDATE chat_sessions
+            SET title = %s, model_config = %s, updated_at = NOW()
+            WHERE id = %s
+            """,
+            (next_title, psycopg.types.json.Json(config), _uuid(session_id)),
+        )
+        conn.commit()
+
+    return next_title
+
+
 def delete_session(session_id: str, user_id: int) -> bool:
     """Soft-delete a session. Returns True if deleted."""
     with _get_pg_conn() as conn:
@@ -587,9 +883,10 @@ def create_message(
     content: list[dict],
     token_count: int = 0,
     metadata: dict | None = None,
+    message_id: str | None = None,
 ) -> dict:
     """Create a new message in a session and update session counters."""
-    message_id = str(uuid.uuid4())
+    message_id = message_id or str(uuid.uuid4())
     now = datetime.now(timezone.utc)
     meta = metadata or {}
 
@@ -628,6 +925,173 @@ def create_message(
     }
 
 
+def save_streaming_assistant_message(
+    session_id: str,
+    message_id: str,
+    content: list[dict],
+    *,
+    metadata: dict | None = None,
+) -> dict:
+    """Create or update the assistant draft message for an in-flight run.
+
+    This keeps the latest assistant output persisted independently of the client
+    transport so refreshes or session switches can recover the current reply.
+    """
+    now = datetime.now(timezone.utc)
+    meta = metadata or {}
+
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT created_at
+            FROM messages
+            WHERE id = %s AND session_id = %s
+            """,
+            (_uuid(message_id), _uuid(session_id)),
+        ).fetchone()
+
+        if row:
+            created_at = row[0] or now
+            conn.execute(
+                """
+                UPDATE messages
+                SET content = %s, metadata = %s
+                WHERE id = %s AND session_id = %s
+                """,
+                (
+                    psycopg.types.json.Json(content),
+                    psycopg.types.json.Json(meta),
+                    _uuid(message_id),
+                    _uuid(session_id),
+                ),
+            )
+        else:
+            created_at = now
+            conn.execute(
+                """
+                INSERT INTO messages (id, session_id, role, content, token_count, metadata, created_at)
+                VALUES (%s, %s, 'assistant', %s, 0, %s, %s)
+                """,
+                (
+                    _uuid(message_id),
+                    _uuid(session_id),
+                    psycopg.types.json.Json(content),
+                    psycopg.types.json.Json(meta),
+                    now,
+                ),
+            )
+            conn.execute(
+                """
+                UPDATE chat_sessions
+                SET message_count = message_count + 1,
+                    updated_at = %s
+                WHERE id = %s
+                """,
+                (now, _uuid(session_id)),
+            )
+
+        conn.commit()
+
+    return {
+        "id": message_id,
+        "session_id": session_id,
+        "role": "assistant",
+        "content": content,
+        "token_count": 0,
+        "metadata": meta,
+        "created_at": created_at.isoformat() if created_at else now.isoformat(),
+    }
+
+
+def update_message(
+    message_id: str,
+    *,
+    content: list[dict] | None = None,
+    metadata_patch: dict | None = None,
+) -> bool:
+    """Update persisted message content/metadata without creating a new row."""
+    assignments: list[str] = []
+    params: list[Any] = []
+
+    if content is not None:
+        assignments.append("content = %s")
+        params.append(psycopg.types.json.Json(content))
+
+    if metadata_patch is not None:
+        assignments.append("metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb")
+        params.append(psycopg.types.json.Json(metadata_patch))
+
+    if not assignments:
+        return False
+
+    params.append(_uuid(message_id))
+
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            "SELECT session_id FROM messages WHERE id = %s AND deleted_at IS NULL",
+            (_uuid(message_id),),
+        ).fetchone()
+        if not row:
+            return False
+
+        result = conn.execute(
+            f"""
+            UPDATE messages
+            SET {", ".join(assignments)}
+            WHERE id = %s
+            """,
+            tuple(params),
+        )
+        if result.rowcount > 0:
+            conn.execute(
+                "UPDATE chat_sessions SET updated_at = NOW() WHERE id = %s",
+                (row[0],),
+            )
+        conn.commit()
+        return result.rowcount > 0
+
+
+def delete_message(message_id: str) -> bool:
+    """Soft-delete a message and keep session counters consistent."""
+    now = datetime.now(timezone.utc)
+
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT session_id, token_count
+            FROM messages
+            WHERE id = %s AND deleted_at IS NULL
+            """,
+            (_uuid(message_id),),
+        ).fetchone()
+        if not row:
+            return False
+
+        session_id = row[0]
+        token_count = int(row[1] or 0)
+
+        result = conn.execute(
+            "UPDATE messages SET deleted_at = %s WHERE id = %s AND deleted_at IS NULL",
+            (now, _uuid(message_id)),
+        )
+        if result.rowcount == 0:
+            conn.commit()
+            return False
+
+        conn.execute(
+            """
+            UPDATE chat_sessions
+            SET message_count = GREATEST(message_count - 1, 0),
+                total_tokens = GREATEST(total_tokens - %s, 0),
+                updated_at = %s
+            WHERE id = %s
+            """,
+            (token_count, now, session_id),
+        )
+        conn.commit()
+        return True
+
+
 def list_messages(
     session_id: str,
     user_id: int,
@@ -642,8 +1106,8 @@ def list_messages(
             f"""
             SELECT m.id, m.session_id, m.role, m.content, m.token_count, m.metadata, m.created_at
             FROM messages m
-            INNER JOIN chat_sessions s ON m.session_id = s.id
-            WHERE m.session_id = %s AND s.user_id = %s AND m.deleted_at IS NULL {role_filter}
+            INNER JOIN chat_sessions s ON m.session_id::text = s.id::text
+            WHERE m.session_id::text = %s AND s.user_id = %s AND m.deleted_at IS NULL {role_filter}
             ORDER BY m.created_at ASC
             LIMIT %s OFFSET %s
             """,

@@ -21,7 +21,7 @@ fashion-report/
 ├── nginx.conf
 ├── docker-compose.yml
 ├── docker-compose.dev.yml
-├── .env.example
+├── env/
 └── reports/            # 初始报告（构建时复制到 volume）
 ```
 
@@ -164,8 +164,8 @@ git clone <repo> fashion-report
 cd fashion-report
 
 # 2. 配置环境变量
-cp .env.example .env.production
-vim .env.production  # 设置 JWT_SECRET
+cp env/prod.env.example env/prod.env
+vim env/prod.env
 
 # 3. 导入初始报告（如果有）
 ./scripts/manage-reports.sh import

@@ -60,7 +60,7 @@ export function GalleryDetailPage() {
     return (
       <section className="space-y-4">
         <Skeleton className="h-8 w-1/3" />
-        <Skeleton className="aspect-[3/4] w-full rounded-xl" />
+        <Skeleton className="aspect-[3/4] w-full rounded-[var(--radius)]" />
       </section>
     )
   }
@@ -68,7 +68,7 @@ export function GalleryDetailPage() {
   if (!gallery) {
     return (
       <section className="flex flex-col items-center justify-center py-20">
-        <p className="text-muted-foreground">{t('galleryNotFound')}</p>
+        <p className="font-serif text-3xl tracking-[-0.03em] text-foreground">{t('galleryNotFound')}</p>
         <Link to="/inspiration" className="mt-4">
           <Button variant="outline" size="sm">
             <ArrowLeft className="h-4 w-4 mr-1" />
@@ -83,51 +83,55 @@ export function GalleryDetailPage() {
   const remainingImages = images.slice(1)
 
   return (
-    <section className="px-4 sm:px-6 md:px-8 py-6 sm:py-8 max-w-5xl mx-auto">
-      {/* ── Title bar ── */}
-      <div className="flex items-center justify-between mb-4">
+    <section className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-8">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
         <Link to="/inspiration">
-          <Button variant="ghost" size="sm" className="gap-1 -ml-2 text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" />
             {t('back')}
           </Button>
         </Link>
-        <span className="text-xs text-muted-foreground font-mono">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {gallery.image_count} LOOKS
         </span>
       </div>
 
-      {/* ── Gallery title section ── */}
-      <header className="mb-6 sm:mb-8">
-        <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-light tracking-tight text-foreground">
-          {gallery.title}
-        </h1>
-        {gallery.description && (
-          <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-3xl">
-            {gallery.description}
+      <header className="mb-8 grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.6fr)]">
+        <div className="space-y-4">
+          <h1 className="font-serif text-3xl font-medium tracking-[-0.04em] text-foreground sm:text-4xl lg:text-5xl">
+            {gallery.title}
+          </h1>
+          {gallery.description && (
+            <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+              {gallery.description}
+            </p>
+          )}
+          {gallery.tags.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {gallery.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <p className="text-[11px] uppercase leading-5 tracking-[0.14em] text-muted-foreground">
+            {gallery.source || 'archive'}
           </p>
-        )}
-        {gallery.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {gallery.tags.map((tag) => (
-              <span
-                key={tag}
-                className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm border border-border text-muted-foreground"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
+        </div>
       </header>
 
-      {/* ── Hero: First image full-width ── */}
       {images.length > 0 && (
         <div
-          className="cursor-pointer group mb-2 sm:mb-4"
+          className="group mb-3 cursor-pointer sm:mb-4"
           onClick={() => setLightboxIndex(0)}
         >
-          <div className="overflow-hidden rounded-sm bg-muted">
+          <div className="overflow-hidden border border-border bg-muted">
             <img
               src={images[0].image_url}
               alt={gallery.title}
@@ -137,15 +141,14 @@ export function GalleryDetailPage() {
         </div>
       )}
 
-      {/* ── Remaining images: 2-column masonry on desktop, 1 on mobile ── */}
-      <div className="columns-1 sm:columns-2 gap-2 sm:gap-4 [column-fill:_balance]">
+      <div className="columns-1 gap-2 [column-fill:_balance] md:columns-2 md:gap-4">
         {remainingImages.map((img, idx) => (
           <div
             key={img.id}
             className="break-inside-avoid mb-2 sm:mb-4 cursor-pointer group"
             onClick={() => setLightboxIndex(idx + 1)}
           >
-            <div className="overflow-hidden rounded-sm bg-muted">
+            <div className="overflow-hidden border border-border bg-muted">
               <img
                 src={img.image_url}
                 alt={img.caption || `Look ${idx + 2}`}
@@ -157,8 +160,7 @@ export function GalleryDetailPage() {
         ))}
       </div>
 
-      {/* ── Bottom nav ── */}
-      <div className="pt-10 pb-6 flex justify-center">
+      <div className="flex justify-center pb-6 pt-10">
         <Link to="/inspiration">
           <Button variant="outline" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" />
@@ -174,7 +176,7 @@ export function GalleryDetailPage() {
           onClick={() => setLightboxIndex(null)}
         >
           <button
-            className="absolute top-4 right-4 text-white/40 hover:text-white z-10 transition-colors"
+            className="absolute right-3 top-3 z-10 border border-white/12 p-2 text-white/40 transition-colors hover:border-white/30 hover:text-white sm:right-4 sm:top-4"
             onClick={() => setLightboxIndex(null)}
           >
             <X className="h-6 w-6" />
@@ -182,25 +184,25 @@ export function GalleryDetailPage() {
 
           {lightboxIndex > 0 && (
             <button
-              className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white z-10 transition-colors"
+              className="absolute left-2 top-1/2 z-10 -translate-y-1/2 text-white/30 transition-colors hover:text-white sm:left-4"
               onClick={(e) => {
                 e.stopPropagation()
                 setLightboxIndex(lightboxIndex - 1)
               }}
             >
-              <ChevronLeft className="h-10 w-10" />
+              <ChevronLeft className="h-8 w-8 sm:h-10 sm:w-10" />
             </button>
           )}
 
           {lightboxIndex < images.length - 1 && (
             <button
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/30 hover:text-white z-10 transition-colors"
+              className="absolute right-2 top-1/2 z-10 -translate-y-1/2 text-white/30 transition-colors hover:text-white sm:right-4"
               onClick={(e) => {
                 e.stopPropagation()
                 setLightboxIndex(lightboxIndex + 1)
               }}
             >
-              <ChevronRight className="h-10 w-10" />
+              <ChevronRight className="h-8 w-8 sm:h-10 sm:w-10" />
             </button>
           )}
 
@@ -218,9 +220,9 @@ export function GalleryDetailPage() {
             </span>
 
             {/* Colors Palette in Lightbox */}
-            {images[lightboxIndex].colors && images[lightboxIndex].colors.length > 0 && (
+          {images[lightboxIndex].colors && images[lightboxIndex].colors.length > 0 && (
               <div
-                className="mt-6 flex gap-3 p-3 rounded-full bg-white/5 backdrop-blur-md border border-white/10"
+                className="mt-6 flex max-w-full flex-wrap justify-center gap-3 border border-white/10 bg-white/5 p-3 backdrop-blur-md"
                 onClick={(e) => e.stopPropagation()}
               >
                 {images[lightboxIndex].colors!.map((c, i) => (
@@ -231,7 +233,7 @@ export function GalleryDetailPage() {
                       e.preventDefault()
                       handleColorSearch(c.hsv.h, c.hsv.s, c.hsv.v, c.hex)
                     }}
-                    className="w-8 h-8 rounded-full border-2 border-white/20 shadow-lg transition-transform hover:scale-125 focus:outline-none focus:border-white"
+                    className="h-8 w-8 border border-white/20 transition-transform hover:scale-125 focus:outline-none focus:border-white"
                     style={{ backgroundColor: c.hex }}
                     title={`HSV: ${c.hsv.h},${c.hsv.s},${c.hsv.v} (${c.percentage}%)`}
                   />
@@ -244,35 +246,39 @@ export function GalleryDetailPage() {
 
       {/* ── Search Results Overlay ── */}
       {searchColors && (
-        <div className="fixed inset-0 z-[100] bg-background/95 backdrop-blur-sm overflow-y-auto flex flex-col">
-          <div className="sticky top-0 bg-background/80 backdrop-blur border-b border-border p-4 flex items-center justify-between z-10">
-            <div className="flex items-center gap-3">
-              <div 
-                className="w-6 h-6 rounded-full border border-border shadow-sm" 
-                style={{ backgroundColor: searchColors.hex }} 
-              />
-              <h2 className="font-medium text-foreground">{t('globalColorTracking')}</h2>
-              <span className="text-muted-foreground text-sm ml-2">
-                {searchingColors ? t('searching') : t('searchResultCount', { count: similarImages.length })}
-              </span>
+        <div className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-background/95 backdrop-blur-sm">
+          <div className="sticky top-0 z-10 border-b border-border bg-background/80 p-4 backdrop-blur">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div
+                  className="h-6 w-6 border border-border"
+                  style={{ backgroundColor: searchColors.hex }}
+                />
+                <div className="min-w-0">
+                  <h2 className="font-serif text-xl tracking-[-0.03em] text-foreground">{t('globalColorTracking')}</h2>
+                  <span className="block text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                    {searchingColors ? t('searching') : t('searchResultCount', { count: similarImages.length })}
+                  </span>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setSearchColors(null)}>
+                <X className="h-5 w-5" />
+              </Button>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => setSearchColors(null)}>
-              <X className="h-5 w-5" />
-            </Button>
           </div>
-          
-          <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full">
+
+          <div className="mx-auto w-full max-w-7xl p-4 sm:p-6 md:p-8">
             {searchingColors ? (
-              <div className="columns-2 sm:columns-3 md:columns-4 gap-2 sm:gap-4">
-                {[1,2,3,4,5,6,7,8].map((i) => (
-                  <Skeleton key={i} className="mb-2 sm:mb-4 w-full h-48 sm:h-64 rounded-sm" />
+              <div className="columns-1 gap-2 sm:columns-2 sm:gap-4 lg:columns-3 xl:columns-4">
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                  <Skeleton key={i} className="mb-2 h-48 w-full rounded-sm sm:mb-4 sm:h-64" />
                 ))}
               </div>
             ) : similarImages.length > 0 ? (
-              <div className="columns-2 sm:columns-3 md:columns-4 gap-2 sm:gap-4 [column-fill:_balance]">
+              <div className="columns-1 gap-2 [column-fill:_balance] sm:columns-2 sm:gap-4 lg:columns-3 xl:columns-4">
                 {similarImages.map((img) => (
                   <div key={img.id} className="break-inside-avoid mb-2 sm:mb-4 group">
-                    <div className="overflow-hidden rounded-sm bg-muted relative">
+                    <div className="relative overflow-hidden border border-border bg-muted">
                       <img 
                         src={img.image_url} 
                         alt="" 
@@ -280,9 +286,9 @@ export function GalleryDetailPage() {
                         loading="lazy" 
                       />
                       {img.similarity_score !== undefined && (
-                        <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-background/80 backdrop-blur border border-border text-foreground text-[10px] px-2 py-0.5 rounded-full shadow-sm font-mono z-10">
+                        <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 border border-border bg-background/80 px-2 py-0.5 font-mono text-[10px] text-foreground backdrop-blur">
                           {img.matched_color?.hex && (
-                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: img.matched_color.hex }} />
+                            <div className="h-2.5 w-2.5" style={{ backgroundColor: img.matched_color.hex }} />
                           )}
                           {img.similarity_score}%
                         </div>
@@ -293,7 +299,7 @@ export function GalleryDetailPage() {
               </div>
             ) : (
               <div className="py-20 text-center text-muted-foreground flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-full border-4 border-muted" style={{ backgroundColor: searchColors.hex }} />
+                <div className="h-12 w-12 border border-border" style={{ backgroundColor: searchColors.hex }} />
                 {t('noStyleWithColor')}
               </div>
             )}

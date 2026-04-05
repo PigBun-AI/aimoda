@@ -4,8 +4,8 @@ import chroma from 'chroma-js';
 import * as dotenv from 'dotenv';
 import path from 'path';
 
-// Load .env.deploy
-dotenv.config({ path: path.resolve(process.cwd(), '../../.env.deploy') });
+const defaultEnvFile = path.resolve(process.cwd(), '../../env/dev.env');
+dotenv.config({ path: process.env.AIMODA_ENV_FILE || defaultEnvFile });
 
 const { Pool } = pg;
 const pool = new Pool({

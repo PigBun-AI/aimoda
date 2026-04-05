@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+
 import type { ImageResult } from './chat-types'
 import type { SearchResponse } from './chat-api'
 import { FashionImage } from './fashion-image'
@@ -21,53 +22,49 @@ export function SearchResultsGrid({
   const { t } = useTranslation('common')
   const gridRef = useRef<HTMLDivElement>(null)
 
-  const { images, total, page, page_size, has_more } = searchResults
+  const { images, total, page, page_size } = searchResults
   const totalPages = Math.ceil(total / page_size)
 
-  const handleImageClick = useCallback(
-    (image: ImageResult) => {
-      // Always open in a new tab to avoid stacking navigation
-      window.open(`/image/${image.image_id}`, '_blank', 'noopener')
-    },
-    [],
-  )
+  const handleImageClick = useCallback((image: ImageResult) => {
+    window.open(`/image/${image.image_id}`, '_blank', 'noopener')
+  }, [])
 
   if (images.length === 0 && !isLoading) {
     return (
-      <div className="w-full max-w-[1784px] mt-6 mb-6 text-center py-12">
-        <p className="text-muted-foreground">{t('noRelatedImages')}</p>
+      <div className="mb-6 mt-6 w-full border border-border px-4 py-12 text-center sm:px-6">
+        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('noRelatedImages')}</p>
       </div>
     )
   }
 
   return (
-    <div ref={gridRef} className="w-full max-w-[1784px] mt-6 mb-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-foreground">
-          {labelName}
-          <span className="text-sm text-muted-foreground font-normal ml-2">
+    <div ref={gridRef} className="mb-6 mt-6 w-full border border-border">
+      <div className="grid gap-4 border-b border-border px-4 py-4 sm:px-6 sm:py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <h3 className="type-editorial-inline truncate text-foreground">
+            {labelName}
+          </h3>
+          <p className="type-kicker text-muted-foreground">
             {t('imageCountSummary', { count: total })}
-          </span>
-        </h3>
+          </p>
+        </div>
 
-        {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1 || isLoading}
-              className="h-8 w-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              className="control-icon-sm flex items-center justify-center border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="text-sm text-muted-foreground min-w-[60px] text-center">
+            <span className="type-kicker min-w-[72px] text-center text-muted-foreground">
               {page} / {totalPages}
             </span>
             <button
               onClick={() => onPageChange(page + 1)}
-              disabled={!has_more || isLoading}
-              className="h-8 w-8 flex items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+              disabled={page >= totalPages || isLoading}
+              className="control-icon-sm flex items-center justify-center border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronRight size={16} />
             </button>
@@ -75,35 +72,34 @@ export function SearchResultsGrid({
         )}
       </div>
 
-      {/* Loading overlay */}
       {isLoading && (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          <span className="ml-2 text-sm text-muted-foreground">{t('searching')}</span>
+        <div className="flex items-center justify-center gap-2 px-4 py-16 sm:px-6">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <span className="type-kicker text-muted-foreground">{t('searching')}</span>
         </div>
       )}
 
-      {/* Image Grid */}
       {!isLoading && (
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2">
-          {images.map((image) => (
+        <div className="grid grid-cols-2 gap-px bg-border md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+          {images.map(image => (
             <div
               key={image.image_id}
-              className="relative group cursor-pointer overflow-hidden bg-muted"
+              className="group relative cursor-pointer overflow-hidden bg-background"
               style={{ aspectRatio: '1 / 2' }}
               onClick={() => handleImageClick(image)}
             >
-              <FashionImage image={image} className="w-full h-full" />
-              {/* Hover overlay with brand info */}
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors pointer-events-none" />
+              <FashionImage image={image} className="h-full w-full" thumbnailWidth={1280} />
+              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
               {(image.brand || image.year) && (
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="text-white text-xs space-y-0.5">
+                <div className="absolute inset-x-0 bottom-0 border-t border-white/15 bg-gradient-to-t from-black/72 to-transparent p-3 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="space-y-1 text-white">
                     {image.brand && (
-                      <div className="font-semibold truncate">{image.brand}</div>
+                      <div className="type-kicker truncate">
+                        {image.brand}
+                      </div>
                     )}
                     {image.year && (
-                      <div className="text-white/80">{image.year}</div>
+                      <div className="type-meta text-white/75">{image.year}</div>
                     )}
                   </div>
                 </div>
@@ -113,24 +109,23 @@ export function SearchResultsGrid({
         </div>
       )}
 
-      {/* Bottom pagination */}
       {totalPages > 1 && !isLoading && (
-        <div className="flex items-center justify-center gap-2 mt-6">
+        <div className="flex flex-wrap items-center justify-center gap-2 border-t border-border px-4 py-4 sm:px-6">
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
-            className="h-8 px-3 flex items-center gap-1 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            className="type-action-label control-pill-sm flex items-center gap-1 border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
           >
             <ChevronLeft size={14} />
             {t('previous')}
           </button>
-          <span className="text-sm text-muted-foreground">
+          <span className="type-kicker min-w-[72px] text-center text-muted-foreground">
             {page} / {totalPages}
           </span>
           <button
             onClick={() => onPageChange(page + 1)}
-            disabled={!has_more}
-            className="h-8 px-3 flex items-center gap-1 rounded-md border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            disabled={page >= totalPages || isLoading}
+            className="type-action-label control-pill-sm flex items-center gap-1 border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
           >
             {t('next')}
             <ChevronRight size={14} />

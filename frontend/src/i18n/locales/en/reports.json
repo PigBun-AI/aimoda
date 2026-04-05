@@ -11,5 +11,12 @@
   "backToList": "Back to List",
   "previousArticle": "Previous",
   "nextArticle": "Next",
-  "iframeError": "This article URL does not meet security loading policy"
+  "iframeError": "This article URL does not meet security loading policy",
+  "draft": "Draft",
+  "pagination": "Pagination",
+  "archiveLabel": "aimoda archive",
+  "lockedEyebrow": "Membership Access",
+  "lockedTitle": "Full runway reports require membership access",
+  "lockedBody": "Redeem a membership code to open the full archive, editorial breakdowns, and report viewer.",
+  "openMembership": "Open membership"
 }

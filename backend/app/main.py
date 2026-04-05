@@ -12,6 +12,9 @@ from .exceptions import AppError
 from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries, report_mcp_internal
 from .services.report_upload_job_service import recover_report_upload_jobs
 
+PG_REPORT_SCHEMA_LOCK_KEY = 4201001
+PG_CHAT_SCHEMA_LOCK_KEY = 4201002
+
 
 def _init_pg_report_schema():
     """Initialize PostgreSQL report tables (idempotent)."""
@@ -23,8 +26,10 @@ def _init_pg_report_schema():
     schema = sql_path.read_text(encoding="utf-8")
     try:
         with psycopg.connect(settings.POSTGRES_DSN) as conn:
+            conn.execute("SELECT pg_advisory_lock(%s)", (PG_REPORT_SCHEMA_LOCK_KEY,))
             conn.execute(schema)
             conn.commit()
+            conn.execute("SELECT pg_advisory_unlock(%s)", (PG_REPORT_SCHEMA_LOCK_KEY,))
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Failed to init PG report schema: %s", e)
@@ -40,6 +45,7 @@ def _init_pg_chat_schema():
     schema = sql_path.read_text(encoding="utf-8")
     try:
         with psycopg.connect(settings.POSTGRES_DSN) as conn:
+            conn.execute("SELECT pg_advisory_lock(%s)", (PG_CHAT_SCHEMA_LOCK_KEY,))
             conn.execute(schema)
             conn.execute("""
                 ALTER TABLE IF EXISTS artifacts
@@ -54,6 +60,7 @@ def _init_pg_chat_schema():
                 ))
             """)
             conn.commit()
+            conn.execute("SELECT pg_advisory_unlock(%s)", (PG_CHAT_SCHEMA_LOCK_KEY,))
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Failed to init PG chat schema: %s", e)

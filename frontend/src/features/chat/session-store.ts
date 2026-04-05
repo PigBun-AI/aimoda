@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from 'react'
 import i18n from '@/i18n'
 import type { ChatSession } from './chat-types'
+import { removeSessionMessages, resetChatMessageStore } from './chat-message-store'
 import {
   listSessions as apiListSessions,
   createSession as apiCreateSession,
@@ -136,11 +137,12 @@ function reconcileFetchedSession(previous: ChatSession | undefined, incoming: Ch
   if (!previous) return incoming
 
   const previousUpdatedAt = sessionTime(previous.updated_at)
-  const previousStartedAt = sessionTime(previous.last_run_started_at)
   const incomingUpdatedAt = sessionTime(incoming.updated_at)
-  const incomingStartedAt = sessionTime(incoming.last_run_started_at)
   const previousTitleSource = previous.title_source ?? 'default'
   const incomingTitleSource = incoming.title_source ?? 'default'
+  const previousRunId = previous.current_run_id ?? null
+  const incomingRunId = incoming.current_run_id ?? null
+  const incomingLastRunId = incoming.last_run_id ?? null
 
   let next = incoming
 
@@ -161,14 +163,19 @@ function reconcileFetchedSession(previous: ChatSession | undefined, incoming: Ch
     }
   }
 
-  if (
+  const shouldPreserveOptimisticRun =
     previous.execution_status === 'running' &&
     next.execution_status === 'idle' &&
-    previousStartedAt > incomingStartedAt
-  ) {
+    Boolean(previousRunId) &&
+    incomingRunId !== previousRunId &&
+    incomingLastRunId !== previousRunId
+
+  if (shouldPreserveOptimisticRun) {
     return {
       ...next,
       execution_status: previous.execution_status,
+      current_run_id: previous.current_run_id,
+      last_run_id: previous.last_run_id,
       last_run_started_at: previous.last_run_started_at,
       last_run_completed_at: previous.last_run_completed_at,
       last_run_error: previous.last_run_error,
@@ -226,12 +233,13 @@ export function setActiveSessionId(id: string | null) {
 
 export function resetSessionStore() {
   store = { ...initialStore }
+  resetChatMessageStore()
   emit()
 }
 
-export async function createNewSession(): Promise<ChatSession | null> {
+export async function createNewSession(title?: string): Promise<ChatSession | null> {
   try {
-    const session = await apiCreateSession()
+    const session = await apiCreateSession(title ?? '新对话')
     const nextSessions = sortSessions([session, ...store.sessions])
     store = {
       ...store,
@@ -280,14 +288,25 @@ export function markSessionExecutionStatus(
   id: string,
   executionStatus: ChatSession['execution_status'],
   errorMessage?: string | null,
+  runId?: string | null,
 ) {
   const nextSessions = store.sessions.map(session => {
     if (session.id !== id) return session
 
     const now = new Date().toISOString()
+    const resolvedRunId =
+      runId
+      ?? session.current_run_id
+      ?? session.last_run_id
+      ?? `pending-${id}-${Date.now()}`
     return {
       ...session,
       execution_status: executionStatus,
+      current_run_id:
+        executionStatus === 'running'
+          ? resolvedRunId
+          : null,
+      last_run_id: resolvedRunId,
       last_run_started_at: executionStatus === 'running' ? now : session.last_run_started_at,
       last_run_completed_at:
         executionStatus === 'completed' || executionStatus === 'error'
@@ -309,6 +328,7 @@ export function primeSessionForImmediateRun(
   id: string,
   patch?: {
     title?: string | null
+    runId?: string | null
   },
 ) {
   const now = new Date().toISOString()
@@ -317,15 +337,41 @@ export function primeSessionForImmediateRun(
 
     const canPromoteTitle = !session.title_locked && (session.message_count ?? 0) === 0
     const nextTitle = canPromoteTitle && patch?.title?.trim() ? patch.title.trim() : session.title
+    const nextRunId =
+      patch?.runId
+      ?? session.current_run_id
+      ?? session.last_run_id
+      ?? `pending-${id}-${Date.now()}`
     return {
       ...session,
       title: nextTitle,
       title_source: nextTitle !== session.title ? 'heuristic' : session.title_source,
       execution_status: 'running' as const,
+      current_run_id: nextRunId,
+      last_run_id: nextRunId,
       last_run_started_at: now,
       last_run_error: null,
       message_count: Math.max(session.message_count ?? 0, 1),
       updated_at: now,
+    }
+  })
+
+  store = {
+    ...store,
+    sessions: sortSessions(nextSessions),
+  }
+  emit()
+}
+
+export function syncSessionRunId(id: string, runId: string) {
+  const nextSessions = store.sessions.map(session => {
+    if (session.id !== id) return session
+    if (session.current_run_id === runId && session.last_run_id === runId) return session
+
+    return {
+      ...session,
+      current_run_id: session.execution_status === 'running' ? runId : null,
+      last_run_id: runId,
     }
   })
 
@@ -351,6 +397,7 @@ export async function removeSession(id: string): Promise<{ nextActiveSessionId: 
       activeSessionId: nextActiveSessionId,
       notifications: store.notifications.filter(item => item.sessionId !== id),
     }
+    removeSessionMessages(id)
     emit()
     return { nextActiveSessionId, removedActive }
   } catch (e) {
@@ -386,6 +433,7 @@ export function useSessionStore() {
     renameSession,
     toggleSessionPinned,
     primeSessionForImmediateRun,
+    syncSessionRunId,
     markSessionExecutionStatus,
     removeSession,
     dismissSessionNotification,

@@ -11,12 +11,39 @@ def test_derive_session_title_from_blocks_prefers_text():
     assert title == "蓝色的连衣裙，优雅通勤一点"
 
 
+def test_derive_session_title_from_blocks_strips_greetings():
+    title = service.derive_session_title_from_blocks([
+        {"type": "text", "text": "你好，请帮我找一些极简风格的白色衬衫"},
+    ])
+
+    assert title == "一些极简风格的白色衬衫"
+
+
 def test_derive_session_title_from_blocks_supports_image_only():
     title = service.derive_session_title_from_blocks([
         {"type": "image", "source": {"type": "url", "url": "https://example.com/look.jpg"}},
     ])
 
     assert title == service.IMAGE_SEARCH_SESSION_TITLE
+
+
+def test_derive_session_title_from_turn_uses_style_tool_result():
+    title = service.derive_session_title_from_turn(
+        [{"type": "text", "text": "你好，帮我分析一下这个风格"}],
+        [{
+            "type": "tool_result",
+            "tool_use_id": "tool-1",
+            "content": '{"primary_style":{"style_name":"Swiss Negative"}}',
+        }],
+    )
+
+    assert title == "Swiss Negative风格解析"
+
+
+def test_sanitize_generated_title_strips_think_blocks():
+    title = service._sanitize_generated_title("<think>先分析用户意图</think> 红色连衣裙检索")
+
+    assert title == "红色连衣裙检索"
 
 
 def test_derive_session_title_from_blocks_supports_multi_image_only():
@@ -30,6 +57,30 @@ def test_derive_session_title_from_blocks_supports_multi_image_only():
 
 def test_build_runtime_thread_id_includes_version():
     assert service.build_runtime_thread_id(7, "session-123", 3) == "7:session-123:v3"
+
+
+def test_merge_session_state_tracks_current_and_last_run_id():
+    running = service._merge_session_state(
+        {},
+        execution_status="running",
+        run_id="run-123",
+    )
+
+    runtime_running = running["runtime"]
+    assert runtime_running["execution_status"] == "running"
+    assert runtime_running["current_run_id"] == "run-123"
+    assert runtime_running["last_run_id"] == "run-123"
+
+    completed = service._merge_session_state(
+        running,
+        execution_status="completed",
+        run_id="run-123",
+    )
+
+    runtime_completed = completed["runtime"]
+    assert runtime_completed["execution_status"] == "completed"
+    assert runtime_completed["current_run_id"] is None
+    assert runtime_completed["last_run_id"] == "run-123"
 
 
 def test_maybe_compact_session_rolls_thread_version(monkeypatch):

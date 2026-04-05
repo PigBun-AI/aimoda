@@ -1,22 +1,21 @@
-import { useState, useCallback } from 'react'
-import { BarChart3, FileText, UserCog, Ticket, User, LogOut, Image as ImageIcon, Tags } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { BarChart3, FileText, Image as ImageIcon, LogOut, Tags, Ticket, User, UserCog } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { queryClient } from '@/main'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { queryClient } from '@/main'
 import { Button } from '@/components/ui/button'
-import { RedeemDialog } from '@/features/redemption/redeem-dialog'
-import { useMySubscription } from '@/features/redemption/use-redeem'
-import { getSessionUser, clearSession } from '@/features/auth/protected-route'
+import { clearSession, getSessionUser } from '@/features/auth/protected-route'
 import { DashboardPage } from '@/features/admin/dashboard-page'
 import { ArticlesPage } from '@/features/admin/articles-page'
 import { AdminPage } from '@/features/admin/admin-page'
 import { RedemptionCodesPage } from '@/features/admin/redemption-codes-page'
 import { AdminGalleriesPage } from '@/features/admin/admin-galleries-page'
 import { StyleGapPage } from '@/features/admin/style-gap-page'
+import { MembershipOverview } from '@/features/membership/membership-overview'
+import { useMembershipStatus } from '@/features/membership/use-membership'
 
-type TabId = 'profile' | 'dashboard' | 'articles' | 'galleries' | 'styleGaps' | 'users' | 'redemption'
+type TabId = 'profile' | 'access' | 'dashboard' | 'articles' | 'galleries' | 'styleGaps' | 'users' | 'redemption'
 
 interface TabConfig {
   id: TabId
@@ -28,10 +27,11 @@ interface TabConfig {
 export function ProfilePage() {
   const { t } = useTranslation('common')
   const currentUser = getSessionUser()
-  const [activeTab, setActiveTab] = useState<TabId>('profile')
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const tabs: TabConfig[] = [
     { id: 'profile', labelKey: 'profileTab', icon: User },
+    { id: 'access', labelKey: 'accessTab', icon: Ticket },
     { id: 'dashboard', labelKey: 'dashboardTab', icon: BarChart3, requiresAdmin: true },
     { id: 'articles', labelKey: 'articlesTab', icon: FileText, requiresAdmin: true },
     { id: 'galleries', labelKey: 'galleriesTab', icon: ImageIcon, requiresAdmin: true },
@@ -41,10 +41,20 @@ export function ProfilePage() {
   ]
 
   const visibleTabs = tabs.filter(tab => !tab.requiresAdmin || currentUser?.role === 'admin')
+  const resolveTab = (value: string | null): TabId => (
+    visibleTabs.some(tab => tab.id === value) ? (value as TabId) : 'profile'
+  )
+  const [activeTab, setActiveTab] = useState<TabId>(() => resolveTab(searchParams.get('tab')))
+
+  useEffect(() => {
+    const nextTab = resolveTab(searchParams.get('tab'))
+    setActiveTab(current => (current === nextTab ? current : nextTab))
+  }, [searchParams, visibleTabs])
 
   const renderTabContent = () => {
     switch (activeTab) {
       case 'profile': return <ProfileContent />
+      case 'access': return <AccessContent />
       case 'dashboard': return <DashboardPage />
       case 'articles': return <ArticlesPage />
       case 'galleries': return <AdminGalleriesPage />
@@ -56,35 +66,63 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="font-sans">
-      <div className="relative mb-6">
-        <div className="flex items-center gap-1 pb-3 overflow-x-auto border-b border-border scrollbar-hide font-sans">
+    <section className="space-y-8 font-sans">
+      <header className="grid gap-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.78fr)] lg:gap-8 lg:pt-6">
+        <div className="space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {currentUser?.role ?? 'guest'}
+          </p>
+          <h1 className="max-w-[12ch] font-serif text-[2.25rem] font-medium leading-[0.96] tracking-[-0.04em] text-foreground sm:text-[3.2rem]">
+            {currentUser?.name ?? t('profileTab')}
+          </h1>
+        </div>
+        <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <p className="max-w-[32ch] break-all text-[11px] uppercase leading-5 tracking-[0.14em] text-muted-foreground">
+            {currentUser?.email ?? currentUser?.phone ?? t('notSet')}
+          </p>
+          <div className="flex items-center justify-between border-t border-border pt-3 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            <span>{t('profile.accountLabel')}</span>
+            <span>{String(visibleTabs.length).padStart(2, '0')}</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="relative">
+        <div className="scrollbar-hide flex items-center gap-4 overflow-x-auto border-b border-border font-sans sm:gap-5">
           {visibleTabs.map(tab => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id)
+                  const nextParams = new URLSearchParams(searchParams)
+                  if (tab.id === 'profile') {
+                    nextParams.delete('tab')
+                  } else {
+                    nextParams.set('tab', tab.id)
+                  }
+                  setSearchParams(nextParams, { replace: true })
+                }}
                 className={[
-                  'flex items-center gap-2 px-4 py-2 text-sm rounded-lg transition-all duration-fast whitespace-nowrap cursor-pointer font-sans',
-                  isActive ? 'bg-accent text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground',
+                  'relative flex items-center gap-2 whitespace-nowrap border-b pb-3 text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors duration-fast cursor-pointer font-sans',
+                  isActive ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
-                <Icon size={16} />
+                <Icon size={14} />
                 {t(tab.labelKey)}
               </button>
             )
           })}
         </div>
-        {/* 右侧渐变提示 - 仅在内容可滚动时显示 */}
-        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent pointer-events-none" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
       </div>
 
       <div className="animate-fade-in font-sans">
         {renderTabContent()}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -92,7 +130,6 @@ function ProfileContent() {
   const { t } = useTranslation('common')
   const navigate = useNavigate()
   const currentUser = getSessionUser()
-  const { data: subscription } = useMySubscription()
 
   const handleLogout = useCallback(() => {
     queryClient.clear()
@@ -101,59 +138,108 @@ function ProfileContent() {
   }, [navigate])
 
   return (
-    <div className="max-w-lg font-sans">
-      <h2 className="mb-6 text-2xl sm:text-3xl font-medium text-foreground">{t('profileTab')}</h2>
+    <div className="grid max-w-4xl gap-4 font-sans lg:grid-cols-[minmax(0,1.3fr)_minmax(240px,0.7fr)]">
+      <section className="border border-border">
+        <div className="grid gap-5 border-b border-border px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(150px,0.48fr)]">
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {t('profile.accountEyebrow')}
+            </p>
+            <h2 className="font-serif text-[1.65rem] font-medium leading-[0.98] tracking-[-0.035em] text-foreground sm:text-[2rem]">
+              {t('profile.accountTitle')}
+            </h2>
+          </div>
+
+          <div className="flex flex-col justify-end gap-3 border-t border-border pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+            <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              {currentUser?.role ?? 'guest'}
+            </p>
+            <div className="flex items-center justify-between border-t border-border pt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <span>{t('profile.fieldsLabel')}</span>
+              <span>03</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5">
+          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border py-4 sm:flex-row sm:items-center sm:gap-6">
+            <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('username')}</span>
+            <span className="text-sm font-medium text-foreground sm:text-right">{currentUser?.name ?? t('notSet')}</span>
+          </div>
+          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border py-4 sm:flex-row sm:items-center sm:gap-6">
+            <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('role')}</span>
+            <span className="text-sm font-medium uppercase tracking-[0.14em] text-foreground sm:text-right">{currentUser?.role ?? 'guest'}</span>
+          </div>
+          <div className="flex flex-col items-start justify-between gap-1.5 py-4 sm:flex-row sm:items-center sm:gap-6">
+            <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('email')}</span>
+            <span className="break-all text-sm font-medium text-foreground sm:text-right">{currentUser?.email ?? currentUser?.phone ?? t('notSet')}</span>
+          </div>
+        </div>
+      </section>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between py-3 border-b border-border">
-          <span className="text-sm text-muted-foreground">{t('username')}</span>
-          <span className="text-sm font-medium text-foreground">{currentUser?.name ?? t('notSet')}</span>
+        <div className="border border-border bg-card p-5 text-sm text-muted-foreground">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {t('membership.profileTitle')}
+          </p>
+          <p className="mt-3 max-w-[28ch] text-sm leading-6 text-muted-foreground">
+            {t('membership.profileHint')}
+          </p>
         </div>
-        <div className="flex items-center justify-between py-3 border-b border-border">
-          <span className="text-sm text-muted-foreground">{t('role')}</span>
-          <span className="text-sm font-medium uppercase tracking-wider text-foreground">{currentUser?.role ?? 'guest'}</span>
-        </div>
-        <div className="flex items-center justify-between py-3 border-b border-border">
-          <span className="text-sm text-muted-foreground">{t('email')}</span>
-          <span className="text-sm font-medium text-foreground">{currentUser?.email ?? t('notSet')}</span>
+
+        <div className="flex flex-col gap-2">
+          <Button
+            variant="outline"
+            className="w-full justify-between gap-2"
+            onClick={handleLogout}
+          >
+            <span>{t('common:logout')}</span>
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </div>
+    </div>
+  )
+}
 
-      {/* 订阅信息区块 */}
-      <Card className="mt-4">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">{t('common:subscription')}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-1">
-          {subscription ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                {subscription.status === 'active' ? t('common:subscriptionActive') : t('common:subscriptionInactive')}
-              </p>
-              {subscription.endsAt && (
-                <p className="text-xs text-muted-foreground">
-                  {t('common:expiresAt')}: {new Date(subscription.endsAt).toLocaleDateString()}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t('common:noSubscription')}</p>
-          )}
-        </CardContent>
-      </Card>
+function AccessContent() {
+  const { t } = useTranslation('common')
+  const { planLabel, aiQuotaLabel, hasSubscription } = useMembershipStatus()
 
-      {/* 操作按钮区块 */}
-      <div className="flex flex-col gap-2 mt-4">
-        <RedeemDialog />
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2"
-          onClick={handleLogout}
-        >
-          <LogOut className="w-4 h-4" />
-          {t('common:logout')}
-        </Button>
-      </div>
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-4 border border-border px-5 py-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(220px,0.75fr)] sm:px-6">
+        <div className="space-y-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {t('accessTab')}
+          </p>
+          <h2 className="font-serif text-[1.75rem] font-medium leading-[0.96] tracking-[-0.04em] text-foreground sm:text-[2.15rem]">
+            {t('membership.profileTitle')}
+          </h2>
+          <p className="max-w-[40ch] text-sm leading-6 text-muted-foreground">
+            {t('membership.profileHint')}
+          </p>
+        </div>
+
+        <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border pb-3 sm:flex-row sm:items-center sm:gap-4">
+            <span>{t('membership.currentPlan')}</span>
+            <span className="text-foreground">{planLabel}</span>
+          </div>
+          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border pb-3 sm:flex-row sm:items-center sm:gap-4">
+            <span>{t('membership.currentQuota')}</span>
+            <span className="text-foreground">{aiQuotaLabel}</span>
+          </div>
+          <div className="flex flex-col items-start justify-between gap-1.5 sm:flex-row sm:items-center sm:gap-4">
+            <span>{t('membership.reportAccess')}</span>
+            <span className="text-foreground">
+              {hasSubscription ? t('membership.reportsUnlocked') : t('membership.reportsLocked')}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <MembershipOverview showHeader={false} compact />
     </div>
   )
 }

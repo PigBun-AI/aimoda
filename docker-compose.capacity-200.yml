@@ -1,0 +1,116 @@
+services:
+  api:
+    environment:
+      API_WORKERS: ${API_WORKERS:-4}
+      API_BACKLOG: ${API_BACKLOG:-1024}
+      API_KEEP_ALIVE_TIMEOUT: ${API_KEEP_ALIVE_TIMEOUT:-30}
+    cpus: "6"
+    mem_limit: 6g
+    mem_reservation: 2g
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    deploy:
+      resources:
+        limits:
+          cpus: "6"
+          memory: 6g
+        reservations:
+          cpus: "2"
+          memory: 2g
+
+  postgres:
+    cpus: "2"
+    mem_limit: 2g
+    mem_reservation: 1g
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2g
+        reservations:
+          cpus: "1"
+          memory: 1g
+
+  redis:
+    cpus: "1"
+    mem_limit: 1g
+    mem_reservation: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1g
+        reservations:
+          cpus: "0.25"
+          memory: 256m
+
+  frontend:
+    cpus: "1"
+    mem_limit: 768m
+    mem_reservation: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 768m
+        reservations:
+          cpus: "0.25"
+          memory: 256m
+
+  nginx:
+    cpus: "1"
+    mem_limit: 768m
+    mem_reservation: 256m
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 768m
+        reservations:
+          cpus: "0.25"
+          memory: 256m
+
+  style-knowledge-mcp:
+    cpus: "1"
+    mem_limit: 768m
+    mem_reservation: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 768m
+        reservations:
+          cpus: "0.25"
+          memory: 256m
+
+  inspiration-gallery-mcp:
+    cpus: "1"
+    mem_limit: 768m
+    mem_reservation: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 768m
+        reservations:
+          cpus: "0.25"
+          memory: 256m
+
+  fashion-report-mcp:
+    cpus: "0.5"
+    mem_limit: 256m
+    mem_reservation: 128m
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256m
+        reservations:
+          cpus: "0.25"
+          memory: 128m

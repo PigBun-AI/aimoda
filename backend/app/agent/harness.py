@@ -16,6 +16,7 @@ class TurnContext(TypedDict, total=False):
     inferred_categories: list[str]
     session_categories: list[str]
     primary_category: str
+    brand_only_request: bool
     active_skill: str
     request_mode: str
     invalid_filter_attempts: dict[str, int]
@@ -52,6 +53,20 @@ def infer_categories_from_text(text: str) -> list[str]:
     return list(dict.fromkeys(found))
 
 
+def infer_brand_only_request(text: str) -> bool:
+    normalized = text.strip().lower()
+    if not normalized:
+        return False
+
+    exclusivity_markers = ("只看", "只要", "仅看", "只需", "只想看", "only", "just")
+    brand_markers = ("品牌", "牌子", "brand")
+
+    has_exclusivity = any(marker in normalized for marker in exclusivity_markers)
+    has_brand_marker = any(marker in normalized for marker in brand_markers)
+
+    return has_exclusivity and has_brand_marker
+
+
 def build_turn_context(
     *,
     query_text: str,
@@ -70,6 +85,7 @@ def build_turn_context(
         "inferred_categories": inferred_categories,
         "session_categories": session_categories,
         "primary_category": primary_category,
+        "brand_only_request": infer_brand_only_request(query_text),
         "active_skill": "multimodal_retrieval" if has_images else "text_retrieval",
         "request_mode": "refine_existing_collection" if session_active else "new_search",
         "invalid_filter_attempts": {},
@@ -272,5 +288,11 @@ def build_turn_playbook(context: TurnContext) -> str:
         lines.append(
             f"recommended_next_filters=category:{primary_category} before garment attributes if session has no category yet"
         )
+
+    if context.get("brand_only_request"):
+        lines.append("request_focus=single_brand_only")
+        lines.append("single_brand_request_prefers_direct_brand_filter=true")
+        lines.append("single_brand_filter_dimension=brand")
+        lines.append("single_brand_request_should_skip_trend_analysis_until_brand_filter_fails=true")
 
     return "\n".join(lines)

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from ..dependencies import get_current_user, require_role
 from ..models import AuthenticatedUser, CreateUserRequest
+from ..services.feature_access_service import get_user_membership_snapshot
 from ..services.user_service import get_users, register_user
 from ..services.subscription_service import get_user_subscription
 
@@ -31,4 +32,12 @@ def get_my_subscription(user: Annotated[AuthenticatedUser, Depends(get_current_u
     return {
         "success": True,
         "data": subscription.model_dump(by_alias=True) if subscription else None,
+    }
+
+
+@router.get("/me/membership")
+def get_my_membership(user: Annotated[AuthenticatedUser, Depends(get_current_user)]):
+    return {
+        "success": True,
+        "data": get_user_membership_snapshot(user),
     }
