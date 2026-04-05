@@ -19,7 +19,7 @@ import { queryClient } from '@/main'
 import { saveSession } from './protected-route'
 
 const COUNTDOWN_SECONDS = 60
-const AUTH_INPUT_CLASS = 'h-12 rounded-none border border-border bg-background px-4 text-[14px] tracking-[0.01em]'
+const AUTH_INPUT_CLASS = 'h-12 rounded-none border border-border bg-background px-4 text-sm leading-[1.45]'
 
 export function LoginDialog() {
   const { t } = useTranslation(['auth', 'common'])
@@ -177,16 +177,16 @@ export function LoginDialog() {
           <aside className="flex flex-col justify-between border-b border-border bg-background px-6 py-6 md:border-b-0 md:border-r md:px-8 md:py-8">
             <div className="space-y-8">
               <div className="space-y-4 border-b border-border pb-6">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                <p className="type-kicker-wide text-muted-foreground">
                   aimoda
                 </p>
                 <div className="space-y-4">
                   <img src="/aimoda-logo.svg" alt="aimoda" className="h-7 dark:hidden" />
                   <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-7 dark:block" />
-                  <h2 className="max-w-[12ch] font-serif text-[2rem] font-medium leading-[0.92] tracking-[-0.045em] text-foreground sm:text-[2.45rem]">
+                  <h2 className="type-page-title max-w-[11ch] text-foreground sm:text-[2.7rem]">
                     {mode === 'sms' ? t('common:smsLogin') : t('common:emailLogin')}
                   </h2>
-                  <p className="max-w-[30ch] text-[11px] leading-5 tracking-[0.06em] text-muted-foreground">
+                  <p className="type-body-muted max-w-[30ch] text-muted-foreground">
                     {mode === 'sms' ? t('auth:loginToView') : t('auth:welcomeBack')}
                   </p>
                 </div>
@@ -197,7 +197,7 @@ export function LoginDialog() {
                   <div
                     key={item}
                     className={cn(
-                      'flex items-center justify-between px-4 py-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground',
+                      'type-kicker flex items-center justify-between px-4 py-4 text-muted-foreground',
                       index < productLines.length - 1 && 'border-b border-border',
                     )}
                   >
@@ -211,10 +211,10 @@ export function LoginDialog() {
             <div className="grid gap-4 border-t border-border pt-6">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2 sm:pr-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  <p className="type-kicker text-muted-foreground">
                     {t('auth:serviceTitle')}
                   </p>
-                  <p className="max-w-[24ch] text-[11px] leading-5 tracking-[0.04em] text-muted-foreground">
+                  <p className="type-body-sm max-w-[24ch] text-muted-foreground">
                     {t('auth:serviceHint')}
                   </p>
                 </div>
@@ -226,7 +226,7 @@ export function LoginDialog() {
           <section className="flex flex-col justify-between px-6 py-6 md:px-8 md:py-8">
             <div className="space-y-6 lg:pr-6">
               <div className="space-y-5 border-b border-border pb-5">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                <p className="type-kicker text-muted-foreground">
                   {t('auth:authMethods')}
                 </p>
 
@@ -241,7 +241,7 @@ export function LoginDialog() {
                         key={value}
                         type="button"
                         className={cn(
-                          'h-11 border px-4 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors',
+                          'type-action-label h-11 border px-4 transition-colors',
                           active
                             ? 'border-foreground bg-foreground text-background'
                             : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
@@ -260,7 +260,7 @@ export function LoginDialog() {
               </div>
 
               {error && (
-                <div className="border border-foreground/20 bg-foreground/[0.03] px-4 py-3 text-[12px] leading-5 tracking-[0.03em] text-foreground dark:bg-foreground/[0.06]">
+                <div className="type-body-sm border border-foreground/20 bg-foreground/[0.03] px-4 py-3 text-foreground dark:bg-foreground/[0.06]">
                   {error}
                 </div>
               )}
@@ -268,7 +268,7 @@ export function LoginDialog() {
               {mode === 'sms' ? (
                 <form onSubmit={handleSmsLogin} className="space-y-5">
                   <div className="space-y-2.5">
-                    <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    <label className="type-kicker block text-muted-foreground">
                       {t('auth:mobileLabel')}
                     </label>
                     <Input
@@ -282,7 +282,7 @@ export function LoginDialog() {
                   </div>
 
                   <div className="space-y-2.5">
-                    <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    <label className="type-kicker block text-muted-foreground">
                       {t('auth:codeLabel')}
                     </label>
                     <div className="grid items-stretch gap-3 md:grid-cols-[minmax(0,1fr)_176px]">
@@ -313,7 +313,7 @@ export function LoginDialog() {
               ) : (
                 <form onSubmit={handleAdminLogin} className="space-y-5">
                   <div className="space-y-2.5">
-                    <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    <label className="type-kicker block text-muted-foreground">
                       {t('auth:email')}
                     </label>
                     <Input
@@ -328,7 +328,7 @@ export function LoginDialog() {
                   </div>
 
                   <div className="space-y-2.5">
-                    <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    <label className="type-kicker block text-muted-foreground">
                       {t('auth:password')}
                     </label>
                     <Input
@@ -349,7 +349,7 @@ export function LoginDialog() {
               )}
             </div>
 
-            <div className="mt-8 border-t border-border pt-4 text-[10px] leading-5 tracking-[0.04em] text-muted-foreground">
+            <div className="type-caption mt-8 border-t border-border pt-4 text-muted-foreground">
               {t('common:agreeToTerms')}
               <span className="mx-2 text-foreground">{t('common:userAgreement')}</span>
               <span>/</span>

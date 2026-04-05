@@ -25,7 +25,7 @@ function LoadingIndicator() {
         <div className="h-1.5 w-1.5 animate-pulse bg-primary" style={{ animationDelay: '0.25s' }} />
         <div className="h-1.5 w-1.5 animate-pulse bg-primary" style={{ animationDelay: '0.5s' }} />
       </div>
-      <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{t('agentThinking')}</span>
+      <span className="type-kicker text-muted-foreground">{t('agentThinking')}</span>
     </div>
   )
 }
@@ -41,10 +41,10 @@ function EmptyState() {
             <img src="/aimoda-logo.svg" alt="aimoda" className="h-8 w-auto dark:hidden" />
             <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-8 w-auto dark:block" />
             <div className="h-6 w-px bg-border" />
-            <span className="text-lg font-semibold uppercase tracking-[0.24em] text-foreground/88">{t('agent')}</span>
+            <span className="type-kicker-wide text-foreground/88">{t('agent')}</span>
           </div>
         </div>
-        <p className="mt-8 max-w-[42ch] text-[11px] uppercase leading-6 tracking-[0.14em] text-muted-foreground">
+        <p className="type-body-muted mt-8 max-w-[42ch] text-muted-foreground">
           {t('chatEmptyHint')}
         </p>
       </div>
@@ -242,10 +242,10 @@ export function ChatPage() {
         {isSessionRunning && (
           <div className="grid gap-3 border border-border/70 bg-background/78 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0 space-y-1">
-              <p className="type-kicker-wide text-muted-foreground/72">
+              <p className="type-ui-label-xs text-muted-foreground/72">
                 {t('parallelSearchEyebrow')}
               </p>
-              <p className="type-meta text-muted-foreground/88">
+              <p className="type-ui-meta text-muted-foreground/88">
                 {t('parallelSearchHint')}
               </p>
             </div>
@@ -263,15 +263,15 @@ export function ChatPage() {
         {(membershipBlocked || isLimitExceeded) && (
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0 space-y-1">
-              <p className="type-kicker-wide text-muted-foreground/72">
+              <p className="type-ui-label-xs text-muted-foreground/72">
                 {t('membership.chatAccessEyebrow')} · {planLabel}
               </p>
-              <p className={cn('type-meta truncate text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
+              <p className={cn('type-ui-meta truncate text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
                 {aiSummary}
               </p>
             </div>
             <div className="flex items-center gap-3 sm:justify-end">
-              <span className={cn('type-kicker control-pill-sm inline-flex items-center text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
+              <span className={cn('type-ui-label-sm control-pill-sm inline-flex items-center text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
                 {aiQuotaLabel}
               </span>
               <Link
@@ -347,7 +347,7 @@ export function ChatPage() {
                 <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
                   <button
                     onClick={() => setDrawerOpen(false)}
-                    className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+                    className="type-ui-label-sm flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <span>←</span>
                     <span>{t('backToChat')}</span>

@@ -311,7 +311,7 @@ function ShowCollectionPendingCard() {
         </div>
         <div className="inline-flex items-center gap-2 border border-border bg-background px-3 py-1.5">
           <Loader2 size={12} className="animate-spin text-muted-foreground" />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{t('generatingResults')}</span>
+          <span className="type-ui-label-sm text-muted-foreground">{t('generatingResults')}</span>
         </div>
       </div>
     </div>
@@ -346,15 +346,15 @@ function ToolTraceGroup({
       >
         <div className="flex items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/80">{t('toolTraceTitle')}</span>
-          <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{t('toolCallsCount', { count: stats.toolCount })}</span>
-          {stats.runningCount > 0 && <span className="text-[10px] uppercase tracking-[0.12em] text-foreground">{t('toolRunningCount', { count: stats.runningCount })}</span>}
-          {stats.errorCount > 0 && <span className="text-[10px] uppercase tracking-[0.12em] text-foreground">{t('toolErrorCount', { count: stats.errorCount })}</span>}
+          <span className="type-ui-title-sm text-foreground/84">{t('toolTraceTitle')}</span>
+          <span className="type-ui-meta text-muted-foreground">{t('toolCallsCount', { count: stats.toolCount })}</span>
+          {stats.runningCount > 0 && <span className="type-ui-meta text-foreground">{t('toolRunningCount', { count: stats.runningCount })}</span>}
+          {stats.errorCount > 0 && <span className="type-ui-meta text-foreground">{t('toolErrorCount', { count: stats.errorCount })}</span>}
           {stats.toolCount > 0 && stats.runningCount === 0 && stats.errorCount === 0 && (
-            <span className="text-[10px] uppercase tracking-[0.12em] text-foreground">{t('toolDoneCount', { count: stats.doneCount })}</span>
+            <span className="type-ui-meta text-foreground">{t('toolDoneCount', { count: stats.doneCount })}</span>
           )}
         </div>
-        <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">{collapsed ? t('expand') : t('collapse')}</span>
+        <span className="type-ui-meta text-muted-foreground">{collapsed ? t('expand') : t('collapse')}</span>
       </button>
 
       {!collapsed && (
@@ -400,18 +400,18 @@ function ReasoningBlockView({ block }: { block: { type: 'reasoning'; text: strin
       >
         <div className="flex items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground/80">
+          <span className="type-ui-title-sm text-foreground/84">
             {t('reasoningTraceTitle')}
           </span>
         </div>
-        <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+        <span className="type-ui-meta text-muted-foreground">
           {collapsed ? t('expand') : t('collapse')}
         </span>
       </button>
 
       {!collapsed && (
         <div className="border-t border-border bg-background/60 px-4 py-3">
-          <div className="border-l border-border pl-3 text-sm leading-6 text-muted-foreground">
+          <div className="type-ui-body-md border-l border-border pl-3 text-muted-foreground">
             <ChatMarkdown content={block.text} />
           </div>
         </div>
@@ -433,8 +433,8 @@ function ToolCallCard({ block }: { block: { type: 'tool_use'; id: string; name: 
         <IconComp size={13} className="text-primary" />
       </div>
       <div className="flex items-center gap-2 min-w-0 flex-1">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/80">{label}</span>
-        {summary && <span className="truncate text-xs text-muted-foreground">{summary}</span>}
+        <span className="type-ui-label-sm text-foreground/84">{label}</span>
+        {summary && <span className="type-ui-meta truncate text-muted-foreground">{summary}</span>}
       </div>
       {isDone ? <CheckCircle2 size={12} className="shrink-0 text-foreground" /> : <Loader2 size={12} className="animate-spin shrink-0 opacity-50 text-muted-foreground" />}
     </div>
@@ -468,14 +468,14 @@ function ToolResultView({
 
   if (isError) {
     return (
-      <div className="ml-3 border-l border-foreground py-1 pl-3 text-xs text-foreground">
+      <div className="type-ui-body-sm ml-3 border-l border-foreground py-1 pl-3 text-foreground">
         {parseToolResultSummary(block.content, t)}
       </div>
     )
   }
 
   return (
-    <div className="ml-3 border-l border-border py-1 pl-3 text-xs text-muted-foreground">
+    <div className="type-ui-body-sm ml-3 border-l border-border py-1 pl-3 text-muted-foreground">
       {parseToolResultSummary(block.content, t)}
     </div>
   )
@@ -500,8 +500,8 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
             <Sparkles size={16} className="text-primary" />
           </div>
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('toolFashionVision')}</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="type-ui-title-sm text-foreground">{t('toolFashionVision')}</div>
+            <div className="type-ui-meta text-muted-foreground">
               {data.image_count ? t('imageCardCount', { count: data.image_count }) : t('imageAnalysis')}
               {data.model ? ` · ${data.model}` : ''}
             </div>
@@ -509,19 +509,19 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
         </div>
       </div>
 
-      {analysis.summary_zh && <div className="text-sm leading-6 text-foreground">{analysis.summary_zh}</div>}
+      {analysis.summary_zh && <div className="type-ui-body-md text-foreground">{analysis.summary_zh}</div>}
 
       {analysis.retrieval_query_en && (
         <div className="border border-border bg-muted/60 px-3 py-2">
-          <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Retrieval Query</div>
-          <div className="text-sm text-foreground break-words">{analysis.retrieval_query_en}</div>
+          <div className="type-kicker mb-1 text-muted-foreground">Retrieval Query</div>
+          <div className="type-ui-body-sm break-words text-foreground">{analysis.retrieval_query_en}</div>
         </div>
       )}
 
       {analysis.style_keywords.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {analysis.style_keywords.map((keyword) => (
-            <span key={keyword} className="inline-flex items-center border border-border bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground">
+            <span key={keyword} className="type-kicker inline-flex items-center border border-border bg-background px-2.5 py-1 text-foreground">
               {keyword}
             </span>
           ))}
@@ -530,13 +530,13 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
 
       {filterEntries.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">{t('suggestedHardFilters')}</div>
+          <div className="type-ui-meta text-muted-foreground">{t('suggestedHardFilters')}</div>
           <div className="flex flex-wrap gap-2">
             {filterEntries.map((item, index) => (
-              <span key={`${item.label}-${item.value}-${index}`} className="inline-flex items-center gap-1 border border-border bg-secondary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-secondary-foreground">
-                <span className="text-muted-foreground">{item.label}</span>
-                <span>{item.value}</span>
-              </span>
+              <span key={`${item.label}-${item.value}-${index}`} className="type-ui-label-sm inline-flex items-center gap-1 border border-border bg-secondary px-2.5 py-1 text-secondary-foreground">
+                  <span className="type-caption text-muted-foreground">{item.label}</span>
+                  <span>{item.value}</span>
+                </span>
             ))}
           </div>
         </div>
@@ -544,10 +544,10 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
 
       {analysis.follow_up_questions_zh.length > 0 && (
         <div className="border border-dashed border-border px-3 py-2">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t('followUpQuestions')}</div>
+          <div className="type-kicker mb-1 text-muted-foreground">{t('followUpQuestions')}</div>
           <div className="space-y-1">
             {analysis.follow_up_questions_zh.map((question) => (
-              <div key={question} className="text-xs text-foreground/80">{question}</div>
+              <div key={question} className="type-ui-body-sm text-foreground/82">{question}</div>
             ))}
           </div>
         </div>
@@ -579,8 +579,8 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
             <Sparkles size={16} className="text-primary" />
           </div>
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground">{t('toolSearchStyle')}</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="type-ui-title-sm text-foreground">{t('toolSearchStyle')}</div>
+            <div className="type-ui-meta text-muted-foreground">
               {data.query ? t('styleSearchQuery', { query: data.query }) : t('abstractStyleSearch')}
               {data.search_stage ? ` · ${data.search_stage}` : ''}
             </div>
@@ -588,48 +588,48 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
         </div>
       </div>
 
-      {data.message && <div className="text-sm leading-6 text-foreground">{data.message}</div>}
+      {data.message && <div className="type-ui-body-md text-foreground">{data.message}</div>}
 
       {richTextSummary && (
-        <div className="border border-border bg-muted/30 px-3 py-2 text-sm leading-6 text-foreground/90 whitespace-pre-wrap">
+        <div className="type-ui-body-md whitespace-pre-wrap border border-border bg-muted/30 px-3 py-2 text-foreground/90">
           {richTextSummary}
         </div>
       )}
 
       {primaryStyle?.style_name && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center border border-foreground bg-foreground px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-background">
+          <span className="type-kicker inline-flex items-center border border-foreground bg-foreground px-2.5 py-1 text-background">
             {primaryStyle.style_name}
           </span>
           {primaryStyle.category && (
-            <span className="inline-flex items-center border border-border bg-secondary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-secondary-foreground">
+            <span className="type-kicker inline-flex items-center border border-border bg-secondary px-2.5 py-1 text-secondary-foreground">
               {primaryStyle.category}
             </span>
           )}
           {primaryStyle.match_type && (
-            <span className="text-xs text-muted-foreground">{t('matchType', { value: primaryStyle.match_type })}</span>
+            <span className="type-ui-meta text-muted-foreground">{t('matchType', { value: primaryStyle.match_type })}</span>
           )}
         </div>
       )}
 
       {retrievalPlan?.retrieval_query_en && (
         <div className="border border-border bg-muted/60 px-3 py-2">
-          <div className="mb-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Retrieval Query</div>
-          <div className="text-sm text-foreground break-words">{retrievalPlan.retrieval_query_en}</div>
+          <div className="type-kicker mb-1 text-muted-foreground">Retrieval Query</div>
+          <div className="type-ui-body-sm break-words text-foreground">{retrievalPlan.retrieval_query_en}</div>
         </div>
       )}
 
       {featureGroups.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">{t('styleFeatures')}</div>
+          <div className="type-ui-meta text-muted-foreground">{t('styleFeatures')}</div>
           <div className="flex flex-wrap gap-2">
             {featureGroups.flatMap((group) =>
               group.values.map((value) => (
                 <span
                   key={`${group.label}-${value}`}
-                  className="inline-flex items-center gap-1 border border-border bg-secondary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-secondary-foreground"
+                  className="type-kicker inline-flex items-center gap-1 border border-border bg-secondary px-2.5 py-1 text-secondary-foreground"
                 >
-                  <span className="text-muted-foreground">{group.label}</span>
+                  <span className="type-caption text-muted-foreground">{group.label}</span>
                   <span>{value}</span>
                 </span>
               )),
@@ -640,16 +640,16 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
 
       {suggestedFilters.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-medium text-muted-foreground">{t('suggestedFilters')}</div>
+          <div className="type-ui-meta text-muted-foreground">{t('suggestedFilters')}</div>
           <div className="flex flex-wrap gap-2">
             {suggestedFilters.flatMap(([key, rawValue]) => {
               const values = Array.isArray(rawValue) ? rawValue : [rawValue]
               return values.map((value) => (
                 <span
                   key={`${key}-${String(value)}`}
-                  className="inline-flex items-center gap-1 border border-border bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground"
+                  className="type-kicker inline-flex items-center gap-1 border border-border bg-background px-2.5 py-1 text-foreground"
                 >
-                  <span className="text-muted-foreground">{key}</span>
+                  <span className="type-caption text-muted-foreground">{key}</span>
                   <span>{String(value)}</span>
                 </span>
               ))
@@ -660,10 +660,10 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
 
       {alternatives.length > 0 && (
         <div className="border border-dashed border-border px-3 py-2">
-          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t('relatedStyles')}</div>
+          <div className="type-kicker mb-1 text-muted-foreground">{t('relatedStyles')}</div>
           <div className="flex flex-wrap gap-2">
             {alternatives.map((item) => (
-              <span key={`${item.style_name}-${item.match_type ?? 'alt'}`} className="text-xs text-foreground/80">
+              <span key={`${item.style_name}-${item.match_type ?? 'alt'}`} className="type-ui-body-sm text-foreground/82">
                 {item.style_name}
               </span>
             ))}
@@ -672,7 +672,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
       )}
 
       {data.fallback_suggestion && (
-        <div className="border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+        <div className="type-ui-body-sm border border-dashed border-border px-3 py-2 text-muted-foreground">
           {data.fallback_suggestion}
         </div>
       )}

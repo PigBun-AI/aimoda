@@ -69,18 +69,18 @@ export function ProfilePage() {
     <section className="space-y-8 font-sans">
       <header className="grid gap-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.78fr)] lg:gap-8 lg:pt-6">
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="type-kicker-wide text-muted-foreground">
             {currentUser?.role ?? 'guest'}
           </p>
-          <h1 className="max-w-[12ch] font-serif text-[2.25rem] font-medium leading-[0.96] tracking-[-0.04em] text-foreground sm:text-[3.2rem]">
+          <h1 className="type-page-title max-w-[12ch] text-foreground">
             {currentUser?.name ?? t('profileTab')}
           </h1>
         </div>
         <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <p className="max-w-[32ch] break-all text-[11px] uppercase leading-5 tracking-[0.14em] text-muted-foreground">
+          <p className="type-meta max-w-[32ch] break-all text-muted-foreground">
             {currentUser?.email ?? currentUser?.phone ?? t('notSet')}
           </p>
-          <div className="flex items-center justify-between border-t border-border pt-3 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          <div className="type-meta flex items-center justify-between border-t border-border pt-3 text-muted-foreground">
             <span>{t('profile.accountLabel')}</span>
             <span>{String(visibleTabs.length).padStart(2, '0')}</span>
           </div>
@@ -106,7 +106,7 @@ export function ProfilePage() {
                   setSearchParams(nextParams, { replace: true })
                 }}
                 className={[
-                  'relative flex items-center gap-2 whitespace-nowrap border-b pb-3 text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors duration-fast cursor-pointer font-sans',
+                  'type-kicker relative flex items-center gap-2 whitespace-nowrap border-b pb-3 transition-colors duration-fast cursor-pointer font-sans',
                   isActive ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
@@ -142,19 +142,19 @@ function ProfileContent() {
       <section className="border border-border">
         <div className="grid gap-5 border-b border-border px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(150px,0.48fr)]">
           <div className="space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="type-kicker text-muted-foreground">
               {t('profile.accountEyebrow')}
             </p>
-            <h2 className="font-serif text-[1.65rem] font-medium leading-[0.98] tracking-[-0.035em] text-foreground sm:text-[2rem]">
+            <h2 className="type-section-title text-foreground sm:text-[2rem]">
               {t('profile.accountTitle')}
             </h2>
           </div>
 
           <div className="flex flex-col justify-end gap-3 border-t border-border pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
-            <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            <p className="type-meta text-muted-foreground">
               {currentUser?.role ?? 'guest'}
             </p>
-            <div className="flex items-center justify-between border-t border-border pt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div className="type-kicker flex items-center justify-between border-t border-border pt-3 text-muted-foreground">
               <span>{t('profile.fieldsLabel')}</span>
               <span>03</span>
             </div>
@@ -163,26 +163,26 @@ function ProfileContent() {
 
         <div className="px-5">
           <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border py-4 sm:flex-row sm:items-center sm:gap-6">
-            <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('username')}</span>
-            <span className="text-sm font-medium text-foreground sm:text-right">{currentUser?.name ?? t('notSet')}</span>
+            <span className="type-meta text-muted-foreground">{t('username')}</span>
+            <span className="type-label text-foreground sm:text-right">{currentUser?.name ?? t('notSet')}</span>
           </div>
           <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border py-4 sm:flex-row sm:items-center sm:gap-6">
-            <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('role')}</span>
-            <span className="text-sm font-medium uppercase tracking-[0.14em] text-foreground sm:text-right">{currentUser?.role ?? 'guest'}</span>
+            <span className="type-meta text-muted-foreground">{t('role')}</span>
+            <span className="type-kicker text-foreground sm:text-right">{currentUser?.role ?? 'guest'}</span>
           </div>
           <div className="flex flex-col items-start justify-between gap-1.5 py-4 sm:flex-row sm:items-center sm:gap-6">
-            <span className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('email')}</span>
-            <span className="break-all text-sm font-medium text-foreground sm:text-right">{currentUser?.email ?? currentUser?.phone ?? t('notSet')}</span>
+            <span className="type-meta text-muted-foreground">{t('email')}</span>
+            <span className="type-label break-all text-foreground sm:text-right">{currentUser?.email ?? currentUser?.phone ?? t('notSet')}</span>
           </div>
         </div>
       </section>
 
       <div className="space-y-4">
         <div className="border border-border bg-card p-5 text-sm text-muted-foreground">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="type-kicker text-muted-foreground">
             {t('membership.profileTitle')}
           </p>
-          <p className="mt-3 max-w-[28ch] text-sm leading-6 text-muted-foreground">
+          <p className="type-body-muted mt-3 max-w-[28ch]">
             {t('membership.profileHint')}
           </p>
         </div>
@@ -210,18 +210,18 @@ function AccessContent() {
     <div className="space-y-6">
       <section className="grid gap-4 border border-border px-5 py-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(220px,0.75fr)] sm:px-6">
         <div className="space-y-3">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <p className="type-kicker text-muted-foreground">
             {t('accessTab')}
           </p>
-          <h2 className="font-serif text-[1.75rem] font-medium leading-[0.96] tracking-[-0.04em] text-foreground sm:text-[2.15rem]">
+          <h2 className="type-section-title text-foreground sm:text-[2.15rem]">
             {t('membership.profileTitle')}
           </h2>
-          <p className="max-w-[40ch] text-sm leading-6 text-muted-foreground">
+          <p className="type-body-muted max-w-[40ch]">
             {t('membership.profileHint')}
           </p>
         </div>
 
-        <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        <div className="type-meta flex flex-col justify-between gap-4 border-t border-border pt-4 text-muted-foreground lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border pb-3 sm:flex-row sm:items-center sm:gap-4">
             <span>{t('membership.currentPlan')}</span>
             <span className="text-foreground">{planLabel}</span>

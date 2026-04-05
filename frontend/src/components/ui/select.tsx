@@ -93,7 +93,7 @@ const SelectItem = forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex min-h-9 w-full cursor-default select-none items-center border border-transparent py-2 pl-8 pr-3 text-[11px] font-medium uppercase tracking-[0.12em] leading-[1.35] text-foreground outline-none transition-colors focus:border-border focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'type-action-label relative flex min-h-9 w-full cursor-default select-none items-center border border-transparent py-2 pl-8 pr-3 text-foreground outline-none transition-colors focus:border-border focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     {...props}

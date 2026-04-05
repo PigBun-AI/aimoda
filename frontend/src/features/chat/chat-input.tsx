@@ -124,11 +124,11 @@ export function ChatInput({
     <div className="bg-background px-3 pb-3 sm:px-4 sm:pb-4">
       <div className="mx-auto flex max-w-3xl flex-col gap-2">
         {(statusBar || infoMessage) && (
-          <div className="border border-border/80 bg-muted/20 px-4 py-3">
+          <div className="border border-border/80 bg-muted/16 px-4 py-3">
             <div className="flex flex-col gap-2">
               {statusBar && <div className="min-w-0">{statusBar}</div>}
               {infoMessage && (
-                <p className="type-kicker text-muted-foreground/88">
+                <p className="type-ui-meta text-muted-foreground/88">
                   {infoMessage}
                 </p>
               )}

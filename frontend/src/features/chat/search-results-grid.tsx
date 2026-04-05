@@ -32,7 +32,7 @@ export function SearchResultsGrid({
   if (images.length === 0 && !isLoading) {
     return (
       <div className="mb-6 mt-6 w-full border border-border px-4 py-12 text-center sm:px-6">
-        <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('noRelatedImages')}</p>
+        <p className="type-ui-label-sm text-muted-foreground">{t('noRelatedImages')}</p>
       </div>
     )
   }
@@ -41,7 +41,7 @@ export function SearchResultsGrid({
     <div ref={gridRef} className="mb-6 mt-6 w-full border border-border">
       <div className="grid gap-4 border-b border-border px-4 py-4 sm:px-6 sm:py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <h3 className="type-editorial-inline truncate text-foreground">
+          <h3 className="type-ui-title-lg truncate text-foreground">
             {labelName}
           </h3>
           <p className="type-kicker text-muted-foreground">

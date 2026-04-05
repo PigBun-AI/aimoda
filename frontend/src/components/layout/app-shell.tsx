@@ -316,7 +316,7 @@ export function AppShell() {
               to={item.to}
               className={({ isActive }) =>
                 [
-                  'group flex items-center justify-between gap-3 border px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.14em]',
+                  'type-ui-label-sm group flex items-center justify-between gap-3 border px-4 py-3',
                   'transition-colors duration-fast cursor-pointer',
                   isActive
                     ? 'border-foreground bg-foreground text-background'
@@ -346,7 +346,7 @@ export function AppShell() {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
         <button
-          className="flex w-full items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground cursor-pointer"
+          className="type-ui-label-xs flex w-full items-center gap-2 text-muted-foreground cursor-pointer"
           onClick={() => setHistoryExpanded(value => !value)}
         >
           {historyExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -363,9 +363,9 @@ export function AppShell() {
         {historyExpanded && (
           <div className="mt-4 space-y-2">
             {sessionsLoading ? (
-              <div className="border border-border px-4 py-4 text-center text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('common:loading')}</div>
+              <div className="type-ui-label-xs border border-border px-4 py-4 text-center text-muted-foreground">{t('common:loading')}</div>
             ) : chatSessions.length === 0 ? (
-              <div className="border border-border px-4 py-4 text-center text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="type-ui-label-xs border border-border px-4 py-4 text-center text-muted-foreground">
                 {t('common:noChatHistory')}
               </div>
             ) : (
@@ -392,7 +392,7 @@ export function AppShell() {
                         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-1.5">
-                              <span className="truncate text-[12px] font-medium leading-5 text-foreground">
+                              <span className="type-ui-body-sm truncate text-foreground">
                                 {session.title}
                               </span>
                               {session.is_pinned && (
@@ -400,7 +400,7 @@ export function AppShell() {
                               )}
                             </div>
 
-                            <div className="mt-1 flex min-w-0 items-center gap-2 whitespace-nowrap text-[10px] uppercase tracking-[0.12em] text-muted-foreground/88">
+                            <div className="type-ui-meta mt-1 flex min-w-0 items-center gap-2 whitespace-nowrap text-muted-foreground/88">
                               {session.execution_status === 'running' && (
                                 <span className="inline-flex items-center gap-1 text-foreground/78">
                                   <LoaderCircle className="h-3 w-3 animate-spin" />
@@ -513,14 +513,14 @@ export function AppShell() {
               <CircleUserRound className="w-5 h-5 shrink-0 text-muted-foreground" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="truncate text-[12px] font-medium text-foreground">
+                  <p className="type-ui-body-sm truncate text-foreground">
                     {currentUser.name ?? t('common:user')}
                   </p>
-                  <span className="shrink-0 border border-border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  <span className="type-ui-label-xs shrink-0 border border-border px-1.5 py-0.5 text-muted-foreground">
                     {planBadgeLabel}
                   </span>
                 </div>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                <p className="type-ui-label-sm text-muted-foreground">
                   {currentUser.role ?? 'guest'}
                 </p>
               </div>
@@ -534,7 +534,7 @@ export function AppShell() {
                 <CircleUserRound className="w-4 h-4" />
                 <span>{t('common:login')}</span>
               </div>
-              <span className="text-[10px] opacity-70">{t('common:startJourney')}</span>
+              <span className="type-caption opacity-70">{t('common:startJourney')}</span>
             </Button>
           )}
         </div>
@@ -614,8 +614,8 @@ export function AppShell() {
                       handleProtectedNavigate(`/chat?session=${item.sessionId}`)
                     }}
                   >
-                    <div className="text-sm font-semibold text-foreground">{item.title}</div>
-                    <div className="mt-1 text-sm leading-5 text-muted-foreground">{item.message}</div>
+                    <div className="type-ui-title-sm text-foreground">{item.title}</div>
+                    <div className="type-ui-body-sm mt-1 text-muted-foreground">{item.message}</div>
                   </button>
                   <button
                     className="border border-transparent p-1 text-muted-foreground opacity-70 transition-all hover:border-border hover:bg-accent hover:opacity-100"

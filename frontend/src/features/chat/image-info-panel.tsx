@@ -108,7 +108,7 @@ export function ImageInfoPanel({
       <div className="space-y-8">
         {(image.brand || locationInfo || descriptionText) && (
           <section className="space-y-4 border-b border-border pb-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="type-kicker text-muted-foreground">
               aimoda
             </p>
             {image.brand && (
@@ -119,10 +119,10 @@ export function ImageInfoPanel({
                 title={t('searchBrandImages')}
               >
                 <span className="min-w-0">
-                  <span className="type-editorial-inline block truncate text-foreground transition-colors group-hover:text-muted-foreground">
+                  <span className="type-ui-title-lg block truncate text-foreground transition-colors group-hover:text-muted-foreground">
                     {formatBrand(image.brand)}
                   </span>
-                  <span className="mt-2 inline-flex items-center gap-1 border border-border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors group-hover:border-foreground/30 group-hover:text-foreground">
+                  <span className="type-kicker mt-2 inline-flex items-center gap-1 border border-border px-2 py-1 text-muted-foreground transition-colors group-hover:border-foreground/30 group-hover:text-foreground">
                     {t('searchAction')}
                     {isSearchingBrand ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
                   </span>
@@ -130,12 +130,12 @@ export function ImageInfoPanel({
               </button>
             )}
             {locationInfo && (
-              <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              <p className="type-meta text-muted-foreground">
                 {locationInfo}
               </p>
             )}
             {descriptionText && (
-              <p className="max-w-[28ch] text-sm leading-6 text-muted-foreground">
+              <p className="type-body-muted max-w-[28ch]">
                 {descriptionText}
               </p>
             )}
@@ -145,10 +145,10 @@ export function ImageInfoPanel({
         {extractedColors.length > 0 && (
           <section className="space-y-5 border-b border-border pb-6">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <p className="type-kicker text-muted-foreground">
                 {t('keyColors')}
               </p>
-              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <span className="type-kicker text-muted-foreground">
                 {t('searchAction')}
               </span>
             </div>
@@ -172,13 +172,13 @@ export function ImageInfoPanel({
                     >
                       <span className="min-w-0">
                         <span
-                          className="block truncate text-[10px] font-semibold uppercase tracking-[0.16em]"
+                          className="type-kicker block truncate"
                           style={{ color: textColor.primary }}
                         >
                           {color.color_name}
                         </span>
                         <span
-                          className="mt-1 inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.14em]"
+                          className="type-kicker mt-1 inline-flex items-center gap-1"
                           style={{ color: textColor.secondary }}
                         >
                           {t('searchAction')}
@@ -186,7 +186,7 @@ export function ImageInfoPanel({
                         </span>
                       </span>
                       <span
-                        className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+                        className="type-kicker"
                         style={{ color: textColor.secondary }}
                       >
                         {color.hex}
@@ -252,7 +252,7 @@ interface ColorGroupProps {
 function ColorGroup({ title, colors, onColorSearch, isSearchingColor, t }: ColorGroupProps) {
   return (
     <div className="space-y-3 border-t border-border pt-4 first:border-t-0 first:pt-0">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+      <p className="type-kicker text-muted-foreground">
         {title}
       </p>
       <div className="space-y-2">
@@ -267,17 +267,17 @@ function ColorGroup({ title, colors, onColorSearch, isSearchingColor, t }: Color
             <span className="flex min-w-0 items-center gap-3">
               <span className="h-3 w-3 shrink-0 border border-black/10" style={{ backgroundColor: color.hex }} />
               <span className="min-w-0">
-                <span className="block truncate text-[11px] uppercase tracking-[0.14em] text-foreground">
+                <span className="type-label block truncate text-foreground">
                   {color.color_name}
                 </span>
-                <span className="mt-1 inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors group-hover:text-foreground">
+                <span className="type-kicker mt-1 inline-flex items-center gap-1 text-muted-foreground transition-colors group-hover:text-foreground">
                   {t('searchAction')}
                   <ArrowUpRight className="h-3 w-3" />
                 </span>
               </span>
             </span>
             <span className="shrink-0 text-right">
-              <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <span className="type-kicker block text-muted-foreground">
                 {color.hex}
               </span>
             </span>

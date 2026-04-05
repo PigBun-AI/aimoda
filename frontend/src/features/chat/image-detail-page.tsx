@@ -178,7 +178,7 @@ export function ImageDetailPage() {
 
             <div className="hidden min-w-0 border-l border-border pl-4 sm:block">
               <div className="flex min-w-0 items-center gap-3">
-                <h1 className="type-editorial-inline truncate text-foreground">
+                <h1 className="type-ui-title-md truncate text-foreground">
                   {titleBrand}
                 </h1>
                 {imageMeta && (

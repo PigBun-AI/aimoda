@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import type { DrawerData } from './chat-types'
 import { FashionImage } from './fashion-image'
 
-const DRAWER_HEADER_META_CLASS = 'type-kicker text-muted-foreground'
+const DRAWER_HEADER_META_CLASS = 'type-ui-label-sm text-muted-foreground'
 const DRAWER_HEADER_ICON_BUTTON_CLASS =
   'control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground'
 const DRAWER_HEADER_ACTION_BUTTON_CLASS =
@@ -55,7 +55,7 @@ export function ImageDrawer({
       <div className="border-b border-border px-4 py-3 sm:px-5">
         <div className="flex min-h-10 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="type-editorial-inline truncate text-foreground">
+            <div className="type-ui-title-md truncate text-foreground">
               {t('aiSearchResult')}
             </div>
             <p className={`${DRAWER_HEADER_META_CLASS} shrink-0 whitespace-nowrap`}>
@@ -113,12 +113,12 @@ export function ImageDrawer({
                   </div>
                 )}
                 {img.brand && (
-                  <div className="type-body-xs font-medium text-foreground">
+                  <div className="type-ui-body-sm text-foreground">
                     {formatBrand(img.brand)}
                   </div>
                 )}
                 {img.quarter && (
-                  <div className="type-meta truncate text-muted-foreground">
+                  <div className="type-ui-meta truncate text-muted-foreground">
                     {img.quarter}
                   </div>
                 )}
