@@ -1,185 +1,211 @@
-import { FormEvent, useState, useCallback } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { register } from '@/lib/api'
+import { getApiErrorMessage, registerWithSms, sendSmsCode } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { queryClient } from '@/main'
-
 import { saveSession } from './protected-route'
 
-export function RegisterPage() {
-  const { t } = useTranslation('auth')
-  const { t: tc } = useTranslation('common')
-  const navigate = useNavigate()
-  const location = useLocation()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [validationError, setValidationError] = useState('')
+const COUNTDOWN_SECONDS = 60
+const AUTH_INPUT_CLASS = 'h-12 rounded-none border border-border bg-background px-4 text-[14px] tracking-[0.01em]'
 
-  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/reports'
+export function RegisterPage() {
+  const { t } = useTranslation(['auth', 'common'])
+  const navigate = useNavigate()
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [countdown, setCountdown] = useState(0)
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const productLines = useMemo(
+    () => [t('auth:productLineReports'), t('auth:productLineAssistant'), t('auth:productLineInspiration')],
+    [t],
+  )
 
   const mutation = useMutation({
-    mutationFn: register,
+    mutationFn: async () => registerWithSms({ phone, code }),
     onSuccess: (user) => {
       queryClient.removeQueries()
       saveSession(JSON.stringify(user))
-      navigate(redirectTo, { replace: true })
+      setError(null)
+      navigate('/reports', { replace: true })
+    },
+    onError: (mutationError) => {
+      setError(getApiErrorMessage(mutationError, t('auth:registerFailed')))
     },
   })
 
-  const handleSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setValidationError('')
-
-    if (password !== confirmPassword) {
-      setValidationError(t('passwordMismatch'))
+  useEffect(() => {
+    if (countdown <= 0) {
       return
     }
 
-    if (password.length < 8) {
-      setValidationError(t('passwordTooShort'))
+    const timer = setTimeout(() => {
+      setCountdown((prev) => Math.max(prev - 1, 0))
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [countdown])
+
+  const handleSendCode = useCallback(async () => {
+    if (phone.trim().length === 0) {
+      setError(t('common:fillAccount'))
       return
     }
 
-    mutation.mutate({ email, password })
-  }, [password, confirmPassword, email, mutation, t])
+    setError(null)
+    setIsSendingCode(true)
+
+    try {
+      await sendSmsCode({ phone, purpose: 'register' })
+      setCountdown(COUNTDOWN_SECONDS)
+    } catch (sendError) {
+      setError(getApiErrorMessage(sendError, t('auth:registerFailed')))
+    } finally {
+      setIsSendingCode(false)
+    }
+  }, [phone, t])
+
+  const renderResendLabel = () => {
+    if (countdown <= 0) {
+      return t('common:sendCode')
+    }
+
+    return t('common:resendCountdown', { n: countdown })
+  }
+
+  const handleSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      setError(null)
+
+      if (phone.trim().length === 0) {
+        setError(t('common:fillAccount'))
+        return
+      }
+
+      if (code.trim().length === 0) {
+        setError(t('common:fillCode'))
+        return
+      }
+
+      mutation.mutate()
+    },
+    [phone, code, mutation, t],
+  )
 
   return (
-    <div className="min-h-dvh flex bg-background">
-      {/* Left side - Brand */}
-      <div
-        className="hidden lg:flex lg:w-1/2 flex-col justify-center px-16 border-r bg-secondary border-border"
-      >
-        <div className="max-w-md">
-          <div className="mb-8">
-            <p
-              className="text-xs tracking-[0.3em] uppercase mb-3 text-muted-foreground"
-            >
-              AI-Powered Fashion Intelligence
-            </p>
-            <h1 className="mb-4">
-              <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden" style={{ height: 'clamp(40px, 5vw, 56px)' }} />
-              <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block" style={{ height: 'clamp(40px, 5vw, 56px)' }} />
-            </h1>
-            <div
-              className="w-12 h-px mb-6"
-              style={{ backgroundColor: 'var(--border)' }}
-            ></div>
-            <p className="leading-relaxed text-muted-foreground">
-              {tc('brandTagline')}
-            </p>
-          </div>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <p>· {tc('brandFeature1')}</p>
-            <p>· {tc('brandFeature2')}</p>
-            <p>· {tc('brandFeature3')}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Right side - Register Form */}
-      <div
-        className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-8 sm:py-10 bg-background"
-      >
-        <div className="w-full max-w-[340px] sm:max-w-sm">
-          <div className="lg:hidden mb-10 text-center">
-            <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden mx-auto" style={{ height: '36px' }} />
-            <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block mx-auto" style={{ height: '36px' }} />
-          </div>
-
-          <div className="mb-8">
-            <h2 className="text-2xl sm:text-3xl font-medium mb-2 text-foreground">
-              {t('createAccount')}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {t('registerHint')}
-            </p>
-          </div>
-
-          <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <Label
-                htmlFor="email"
-                className="text-sm text-muted-foreground"
-              >
-                {t('email')}
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                className="h-11 sm:h-12 bg-secondary border-border text-foreground"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="password"
-                className="text-sm text-muted-foreground"
-              >
-                {t('password')}
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                className="h-11 sm:h-12 bg-secondary border-border text-foreground"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label
-                htmlFor="confirmPassword"
-                className="text-sm text-muted-foreground"
-              >
-                {t('confirmPassword')}
-              </Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                required
-                className="h-11 sm:h-12 bg-secondary border-border text-foreground"
-              />
+    <div className="min-h-dvh bg-background px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+      <div className="mx-auto grid min-h-[calc(100dvh-2.5rem)] w-full max-w-[1320px] border border-border bg-card lg:grid-cols-[minmax(320px,0.95fr)_minmax(420px,1fr)]">
+        <aside className="flex flex-col justify-between border-b border-border bg-background px-6 py-6 md:px-8 md:py-8 lg:border-b-0 lg:border-r lg:px-10 lg:py-10">
+          <div className="space-y-8">
+            <div className="space-y-4 border-b border-border pb-6">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                aimoda
+              </p>
+              <img src="/aimoda-logo.svg" alt="aimoda" className="h-8 dark:hidden" />
+              <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-8 dark:block" />
+              <h1 className="max-w-[10ch] font-serif text-[2.5rem] font-medium leading-[0.9] tracking-[-0.05em] text-foreground sm:text-[3.4rem]">
+                {t('auth:createAccount')}
+              </h1>
+              <p className="max-w-[34ch] text-[11px] leading-5 tracking-[0.06em] text-muted-foreground">
+                {t('auth:registerHint')}
+              </p>
             </div>
 
-            {validationError && (
-              <p className="text-sm text-destructive">{validationError}</p>
+            <div className="grid gap-0 border border-border">
+              {productLines.map((item, index) => (
+                <div key={item} className={cn('flex items-center justify-between px-4 py-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground', index < productLines.length - 1 && 'border-b border-border')}>
+                  <span>{item}</span>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-border pt-6 text-[11px] leading-5 tracking-[0.04em] text-muted-foreground">
+            {t('auth:registerAccessHint')}
+          </div>
+        </aside>
+
+        <section className="flex items-center px-6 py-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
+          <div className="w-full max-w-[520px] space-y-8">
+            <div className="space-y-5 border-b border-border pb-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                {t('auth:registerMethods')}
+              </p>
+              <p className="text-[11px] leading-5 tracking-[0.06em] text-muted-foreground">
+                {t('auth:registerIntro')}
+              </p>
+            </div>
+
+            {error && (
+              <div className="border border-foreground/20 bg-foreground/[0.03] px-4 py-3 text-[12px] leading-5 tracking-[0.03em] text-foreground dark:bg-foreground/[0.06]">
+                {error}
+              </div>
             )}
 
-            {mutation.isError && (
-              <p className="text-sm text-destructive">{t('registerFailed')}，{t('emailExists')}。</p>
-            )}
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              <div className="space-y-2.5">
+                <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  {t('auth:mobileLabel')}
+                </label>
+                <Input
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder={t('common:enterPhone')}
+                  autoComplete="tel"
+                  className={AUTH_INPUT_CLASS}
+                />
+              </div>
 
-            <Button
-              className="w-full h-12 bg-foreground text-background"
-              loading={mutation.isPending}
-              disabled={mutation.isPending}
-              type="submit"
-            >
-              {mutation.isPending ? t('registering') : t('register')}
-            </Button>
-          </form>
+              <div className="space-y-2.5">
+                <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  {t('auth:codeLabel')}
+                </label>
+                <div className="grid items-stretch gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                  <Input
+                    value={code}
+                    onChange={(event) => setCode(event.target.value)}
+                    placeholder={t('common:enterCode')}
+                    autoComplete="one-time-code"
+                    className={AUTH_INPUT_CLASS}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSendCode}
+                    disabled={isSendingCode || countdown > 0 || mutation.isPending}
+                    className="h-12 rounded-none"
+                  >
+                    {isSendingCode ? t('common:sending') : renderResendLabel()}
+                  </Button>
+                </div>
+              </div>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            {t('haveAccount')}{' '}
-            <Link to="/login" className="underline text-foreground">
-              {t('login')}
-            </Link>
-          </p>
+              <Button type="submit" className="h-12 w-full rounded-none" loading={mutation.isPending}>
+                {mutation.isPending ? t('auth:registering') : t('auth:register')}
+              </Button>
+            </form>
 
-          <p className="mt-8 text-center text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} aimoda. All rights reserved.
-          </p>
-        </div>
+            <div className="grid gap-4 border-t border-border pt-4 text-[10px] leading-5 tracking-[0.04em] text-muted-foreground">
+              <p>
+                {t('common:agreeToTerms')}
+                <span className="mx-2 text-foreground">{t('common:userAgreement')}</span>
+                <span>/</span>
+                <span className="mx-2 text-foreground">{t('common:privacyPolicy')}</span>
+              </p>
+              <p>
+                {t('auth:haveAccount')} <Link to="/login" className="text-foreground underline underline-offset-4">{t('auth:login')}</Link>
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   )

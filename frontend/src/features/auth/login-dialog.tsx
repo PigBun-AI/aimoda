@@ -1,355 +1,361 @@
-import { useState, useRef, useCallback } from 'react'
-import { Shield, Mail, Lock } from 'lucide-react'
-import { QRCodeSVG } from 'qrcode.react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { WechatQrCode } from '@/components/support/wechat-qr-code'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
+import { getApiErrorMessage, login, loginWithSms, sendSmsCode } from '@/lib/api'
+import type { AuthUser } from '@/lib/types'
 import { useLoginDialog } from './auth-store'
-import { login } from '@/lib/api'
-import { saveSession } from './protected-route'
 import { queryClient } from '@/main'
+import { saveSession } from './protected-route'
 
-const WECHAT_QR_URL = import.meta.env.VITE_WECHAT_QR_URL || 'https://u.wechat.com/MF5PYmxZDLIHeXt8bY78UYg?s=2'
+const COUNTDOWN_SECONDS = 60
+const AUTH_INPUT_CLASS = 'h-12 rounded-none border border-border bg-background px-4 text-sm leading-[1.45]'
 
 export function LoginDialog() {
-  const { t, i18n } = useTranslation(['auth', 'common'])
+  const { t } = useTranslation(['auth', 'common'])
   const { isLoginOpen, closeLogin } = useLoginDialog()
 
+  const [mode, setMode] = useState<'sms' | 'admin'>('sms')
+  const [smsPhone, setSmsPhone] = useState('')
+  const [smsCode, setSmsCode] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSendingCode, setIsSendingCode] = useState(false)
   const [countdown, setCountdown] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
-  // Email + password fields (primary)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const productLines = useMemo(
+    () => [t('auth:productLineReports'), t('auth:productLineAssistant'), t('auth:productLineInspiration')],
+    [t],
+  )
 
-  // SMS fields (collapsible fallback)
-  const [showSmsLogin, setShowSmsLogin] = useState(false)
-  const [smsAccount, setSmsAccount] = useState('')
-  const [verificationCode, setVerificationCode] = useState('')
+  useEffect(() => {
+    if (countdown <= 0) {
+      return
+    }
 
-  const [autoLogin, setAutoLogin] = useState(true)
-  const formRef = useRef<HTMLFormElement>(null)
-  const countdownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const timer = setTimeout(() => {
+      setCountdown((prev) => Math.max(prev - 1, 0))
+    }, 1000)
 
-  // ── Countdown timer ──────────────────────────────────────────────────────
-  const startCountdown = useCallback((seconds: number) => {
-    setCountdown(seconds)
+    return () => clearTimeout(timer)
+  }, [countdown])
+
+  const resetState = useCallback(() => {
+    setMode('sms')
+    setSmsPhone('')
+    setSmsCode('')
+    setEmail('')
+    setPassword('')
+    setCountdown(0)
+    setError(null)
+    setIsLoading(false)
+    setIsSendingCode(false)
   }, [])
 
+  const handleSuccess = useCallback(
+    (user: AuthUser) => {
+      queryClient.removeQueries()
+      saveSession(JSON.stringify(user))
+      resetState()
+      closeLogin()
+      window.location.reload()
+    },
+    [closeLogin, resetState],
+  )
+
+  const handleClose = useCallback(() => {
+    closeLogin()
+    resetState()
+  }, [closeLogin, resetState])
+
   const handleSendCode = useCallback(async () => {
-    if (!smsAccount) {
+    if (smsPhone.trim().length === 0) {
       setError(t('common:fillAccount'))
       return
     }
+
+    setError(null)
     setIsSendingCode(true)
-    setError(null)
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    setIsSendingCode(false)
-    startCountdown(60)
-  }, [smsAccount, t, startCountdown])
 
-  // ── Countdown effect ─────────────────────────────────────────────────────
-  // Manually managed: we track countdown via useCallback so closure is stable
-
-  // ── Email + Password login (primary) ────────────────────────────────────
-  const handleEmailLogin = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setError(null)
-    if (!email) { setError(t('common:fillEmail')); return }
-    if (!password) { setError(t('common:fillPassword')); return }
-
-    setIsLoading(true)
     try {
-      const user = await login({ email, password })
-      saveSession(JSON.stringify(user))
-      queryClient.removeQueries()
-      closeLogin()
-      window.location.reload()
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      // Try to extract backend error message
-      if (message.includes('401') || message.includes('invalid')) {
-        setError(t('auth:invalidCredentials'))
-      } else if (message.includes('404') || message.includes('not found')) {
-        setError(t('auth:invalidCredentials'))
-      } else {
-        setError(t('auth:loginFailed'))
-      }
+      await sendSmsCode({ phone: smsPhone, purpose: 'login' })
+      setCountdown(COUNTDOWN_SECONDS)
+    } catch (sendError) {
+      setError(getApiErrorMessage(sendError, t('auth:loginFailed')))
     } finally {
-      setIsLoading(false)
+      setIsSendingCode(false)
     }
-  }, [email, password, t, closeLogin])
+  }, [smsPhone, t])
 
-  // ── SMS login (fallback, placeholder) ───────────────────────────────────
-  const handleSmsLogin = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setError(null)
-    if (!smsAccount) { setError(t('common:fillAccount')); return }
-    if (!verificationCode) { setError(t('common:fillCode')); return }
-    setIsLoading(true)
-    await new Promise(resolve => setTimeout(resolve, 1500))
-    setIsLoading(false)
-    setError(t('common:backendNotReady'))
-  }, [smsAccount, verificationCode, t])
+  const handleSmsLogin = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      setError(null)
 
-  const handleClose = () => {
-    closeLogin()
-    setError(null)
-    setEmail('')
-    setPassword('')
-    setSmsAccount('')
-    setVerificationCode('')
-    setShowSmsLogin(false)
-    setCountdown(0)
-    if (countdownTimerRef.current) {
-      clearTimeout(countdownTimerRef.current)
-      countdownTimerRef.current = null
+      if (smsPhone.trim().length === 0) {
+        setError(t('common:fillAccount'))
+        return
+      }
+
+      if (smsCode.trim().length === 0) {
+        setError(t('common:fillCode'))
+        return
+      }
+
+      setIsLoading(true)
+
+      try {
+        const user = await loginWithSms({ phone: smsPhone, code: smsCode })
+        handleSuccess(user)
+      } catch (loginError) {
+        setError(getApiErrorMessage(loginError, t('auth:loginFailed')))
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [handleSuccess, smsCode, smsPhone, t],
+  )
+
+  const handleAdminLogin = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      setError(null)
+
+      if (email.trim().length === 0) {
+        setError(t('common:fillEmail'))
+        return
+      }
+
+      if (password.length === 0) {
+        setError(t('common:fillPassword'))
+        return
+      }
+
+      setIsLoading(true)
+
+      try {
+        const user = await login({ email, password })
+        handleSuccess(user)
+      } catch (loginError) {
+        setError(getApiErrorMessage(loginError, t('auth:invalidCredentials')))
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [email, handleSuccess, password, t],
+  )
+
+  const renderResendLabel = () => {
+    if (countdown <= 0) {
+      return t('common:sendCode')
     }
-    formRef.current?.reset()
+
+    return t('common:resendCountdown', { n: countdown })
   }
 
   return (
-    <Dialog open={isLoginOpen} onOpenChange={(open) => { if (!open) handleClose() }}>
-      <DialogContent className="min-h-[520px] w-full md:w-[90vw] lg:w-[780px] max-w-[95vw] p-0 overflow-hidden bg-background border border-border">
+    <Dialog open={isLoginOpen} onOpenChange={(open) => { if (open === false) handleClose() }}>
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[min(920px,calc(100%-1rem))] max-w-[920px] overflow-y-auto border border-border bg-card p-0 shadow-[var(--shadow-xl)] sm:w-[min(920px,calc(100%-1.5rem))]">
         <DialogHeader className="sr-only">
           <DialogTitle>{t('common:loginRegister')}</DialogTitle>
+          <DialogDescription>{t('auth:loginToView')}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col md:flex-row">
-          {/* 左侧：微信登录区域 */}
-          <div className="flex-1 p-4 md:p-8 flex flex-col items-center justify-center hidden md:flex">
-            <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-              {t('common:welcomeTo')}
-              <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden h-6" />
-              <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block h-6" />
-            </h2>
-            <div className="my-8">
-              <QRCodeSVG
-                value={WECHAT_QR_URL}
-                size={200}
-                level="H"
-                includeMargin={true}
-              />
-            </div>
-            <p className="text-sm text-muted-foreground">{t('common:addWechatMember')}</p>
-          </div>
-
-          {/* 右侧：登录表单 */}
-          <div className="flex-1 p-4 md:p-8 flex flex-col justify-center">
-            <h2 className="text-xl sm:text-2xl font-semibold mb-6">
-              {showSmsLogin ? t('common:smsLogin') : t('common:emailLogin')}
-            </h2>
-
-            {/* 错误提示 */}
-            {error && (
-              <div className="rounded-md bg-warning/15 border border-warning/30 p-3 text-sm text-warning flex items-center gap-2 mb-4">
-                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                  />
-                </svg>
-                {error}
+        <div className="grid min-h-0 md:min-h-[560px] md:grid-cols-[minmax(300px,0.9fr)_minmax(360px,1fr)]">
+          <aside className="flex flex-col justify-between border-b border-border bg-background px-6 py-6 md:border-b-0 md:border-r md:px-8 md:py-8">
+            <div className="space-y-8">
+              <div className="space-y-4 border-b border-border pb-6">
+                <p className="type-kicker-wide text-muted-foreground">
+                  aimoda
+                </p>
+                <div className="space-y-4">
+                  <img src="/aimoda-logo.svg" alt="aimoda" className="h-7 dark:hidden" />
+                  <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-7 dark:block" />
+                  <h2 className="type-page-title max-w-[11ch] text-foreground sm:text-[2.7rem]">
+                    {mode === 'sms' ? t('common:smsLogin') : t('common:emailLogin')}
+                  </h2>
+                  <p className="type-body-muted max-w-[30ch] text-muted-foreground">
+                    {mode === 'sms' ? t('auth:loginToView') : t('auth:welcomeBack')}
+                  </p>
+                </div>
               </div>
-            )}
 
-            {/* ── Email + Password 表单 (主登录方式) ──────────────────── */}
-            {!showSmsLogin && (
-              <form ref={formRef} onSubmit={handleEmailLogin} className="space-y-3 sm:space-y-4">
-                <div className="space-y-2">
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <div className="grid gap-0 border border-border">
+                {productLines.map((item, index) => (
+                  <div
+                    key={item}
+                    className={cn(
+                      'type-kicker flex items-center justify-between px-4 py-4 text-muted-foreground',
+                      index < productLines.length - 1 && 'border-b border-border',
+                    )}
+                  >
+                    <span>{item}</span>
+                    <span>{String(index + 1).padStart(2, '0')}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 border-t border-border pt-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="space-y-2 sm:pr-3">
+                  <p className="type-kicker text-muted-foreground">
+                    {t('auth:serviceTitle')}
+                  </p>
+                  <p className="type-body-sm max-w-[24ch] text-muted-foreground">
+                    {t('auth:serviceHint')}
+                  </p>
+                </div>
+                <WechatQrCode size={88} />
+              </div>
+            </div>
+          </aside>
+
+          <section className="flex flex-col justify-between px-6 py-6 md:px-8 md:py-8">
+            <div className="space-y-6 lg:pr-6">
+              <div className="space-y-5 border-b border-border pb-5">
+                <p className="type-kicker text-muted-foreground">
+                  {t('auth:authMethods')}
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 border border-border p-1">
+                  {([
+                    ['sms', t('common:smsLogin')],
+                    ['admin', t('common:emailLogin')],
+                  ] as const).map(([value, label]) => {
+                    const active = mode === value
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        className={cn(
+                          'type-action-label h-11 border px-4 transition-colors',
+                          active
+                            ? 'border-foreground bg-foreground text-background'
+                            : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
+                        )}
+                        onClick={() => {
+                          setMode(value)
+                          setError(null)
+                        }}
+                        disabled={active}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {error && (
+                <div className="type-body-sm border border-foreground/20 bg-foreground/[0.03] px-4 py-3 text-foreground dark:bg-foreground/[0.06]">
+                  {error}
+                </div>
+              )}
+
+              {mode === 'sms' ? (
+                <form onSubmit={handleSmsLogin} className="space-y-5">
+                  <div className="space-y-2.5">
+                    <label className="type-kicker block text-muted-foreground">
+                      {t('auth:mobileLabel')}
+                    </label>
+                    <Input
+                      value={smsPhone}
+                      onChange={(event) => setSmsPhone(event.target.value)}
+                      placeholder={t('common:enterPhone')}
+                      autoComplete="tel"
+                      className={AUTH_INPUT_CLASS}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <label className="type-kicker block text-muted-foreground">
+                      {t('auth:codeLabel')}
+                    </label>
+                    <div className="grid items-stretch gap-3 md:grid-cols-[minmax(0,1fr)_176px]">
+                      <Input
+                        value={smsCode}
+                        onChange={(event) => setSmsCode(event.target.value)}
+                        placeholder={t('common:enterCode')}
+                        autoComplete="one-time-code"
+                        className={AUTH_INPUT_CLASS}
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleSendCode}
+                        disabled={isSendingCode || countdown > 0 || isLoading}
+                        className="h-12 rounded-none"
+                      >
+                        {isSendingCode ? t('common:sending') : renderResendLabel()}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="h-12 w-full rounded-none" loading={isLoading}>
+                    {t('common:login')}
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleAdminLogin} className="space-y-5">
+                  <div className="space-y-2.5">
+                    <label className="type-kicker block text-muted-foreground">
+                      {t('auth:email')}
+                    </label>
                     <Input
                       type="email"
                       placeholder={t('common:enterEmail')}
                       value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      className="pl-9 h-10 sm:h-11"
-                      required
-                      disabled={isLoading}
+                      onChange={(event) => setEmail(event.target.value)}
                       autoComplete="email"
+                      className={AUTH_INPUT_CLASS}
+                      required
                     />
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <div className="space-y-2.5">
+                    <label className="type-kicker block text-muted-foreground">
+                      {t('auth:password')}
+                    </label>
                     <Input
                       type="password"
                       placeholder={t('common:enterPassword')}
                       value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      className="pl-9 h-10 sm:h-11"
-                      required
-                      disabled={isLoading}
+                      onChange={(event) => setPassword(event.target.value)}
                       autoComplete="current-password"
+                      className={AUTH_INPUT_CLASS}
+                      required
                     />
                   </div>
-                </div>
 
-                {/* 登录按钮 */}
-                <Button
-                  type="submit"
-                  disabled={isLoading || !email || !password}
-                  className="w-full h-11 bg-foreground text-background hover:bg-foreground/90 active:bg-foreground/90 cursor-pointer"
-                >
-                  {isLoading ? t('common:loggingIn') : t('common:login')}
-                </Button>
+                  <Button type="submit" className="h-12 w-full rounded-none" loading={isLoading}>
+                    {t('common:login')}
+                  </Button>
+                </form>
+              )}
+            </div>
 
-                {/* 自动登录选项 */}
-                <div className="flex items-center justify-between text-sm">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoLogin}
-                      onChange={e => setAutoLogin(e.target.checked)}
-                      className="w-4 h-4"
-                      disabled={isLoading}
-                    />
-                    <span>{t('common:thirtyDayLogin')}</span>
-                  </label>
-                </div>
-
-                {/* 底部说明 */}
-                <div className="text-xs text-muted-foreground space-y-1 pt-2 flex flex-col items-center">
-                  <p>{t('common:autoRegister')}</p>
-                  <p>
-                    {t('common:agreeToTerms')}{' '}
-                    <a href="#" className="text-destructive hover:underline" onClick={e => e.preventDefault()}>{t('common:userAgreement')}</a>
-                    {' '}{' '}
-                    <a href="#" className="text-destructive hover:underline" onClick={e => e.preventDefault()}>{t('common:privacyPolicy')}</a>
-                  </p>
-                </div>
-
-                {/* SMS 备用登录入口 */}
-                <div className="text-sm text-center pt-2">
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    onClick={() => { setShowSmsLogin(true); setError(null) }}
-                    disabled={isLoading}
-                  >
-                    {t('common:useSmsLogin')}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* ── SMS 登录表单 (可折叠备用方案) ─────────────────────────── */}
-            {showSmsLogin && (
-              <form ref={formRef} onSubmit={handleSmsLogin} className="space-y-3 sm:space-y-4">
-                {/* 账号输入 */}
-                <div className="space-y-2">
-                  <Input
-                    type="text"
-                    placeholder={t('common:enterPhone')}
-                    value={smsAccount}
-                    onChange={e => setSmsAccount(e.target.value)}
-                    className="h-10 sm:h-11"
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
-
-                {/* 验证码输入 */}
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                      <Input
-                        type="text"
-                        placeholder={t('common:enterCode')}
-                        value={verificationCode}
-                        onChange={e => setVerificationCode(e.target.value)}
-                        className="pl-9 h-10 sm:h-11"
-                        required
-                        disabled={isLoading}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleSendCode}
-                      disabled={isSendingCode || countdown > 0 || isLoading}
-                      className="h-11 whitespace-nowrap cursor-pointer"
-                    >
-                      {isSendingCode ? t('common:sending') : countdown > 0
-                        ? i18n.language === 'zh-CN'
-                          ? `${countdown}${t('common:resendCountdown')}`
-                          : t('common:resendCountdown', { n: countdown })
-                        : t('common:sendCode')}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* 没收到验证码链接 */}
-                <div className="text-sm flex justify-end">
-                  <button
-                    type="button"
-                    className="text-primary hover:underline cursor-pointer"
-                    disabled={isLoading}
-                  >
-                    {t('common:notReceivedCode')}
-                  </button>
-                </div>
-
-                {/* 登录/注册按钮 */}
-                <Button
-                  type="submit"
-                  disabled={isLoading || !smsAccount || !verificationCode}
-                  className="w-full h-11 bg-foreground text-background hover:bg-foreground/90 active:bg-foreground/90 cursor-pointer"
-                >
-                  {isLoading ? t('common:loggingIn') : t('common:loginRegister')}
-                </Button>
-
-                {/* 自动登录选项 */}
-                <div className="flex items-center justify-between text-sm">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoLogin}
-                      onChange={e => setAutoLogin(e.target.checked)}
-                      className="w-4 h-4"
-                      disabled={isLoading}
-                    />
-                    <span>{t('common:thirtyDayLogin')}</span>
-                  </label>
-                </div>
-
-                {/* 底部说明 */}
-                <div className="text-xs text-muted-foreground space-y-1 pt-2 flex flex-col items-center">
-                  <p>{t('common:autoRegister')}</p>
-                  <p>
-                    {t('common:agreeToTerms')}{' '}
-                    <a href="#" className="text-destructive hover:underline" onClick={e => e.preventDefault()}>{t('common:userAgreement')}</a>
-                    {' '}{' '}
-                    <a href="#" className="text-destructive hover:underline" onClick={e => e.preventDefault()}>{t('common:privacyPolicy')}</a>
-                  </p>
-                </div>
-
-                {/* 返回邮箱登录入口 */}
-                <div className="text-sm text-center pt-2">
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                    onClick={() => { setShowSmsLogin(false); setError(null) }}
-                    disabled={isLoading}
-                  >
-                    {t('common:useEmailLogin')}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
+            <div className="type-caption mt-8 border-t border-border pt-4 text-muted-foreground">
+              {t('common:agreeToTerms')}
+              <span className="mx-2 text-foreground">{t('common:userAgreement')}</span>
+              <span>/</span>
+              <span className="mx-2 text-foreground">{t('common:privacyPolicy')}</span>
+            </div>
+          </section>
         </div>
       </DialogContent>
     </Dialog>

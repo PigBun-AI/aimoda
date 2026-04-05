@@ -1,84 +1,79 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Loader2, MousePointerClick } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+
 import type { ImageResult } from './chat-types'
-import type { SearchResponse } from './chat-api'
 import { ImageLabels } from './image-labels'
 
 interface ImageViewerProps {
   image: ImageResult
-  onSearchResult?: (results: SearchResponse, labelName: string, searchType?: string, params?: any) => void
+  activeLabelKey?: string | null
+  onLabelSearch?: (label: { name: string; category: string; topCategory: string }) => void | Promise<void>
 }
 
 const MIN_SCALE = 0.5
 const MAX_SCALE = 4
 const DOUBLE_TAP_SCALES = [1, 2]
 
-export function ImageViewer({ image, onSearchResult }: ImageViewerProps) {
+export function ImageViewer({ image, activeLabelKey = null, onLabelSearch }: ImageViewerProps) {
   const { t } = useTranslation('common')
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null)
   const dragStart = useRef<{ x: number; y: number; px: number; py: number } | null>(null)
   const lastTap = useRef<number>(0)
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  // Reset when image changes
   useEffect(() => {
     setScale(1)
     setPosition({ x: 0, y: 0 })
     setLoading(true)
+    setAspectRatio(null)
   }, [image.image_id])
 
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // Use native wheel listener with passive:false to allow preventDefault
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
+
     const onWheel = (e: WheelEvent) => {
-      // Always prevent page scroll when wheeling over the image
       e.preventDefault()
       e.stopPropagation()
       const delta = e.deltaY > 0 ? -0.1 : 0.1
-      setScale((prev) => {
+      setScale(prev => {
         const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prev + delta))
         if (next <= 1) setPosition({ x: 0, y: 0 })
         return next
       })
     }
+
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [scale])
+  }, [])
 
-  const handleMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (scale <= 1) return
-      e.preventDefault()
-      setIsDragging(true)
-      dragStart.current = {
-        x: e.clientX,
-        y: e.clientY,
-        px: position.x,
-        py: position.y,
-      }
-    },
-    [scale, position],
-  )
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (scale <= 1) return
+    e.preventDefault()
+    setIsDragging(true)
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      px: position.x,
+      py: position.y,
+    }
+  }, [position.x, position.y, scale])
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isDragging || !dragStart.current) return
-      const dx = e.clientX - dragStart.current.x
-      const dy = e.clientY - dragStart.current.y
-      setPosition({
-        x: dragStart.current.px + dx,
-        y: dragStart.current.py + dy,
-      })
-    },
-    [isDragging],
-  )
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging || !dragStart.current) return
+    const dx = e.clientX - dragStart.current.x
+    const dy = e.clientY - dragStart.current.y
+    setPosition({
+      x: dragStart.current.px + dx,
+      y: dragStart.current.py + dy,
+    })
+  }, [isDragging])
 
   const handleMouseUp = useCallback(() => {
     setIsDragging(false)
@@ -111,7 +106,7 @@ export function ImageViewer({ image, onSearchResult }: ImageViewerProps) {
   return (
     <div
       ref={containerRef}
-      className={`w-full h-full flex items-center justify-center p-4 relative group/viewer ${cursorStyle}`}
+      className={`group/viewer relative flex h-full w-full items-center justify-center p-5 sm:p-8 ${cursorStyle}`}
       style={{ overflow: 'hidden' }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -119,29 +114,29 @@ export function ImageViewer({ image, onSearchResult }: ImageViewerProps) {
       onMouseLeave={handleMouseUp}
       onDoubleClick={handleDoubleClick}
     >
-      {/* Loading spinner */}
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <Loader2 size={32} className="animate-spin text-muted-foreground" />
+        <div className="absolute inset-0 z-10 flex items-center justify-center">
+          <Loader2 size={28} className="animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {/* 底部居中交互提示 */}
       {showHint && !loading && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-2 bg-black/60 backdrop-blur-sm rounded-lg">
-          <MousePointerClick size={14} className="text-white/80 flex-shrink-0" />
-          <span className="text-xs text-white/90 whitespace-nowrap">
+        <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 border border-border bg-background/90 px-3 py-2 backdrop-blur-sm">
+          <MousePointerClick size={14} className="shrink-0 text-muted-foreground" />
+          <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             {t('imageInteractionHint')}
           </span>
         </div>
       )}
 
-      {/* Image container */}
       <div
-        className="relative flex items-center justify-center max-h-[calc(100vh-56px)]"
+        className="relative flex items-center justify-center border border-border bg-card/40"
         style={{
           overflow: 'hidden',
-          aspectRatio: '2/3',
+          aspectRatio: aspectRatio ? `${aspectRatio}` : '2 / 3',
+          height: '100%',
+          maxHeight: '100%',
+          maxWidth: '100%',
           transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
           transition: isDragging ? 'none' : 'transform 0.2s ease-out',
         }}
@@ -149,12 +144,20 @@ export function ImageViewer({ image, onSearchResult }: ImageViewerProps) {
         <img
           src={image.image_url}
           alt={image.brand || 'fashion image'}
-          className="h-full w-full object-contain select-none"
-          onLoad={() => setLoading(false)}
+          className="h-full w-full select-none object-contain"
+          onLoad={(event) => {
+            const target = event.currentTarget
+            if (target.naturalWidth > 0 && target.naturalHeight > 0) {
+              setAspectRatio(target.naturalWidth / target.naturalHeight)
+            }
+            setLoading(false)
+          }}
           onError={() => setLoading(false)}
           draggable={false}
         />
-        {showHint && !loading && <ImageLabels image={image} onSearchResult={onSearchResult} />}
+        {showHint && !loading && (
+          <ImageLabels image={image} activeLabelKey={activeLabelKey} onLabelSearch={onLabelSearch} />
+        )}
       </div>
     </div>
   )

@@ -20,6 +20,18 @@ import re
 import uuid
 from typing import Any, AsyncGenerator
 
+_THINK_OPEN_TAG = "<think>"
+_THINK_CLOSE_TAG = "</think>"
+
+
+def _partial_tag_suffix_length(value: str, tag: str) -> int:
+    """Return the longest suffix length that could continue into a full tag."""
+    max_len = min(len(value), len(tag) - 1)
+    for size in range(max_len, 0, -1):
+        if value.endswith(tag[:size]):
+            return size
+    return 0
+
 
 def extract_images_from_json(text: str) -> tuple[list[dict], dict]:
     """Extract image objects and metadata from JSON tool result."""
@@ -95,6 +107,12 @@ def _build_text_block(index: int, partial: str = "") -> tuple[dict, int]:
     return block, index
 
 
+def _build_reasoning_block(index: int, partial: str = "") -> tuple[dict, int]:
+    """Create a reasoning ContentBlock and return (block, next_index)."""
+    block = {"type": "reasoning", "text": partial}
+    return block, index
+
+
 def _build_tool_use_block(
     call_id: str,
     tool_name: str,
@@ -129,6 +147,70 @@ def _build_tool_result_block(
     return block, index
 
 
+def _consume_thinking_buffer(
+    buffer: str,
+    *,
+    inside_reasoning: bool,
+    final: bool = False,
+) -> tuple[list[tuple[str, str]], str, bool]:
+    """Split streamed model text into visible text and reasoning segments."""
+    actions: list[tuple[str, str]] = []
+    next_buffer = buffer
+    next_inside_reasoning = inside_reasoning
+
+    while next_buffer:
+        if next_inside_reasoning:
+            close_idx = next_buffer.find(_THINK_CLOSE_TAG)
+            if close_idx >= 0:
+                reasoning_text = next_buffer[:close_idx]
+                if reasoning_text:
+                    actions.append(("reasoning", reasoning_text))
+                actions.append(("reasoning_end", ""))
+                next_buffer = next_buffer[close_idx + len(_THINK_CLOSE_TAG):]
+                next_inside_reasoning = False
+                continue
+
+            if final:
+                if next_buffer:
+                    actions.append(("reasoning", next_buffer))
+                actions.append(("reasoning_end", ""))
+                next_buffer = ""
+                next_inside_reasoning = False
+                break
+
+            keep = _partial_tag_suffix_length(next_buffer, _THINK_CLOSE_TAG)
+            flush_upto = len(next_buffer) - keep
+            if flush_upto > 0:
+                actions.append(("reasoning", next_buffer[:flush_upto]))
+                next_buffer = next_buffer[flush_upto:]
+            break
+
+        open_idx = next_buffer.find(_THINK_OPEN_TAG)
+        if open_idx >= 0:
+            visible_text = next_buffer[:open_idx]
+            if visible_text:
+                actions.append(("text", visible_text))
+            actions.append(("reasoning_start", ""))
+            next_buffer = next_buffer[open_idx + len(_THINK_OPEN_TAG):]
+            next_inside_reasoning = True
+            continue
+
+        if final:
+            if next_buffer:
+                actions.append(("text", next_buffer))
+            next_buffer = ""
+            break
+
+        keep = _partial_tag_suffix_length(next_buffer, _THINK_OPEN_TAG)
+        flush_upto = len(next_buffer) - keep
+        if flush_upto > 0:
+            actions.append(("text", next_buffer[:flush_upto]))
+            next_buffer = next_buffer[flush_upto:]
+        break
+
+    return actions, next_buffer, next_inside_reasoning
+
+
 async def stream_agent_response(
     agent,
     message: str | list[dict[str, Any]],
@@ -148,7 +230,10 @@ async def stream_agent_response(
     closed_tool_call_ids: set[str] = set()
     current_block_index: int = -1  # will be incremented to 0 on first block
     text_block_index: int = -1     # -1 means no text block yet
+    reasoning_block_index: int = -1
     tool_call_index_map: dict[str, int] = {}
+    pending_text_buffer = ""
+    inside_reasoning = False
 
     # Track streaming tool calls to prevent on_tool_start from
     # re-emitting content_block_start for the same tool.
@@ -162,6 +247,112 @@ async def stream_agent_response(
     active_tool_use_id: str = ""
     # Whether the current text block is "open" (started but not stopped)
     text_block_open: bool = False
+    reasoning_block_open: bool = False
+
+    def _close_text_block() -> list[str]:
+        nonlocal text_block_open
+        events: list[str] = []
+        if text_block_open:
+            events.append(sse_event({
+                "type": "content_block_stop",
+                "index": text_block_index,
+            }))
+            text_block_open = False
+        return events
+
+    def _close_reasoning_block() -> list[str]:
+        nonlocal reasoning_block_open
+        events: list[str] = []
+        if reasoning_block_open:
+            events.append(sse_event({
+                "type": "content_block_stop",
+                "index": reasoning_block_index,
+            }))
+            reasoning_block_open = False
+        return events
+
+    def _emit_text_delta(delta: str) -> list[str]:
+        nonlocal current_block_index, text_block_index, text_block_open
+        events: list[str] = []
+        if not delta:
+            return events
+
+        if not text_block_open:
+            current_block_index += 1
+            text_block_index = current_block_index
+            text_block, _ = _build_text_block(text_block_index)
+            if result is not None:
+                _ensure_result_block(result, text_block_index, text_block)
+            events.append(sse_event({
+                **text_block,
+                "type": "content_block_start",
+                "index": text_block_index,
+                "block_type": "text",
+            }))
+            text_block_open = True
+
+        full_text_parts.append(delta)
+        events.append(sse_event({
+            "type": "content_block_delta",
+            "index": text_block_index,
+            "delta": delta,
+        }))
+        if result is not None and text_block_index < len(result.content_blocks):
+            blk = result.content_blocks[text_block_index]
+            if blk.get("type") == "text":
+                blk["text"] = f'{blk.get("text", "")}{delta}'
+        return events
+
+    def _emit_reasoning_delta(delta: str) -> list[str]:
+        nonlocal current_block_index, reasoning_block_index, reasoning_block_open
+        events: list[str] = []
+        if not delta:
+            return events
+
+        if not reasoning_block_open:
+            current_block_index += 1
+            reasoning_block_index = current_block_index
+            reasoning_block, _ = _build_reasoning_block(reasoning_block_index)
+            if result is not None:
+                _ensure_result_block(result, reasoning_block_index, reasoning_block)
+            events.append(sse_event({
+                **reasoning_block,
+                "type": "content_block_start",
+                "index": reasoning_block_index,
+                "block_type": "reasoning",
+            }))
+            reasoning_block_open = True
+
+        events.append(sse_event({
+            "type": "content_block_delta",
+            "index": reasoning_block_index,
+            "delta": delta,
+        }))
+        if result is not None and reasoning_block_index < len(result.content_blocks):
+            blk = result.content_blocks[reasoning_block_index]
+            if blk.get("type") == "reasoning":
+                blk["text"] = f'{blk.get("text", "")}{delta}'
+        return events
+
+    def _flush_pending_text(*, final: bool = False) -> list[str]:
+        nonlocal pending_text_buffer, inside_reasoning
+        events: list[str] = []
+        actions, pending_text_buffer, inside_reasoning = _consume_thinking_buffer(
+            pending_text_buffer,
+            inside_reasoning=inside_reasoning,
+            final=final,
+        )
+        for action, payload in actions:
+            if action == "text":
+                events.extend(_emit_text_delta(payload))
+            elif action == "reasoning_start":
+                events.extend(_close_text_block())
+            elif action == "reasoning":
+                events.extend(_close_text_block())
+                events.extend(_emit_reasoning_delta(payload))
+            elif action == "reasoning_end":
+                events.extend(_close_reasoning_block())
+        return events
 
     try:
         config = {
@@ -215,35 +406,14 @@ async def stream_agent_response(
                         delta = ""
 
                     if delta:
-                        # Start a new text block if:
-                        # 1. No text block exists yet (text_block_index == -1)
-                        # 2. Previous text block was closed (after tool calls)
-                        if not text_block_open:
-                            current_block_index += 1
-                            text_block_index = current_block_index
-                            text_block, _ = _build_text_block(text_block_index)
-                            if result is not None:
-                                _ensure_result_block(result, text_block_index, text_block)
-                            yield sse_event({
-                                **text_block,
-                                "type": "content_block_start",
-                                "index": text_block_index,
-                                "block_type": "text",
-                            })
-                            text_block_open = True
-                        full_text_parts.append(delta)
-                        yield sse_event({
-                            "type": "content_block_delta",
-                            "index": text_block_index,
-                            "delta": delta,
-                        })
-                        if result is not None and text_block_index < len(result.content_blocks):
-                            blk = result.content_blocks[text_block_index]
-                            if blk.get("type") == "text":
-                                blk["text"] = f'{blk.get("text", "")}{delta}'
+                        pending_text_buffer = f"{pending_text_buffer}{delta}"
+                        for event_payload in _flush_pending_text():
+                            yield event_payload
 
                 # Tool call chunks (streaming input) — emit as content_block_delta
                 if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
+                    for event_payload in _flush_pending_text(final=True):
+                        yield event_payload
                     for tc_chunk in chunk.tool_call_chunks:
                         tc_id = tc_chunk.get("id") or tc_chunk.get("index", "")
                         tc_name = tc_chunk.get("name", "")
@@ -252,12 +422,10 @@ async def stream_agent_response(
                         # First chunk with name → start tool_use block
                         if tc_name and tc_id and tc_id not in seen_tool_call_ids:
                             # Close open text block before starting tool block
-                            if text_block_open:
-                                yield sse_event({
-                                    "type": "content_block_stop",
-                                    "index": text_block_index,
-                                })
-                                text_block_open = False
+                            for event_payload in _close_text_block():
+                                yield event_payload
+                            for event_payload in _close_reasoning_block():
+                                yield event_payload
                             seen_tool_call_ids.add(tc_id)
                             current_block_index += 1
                             block_index = current_block_index
@@ -350,12 +518,12 @@ async def stream_agent_response(
 
                 if call_id not in seen_tool_call_ids:
                     # Close open text block before starting tool block
-                    if text_block_open:
-                        yield sse_event({
-                            "type": "content_block_stop",
-                            "index": text_block_index,
-                        })
-                        text_block_open = False
+                    for event_payload in _flush_pending_text(final=True):
+                        yield event_payload
+                    for event_payload in _close_text_block():
+                        yield event_payload
+                    for event_payload in _close_reasoning_block():
+                        yield event_payload
                     seen_tool_call_ids.add(call_id)
                     current_block_index += 1
                     block_index = current_block_index
@@ -463,20 +631,14 @@ async def stream_agent_response(
                     _ensure_result_block(result, block_index, block)
 
         # ── Finalize result ──────────────────────────────────────────────────
-        full_text = "".join(full_text_parts)
-        full_text = re.sub(
-            r"""<think>.*?</think>\s*""",
-            "",
-            full_text,
-            flags=re.DOTALL,
-        ).strip()
+        for event_payload in _flush_pending_text(final=True):
+            yield event_payload
+        full_text = "".join(full_text_parts).strip()
 
-        if text_block_open:
-            yield sse_event({
-                "type": "content_block_stop",
-                "index": text_block_index,
-            })
-            text_block_open = False
+        for event_payload in _close_text_block():
+            yield event_payload
+        for event_payload in _close_reasoning_block():
+            yield event_payload
 
         if result is not None:
             result.full_text = full_text

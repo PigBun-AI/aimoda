@@ -5,15 +5,11 @@ from fastapi import Depends, Header, Request
 
 from .config import settings
 from .exceptions import AppError
-from .models import AuthenticatedUser, UserRole, FREE_USER_VIEW_LIMIT
+from .models import AuthenticatedUser, UserRole
 from .services.auth_token import verify_access_token
 from .repositories.session_repo import is_session_valid
 from .repositories.subscription_repo import find_active_subscription_by_user_id
-from .repositories.report_view_repo import (
-    get_report_view_count,
-    has_viewed_report,
-    record_report_view,
-)
+from .repositories.report_view_repo import record_report_view
 
 
 def get_current_user(authorization: Annotated[str | None, Header()] = None) -> AuthenticatedUser:
@@ -77,20 +73,11 @@ def check_report_view_permission_dep(report_id: int, user: AuthenticatedUser):
     """Check if user can view a report. Records view if allowed."""
     # Admin and editor have unlimited access
     if user.role in ("admin", "editor"):
+        record_report_view(user.id, report_id)
         return
 
     # Subscribers have unlimited access
     if find_active_subscription_by_user_id(user.id) is not None:
+        record_report_view(user.id, report_id)
         return
-
-    # Already viewed reports can be re-viewed
-    if has_viewed_report(user.id, report_id):
-        return
-
-    # Check view count limit
-    view_count = get_report_view_count(user.id)
-    if view_count >= FREE_USER_VIEW_LIMIT:
-        raise AppError("已达到免费查看上限", 403)
-
-    # Record the view
-    record_report_view(user.id, report_id)
+    raise AppError("订阅后可查看该时装周快报", 403)

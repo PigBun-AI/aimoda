@@ -4,7 +4,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 
 from ..dependencies import get_current_user, extract_device_context
-from ..models import AuthenticatedUser, LoginRequest, RegisterRequest, LogoutRequest
+from ..models import (
+    AuthenticatedUser,
+    LoginRequest,
+    LogoutRequest,
+    RegisterRequest,
+    SmsLoginRequest,
+    SmsRegisterRequest,
+    SmsSendCodeRequest,
+)
 from ..services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -40,6 +48,60 @@ def register(body: RegisterRequest, request: Request):
     result = auth_service.register(
         email=body.email,
         password=body.password,
+        user_agent=ctx["user_agent"],
+        ip_address=ctx["ip_address"],
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "user": result["user"].model_dump(by_alias=True),
+            "tokens": result["tokens"].model_dump(by_alias=True),
+        },
+    }
+
+
+@router.post("/sms/send-code")
+def send_sms_code(body: SmsSendCodeRequest, request: Request):
+    ctx = extract_device_context(request)
+    payload = auth_service.send_sms_code(
+        phone=body.phone,
+        purpose=body.purpose,
+        ip_address=ctx["ip_address"],
+    )
+    return {"success": True, "data": payload}
+
+
+@router.post("/sms/login")
+def sms_login(body: SmsLoginRequest, request: Request):
+    ctx = extract_device_context(request)
+    result = auth_service.login_or_register_by_phone(
+        phone=body.phone,
+        code=body.code,
+        user_agent=ctx["user_agent"],
+        ip_address=ctx["ip_address"],
+    )
+
+    response: dict = {
+        "success": True,
+        "data": {
+            "user": result["user"].model_dump(by_alias=True),
+            "tokens": result["tokens"].model_dump(by_alias=True),
+        },
+    }
+
+    if result["kicked_other_devices"]:
+        response["message"] = "您已在其他设备登出"
+
+    return response
+
+
+@router.post("/sms/register", status_code=201)
+def sms_register(body: SmsRegisterRequest, request: Request):
+    ctx = extract_device_context(request)
+    result = auth_service.register_by_phone(
+        phone=body.phone,
+        code=body.code,
         user_agent=ctx["user_agent"],
         ip_address=ctx["ip_address"],
     )

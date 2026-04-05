@@ -1,11 +1,10 @@
 import os
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg_pool import AsyncConnectionPool
 
 from ..config import settings
+from ..llm_factory import build_llm_with_fallback
 from .playbooks import CORE_SYSTEM_PROMPT
 from .tools import ALL_TOOLS
 
@@ -42,26 +41,10 @@ async def get_agent():
     """Get or create the LangGraph ReAct agent with checkpointer."""
     global _agent
     if _agent is None:
-        provider = (settings.LLM_PROVIDER or "anthropic").strip().lower()
-
-        if provider == "anthropic":
-            llm = ChatAnthropic(
-                model=settings.LLM_MODEL,
-                temperature=settings.LLM_TEMPERATURE,
-                max_tokens=settings.LLM_MAX_TOKENS,
-                anthropic_api_key=settings.LLM_API_KEY,
-                anthropic_api_url=settings.LLM_BASE_URL,
-            )
-        elif provider == "openai":
-            llm = ChatOpenAI(
-                model=settings.LLM_MODEL,
-                temperature=settings.LLM_TEMPERATURE,
-                max_tokens=settings.LLM_MAX_TOKENS,
-                api_key=settings.LLM_API_KEY,
-                base_url=settings.LLM_BASE_URL,
-            )
-        else:
-            raise ValueError(f"Unsupported LLM_PROVIDER: {settings.LLM_PROVIDER}")
+        llm = build_llm_with_fallback(
+            temperature=settings.LLM_TEMPERATURE,
+            max_tokens=settings.LLM_MAX_TOKENS,
+        )
 
         checkpointer = await get_checkpointer()
         _agent = create_react_agent(

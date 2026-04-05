@@ -16,6 +16,7 @@ const reports = [
     status: 'published' as const,
     updatedAt: '2026-03-12T10:00:00.000Z',
     coverImageUrl: '/reports/test-brand-fall-2026/cover.jpg',
+    previewUrl: '/api/reports/1/preview/index.html',
   },
 ]
 
@@ -51,5 +52,6 @@ describe('ReportsPage', () => {
     expect(screen.getByText('测试报告')).toBeInTheDocument()
     expect(screen.getByText('Brand · AW26')).toBeInTheDocument()
     expect(screen.getByText('Published')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /测试报告/i })).toHaveAttribute('href', '/api/reports/1/preview/index.html')
   })
 })

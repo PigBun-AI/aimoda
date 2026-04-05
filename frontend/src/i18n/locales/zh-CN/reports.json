@@ -11,5 +11,12 @@
   "backToList": "返回列表",
   "previousArticle": "上一篇",
   "nextArticle": "下一篇",
-  "iframeError": "该报告地址不符合安全加载策略"
+  "iframeError": "该报告地址不符合安全加载策略",
+  "draft": "草稿",
+  "pagination": "分页",
+  "archiveLabel": "aimoda archive",
+  "lockedEyebrow": "会员解锁",
+  "lockedTitle": "完整时装周快报需开通会员",
+  "lockedBody": "兑换会员码后即可浏览全部快报、深度解读与归档内容。",
+  "openMembership": "查看会员中心"
 }

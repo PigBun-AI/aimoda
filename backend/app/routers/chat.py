@@ -15,6 +15,8 @@ import asyncio
 import base64
 import binascii
 import json
+import time
+import uuid
 from typing import Annotated, Any, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -23,6 +25,7 @@ from pydantic import BaseModel
 
 from ..dependencies import get_current_user
 from ..models import AuthenticatedUser
+from ..services.feature_access_service import consume_feature_access, get_feature_access_status
 from ..services.chat_service import (
     create_session,
     list_sessions,
@@ -33,7 +36,9 @@ from ..services.chat_service import (
     get_session,
     list_messages,
     create_message,
+    update_message,
     auto_title_session,
+    finalize_session_title,
     set_session_execution_status,
     get_artifact,
     get_session_agent_runtime,
@@ -72,6 +77,7 @@ from ..agent.query_context import (
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+ACTIVE_CHAT_STREAMS: set[asyncio.Task[Any]] = set()
 
 
 # ── Request/Response models ──
@@ -184,6 +190,58 @@ def _extract_text_from_blocks(blocks: list[dict[str, Any]]) -> str:
 
 def _extract_image_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [dict(block) for block in blocks if block.get("type") == "image"]
+
+
+def _materialize_stream_blocks(stream_result: StreamResult) -> list[dict[str, Any]]:
+    return [
+        dict(block)
+        for block in stream_result.content_blocks
+        if isinstance(block, dict) and block
+    ]
+
+
+async def _persist_streaming_assistant_message(
+    *,
+    session_id: str,
+    message_id: str | None,
+    stream_result: StreamResult,
+    stream_state: str,
+    run_id: str | None = None,
+) -> str | None:
+    blocks = _materialize_stream_blocks(stream_result)
+    if not blocks and not message_id:
+        return None
+
+    metadata_patch: dict[str, Any] = {"stream_state": stream_state}
+    if stream_result.stop_reason:
+        metadata_patch["stop_reason"] = stream_result.stop_reason
+    if run_id:
+        metadata_patch["run_id"] = run_id
+
+    if message_id:
+        await asyncio.to_thread(
+            update_message,
+            message_id,
+            content=blocks,
+            metadata_patch=metadata_patch,
+        )
+        return message_id
+
+    if not blocks:
+        return None
+
+    created = await asyncio.to_thread(
+        create_message,
+        session_id,
+        "assistant",
+        blocks,
+        metadata=metadata_patch,
+    )
+    return str(created["id"])
+
+
+def _resolve_interrupted_execution_status(stream_result: StreamResult) -> str:
+    return "completed" if _materialize_stream_blocks(stream_result) else "idle"
 
 
 def _summarize_tool_payload(payload: dict[str, Any]) -> str:
@@ -618,6 +676,24 @@ async def chat_endpoint(
             content={"success": False, "error": "消息内容不能为空"},
         )
 
+    access = await asyncio.to_thread(get_feature_access_status, user, "ai_chat")
+    if not access.allowed:
+        return JSONResponse(
+            status_code=403,
+            content={
+                "success": False,
+                "error": "AI 助手次数已用尽，请开通会员或兑换订阅后继续使用",
+                "data": {"feature": access.model_dump(by_alias=True)},
+            },
+        )
+
+    access = await asyncio.to_thread(
+        consume_feature_access,
+        user,
+        "ai_chat",
+        metadata={"session_id": req.session_id},
+    )
+
     await asyncio.to_thread(maybe_compact_session, req.session_id, user.id)
     session = await asyncio.to_thread(get_session, req.session_id)
     if not session or session.get("user_id") != user.id:
@@ -679,6 +755,7 @@ async def chat_endpoint(
         current_query_context,
     )
     set_query_context(thread_id, query_context)
+    run_id = str(uuid.uuid4())
 
     # Touch session + auto-title (run sync DB ops in thread pool)
     await asyncio.to_thread(touch_session, req.session_id)
@@ -687,6 +764,7 @@ async def chat_endpoint(
         set_session_execution_status,
         req.session_id,
         execution_status="running",
+        run_id=run_id,
     )
 
     await asyncio.to_thread(
@@ -695,9 +773,47 @@ async def chat_endpoint(
 
     # Create StreamResult to collect full assistant text
     stream_result = StreamResult()
+    assistant_message_id: str | None = None
+    last_persisted_snapshot = ""
+    last_persist_at = 0.0
 
-    async def _generate() -> AsyncGenerator[str, None]:
-        """Wrap the agent stream, then persist the assistant message."""
+    async def _sync_assistant_progress(*, force: bool = False, stream_state: str = "streaming") -> None:
+        nonlocal assistant_message_id, last_persisted_snapshot, last_persist_at
+
+        blocks = _materialize_stream_blocks(stream_result)
+        if not blocks and not assistant_message_id and stream_state == "streaming":
+            return
+
+        snapshot = json.dumps(blocks, ensure_ascii=False)
+        now = time.monotonic()
+        if (
+            not force
+            and stream_state == "streaming"
+            and snapshot == last_persisted_snapshot
+            and (now - last_persist_at) < 0.35
+        ):
+            return
+
+        assistant_message_id = await _persist_streaming_assistant_message(
+            session_id=req.session_id,
+            message_id=assistant_message_id,
+            stream_result=stream_result,
+            stream_state=stream_state,
+            run_id=run_id,
+        )
+        last_persisted_snapshot = snapshot
+        last_persist_at = now
+
+    event_queue: asyncio.Queue[str | None] = asyncio.Queue()
+    client_connected = True
+
+    def _enqueue_stream_chunk(chunk: str | None) -> None:
+        if not client_connected and chunk is not None:
+            return
+        event_queue.put_nowait(chunk)
+
+    async def _run_stream() -> None:
+        """Run the stream in the background so UI refreshes do not abort execution."""
         try:
             async for chunk in stream_agent_response(
                 agent=agent,
@@ -706,14 +822,17 @@ async def chat_endpoint(
                 thread_id=thread_id,
                 result=stream_result,
             ):
-                yield chunk
+                _enqueue_stream_chunk(chunk)
+                await _sync_assistant_progress()
 
             # After streaming completes, persist assistant message using ContentBlocks
             if stream_result.content_blocks:
+                await _sync_assistant_progress(force=True, stream_state="completed")
                 await asyncio.to_thread(
-                    create_message, req.session_id, "assistant",
+                    finalize_session_title,
+                    req.session_id,
+                    raw_content_blocks,
                     stream_result.content_blocks,
-                    metadata={"stop_reason": stream_result.stop_reason},
                 )
             await asyncio.to_thread(
                 clear_compaction_bootstrap,
@@ -724,20 +843,67 @@ async def chat_endpoint(
                 set_session_execution_status,
                 req.session_id,
                 execution_status="completed",
+                run_id=run_id,
+            )
+        except asyncio.CancelledError:
+            await _sync_assistant_progress(force=True, stream_state="interrupted")
+            if stream_result.content_blocks:
+                await asyncio.to_thread(
+                    finalize_session_title,
+                    req.session_id,
+                    raw_content_blocks,
+                    stream_result.content_blocks,
+                )
+            await asyncio.to_thread(
+                clear_compaction_bootstrap,
+                req.session_id,
+                thread_version=int(session.get("thread_version", 1) or 1),
+            )
+            await asyncio.to_thread(
+                set_session_execution_status,
+                req.session_id,
+                execution_status=_resolve_interrupted_execution_status(stream_result),
+                run_id=run_id,
             )
         except Exception:
             import traceback
             traceback.print_exc()
+            await _sync_assistant_progress(force=True, stream_state="error")
+            await asyncio.to_thread(
+                clear_compaction_bootstrap,
+                req.session_id,
+                thread_version=int(session.get("thread_version", 1) or 1),
+            )
             await asyncio.to_thread(
                 set_session_execution_status,
                 req.session_id,
                 execution_status="error",
+                run_id=run_id,
                 error_message="Agent stream failed. Check server logs.",
             )
-            yield sse_event({"type": "error", "message": "Agent stream failed. Check server logs."})
+            _enqueue_stream_chunk(sse_event({"type": "error", "message": "Agent stream failed. Check server logs."}))
         finally:
             set_query_context(thread_id, None)
             clear_turn_context(thread_id)
+            _enqueue_stream_chunk(None)
+
+    stream_task = asyncio.create_task(_run_stream())
+    ACTIVE_CHAT_STREAMS.add(stream_task)
+    stream_task.add_done_callback(ACTIVE_CHAT_STREAMS.discard)
+
+    async def _generate() -> AsyncGenerator[str, None]:
+        nonlocal client_connected
+        try:
+            while True:
+                chunk = await event_queue.get()
+                if chunk is None:
+                    break
+                yield chunk
+        except asyncio.CancelledError:
+            client_connected = False
+            raise
+        finally:
+            client_connected = False
 
     return StreamingResponse(
         _generate(),
@@ -746,6 +912,8 @@ async def chat_endpoint(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "X-Aimoda-Feature-Remaining": str(access.remaining_count),
+            "X-Aimoda-Run-Id": run_id,
         },
     )
 
@@ -857,6 +1025,58 @@ class SearchByColorRequest(BaseModel):
     page_size: int = 56
 
 
+def _scroll_filtered_page(
+    *,
+    client: Any,
+    collection_name: str,
+    scroll_filter: Any,
+    offset: int,
+    limit: int,
+    with_payload: bool = True,
+):
+    """Adapt cursor-based Qdrant scrolling to the page-based API used by the UI."""
+    if offset <= 0:
+        records, _ = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            with_payload=with_payload,
+        )
+        return records
+
+    remaining = offset
+    cursor: Any = None
+
+    while remaining > 0:
+        batch_size = min(remaining, 256)
+        skipped, next_cursor = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=scroll_filter,
+            limit=batch_size,
+            offset=cursor,
+            with_payload=False,
+        )
+        skipped_count = len(skipped)
+        if skipped_count == 0:
+            return []
+        remaining -= skipped_count
+        cursor = next_cursor
+        if remaining > 0 and cursor is None:
+            return []
+
+    if cursor is None:
+        return []
+
+    records, _ = client.scroll(
+        collection_name=collection_name,
+        scroll_filter=scroll_filter,
+        limit=limit,
+        offset=cursor,
+        with_payload=with_payload,
+    )
+    return records
+
+
 @router.post("/search_similar")
 async def search_similar_endpoint(
     req: SearchSimilarRequest,
@@ -935,20 +1155,21 @@ async def search_similar_endpoint(
             total = count_result.count
             print(f"[search_similar] Vector search found {len(results)} results (total filtered: {total})")
         else:
-            # Fallback to scroll (no vector available)
+            # Fallback to filtered scroll using the same page-based contract as vector search.
             count_result = client.count(
                 collection_name=collection,
                 count_filter=qdrant_filter,
                 exact=True,
             )
             total = count_result.count
-            scroll_result, _next_offset = client.scroll(
+            results = _scroll_filtered_page(
+                client=client,
                 collection_name=collection,
                 scroll_filter=qdrant_filter,
+                offset=offset,
                 limit=req.page_size,
                 with_payload=True,
             )
-            results = scroll_result
             print(f"[search_similar] Scroll fallback found {len(results)} results (total: {total})")
 
         formatted = []
@@ -1240,12 +1461,14 @@ async def websocket_chat(websocket: WebSocket):
                     current_query_context,
                 )
                 set_query_context(thread_id, query_context)
+                run_id = str(uuid.uuid4())
                 history = msg.get("history", [])
                 await asyncio.to_thread(auto_title_session, session_id, raw_content_blocks)
                 await asyncio.to_thread(
                     set_session_execution_status,
                     session_id,
                     execution_status="running",
+                    run_id=run_id,
                 )
 
                 await asyncio.to_thread(
@@ -1253,35 +1476,99 @@ async def websocket_chat(websocket: WebSocket):
                 )
 
                 stream_result = StreamResult()
+                assistant_message_id: str | None = None
+                last_persisted_snapshot = ""
+                last_persist_at = 0.0
 
-                async for event in stream_agent_response(
-                    agent=agent,
-                    message=agent_input,
-                    history=history,
-                    thread_id=thread_id,
-                    result=stream_result,
-                ):
-                    await websocket.send_text(event)
+                async def _sync_assistant_progress(*, force: bool = False, stream_state: str = "streaming") -> None:
+                    nonlocal assistant_message_id, last_persisted_snapshot, last_persist_at
 
-                # Persist assistant message using ContentBlocks
-                if stream_result.content_blocks:
-                    await asyncio.to_thread(
-                        create_message, session_id, "assistant",
-                        stream_result.content_blocks,
-                        metadata={"stop_reason": stream_result.stop_reason},
+                    blocks = _materialize_stream_blocks(stream_result)
+                    if not blocks and not assistant_message_id and stream_state == "streaming":
+                        return
+
+                    snapshot = json.dumps(blocks, ensure_ascii=False)
+                    now = time.monotonic()
+                    if (
+                        not force
+                        and stream_state == "streaming"
+                        and snapshot == last_persisted_snapshot
+                        and (now - last_persist_at) < 0.35
+                    ):
+                        return
+
+                    assistant_message_id = await _persist_streaming_assistant_message(
+                        session_id=session_id,
+                        message_id=assistant_message_id,
+                        stream_result=stream_result,
+                        stream_state=stream_state,
+                        run_id=run_id,
                     )
-                await asyncio.to_thread(
-                    clear_compaction_bootstrap,
-                    session_id,
-                    thread_version=int(session.get("thread_version", 1) or 1),
-                )
-                await asyncio.to_thread(
-                    set_session_execution_status,
-                    session_id,
-                    execution_status="completed",
-                )
-                set_query_context(thread_id, None)
-                clear_turn_context(thread_id)
+                    last_persisted_snapshot = snapshot
+                    last_persist_at = now
+
+                try:
+                    async for event in stream_agent_response(
+                        agent=agent,
+                        message=agent_input,
+                        history=history,
+                        thread_id=thread_id,
+                        result=stream_result,
+                    ):
+                        await websocket.send_text(event)
+                        await _sync_assistant_progress()
+
+                    if stream_result.content_blocks:
+                        await _sync_assistant_progress(force=True, stream_state="completed")
+                        await asyncio.to_thread(
+                            finalize_session_title,
+                            session_id,
+                            raw_content_blocks,
+                            stream_result.content_blocks,
+                        )
+                    await asyncio.to_thread(
+                        clear_compaction_bootstrap,
+                        session_id,
+                        thread_version=int(session.get("thread_version", 1) or 1),
+                    )
+                    await asyncio.to_thread(
+                        set_session_execution_status,
+                        session_id,
+                        execution_status="completed",
+                        run_id=run_id,
+                    )
+                except (WebSocketDisconnect, asyncio.CancelledError):
+                    await _sync_assistant_progress(force=True, stream_state="interrupted")
+                    if stream_result.content_blocks:
+                        await asyncio.to_thread(
+                            finalize_session_title,
+                            session_id,
+                            raw_content_blocks,
+                            stream_result.content_blocks,
+                        )
+                    await asyncio.to_thread(
+                        clear_compaction_bootstrap,
+                        session_id,
+                        thread_version=int(session.get("thread_version", 1) or 1),
+                    )
+                    await asyncio.to_thread(
+                        set_session_execution_status,
+                        session_id,
+                        execution_status=_resolve_interrupted_execution_status(stream_result),
+                        run_id=run_id,
+                    )
+                    raise
+                except Exception:
+                    await _sync_assistant_progress(force=True, stream_state="error")
+                    await asyncio.to_thread(
+                        clear_compaction_bootstrap,
+                        session_id,
+                        thread_version=int(session.get("thread_version", 1) or 1),
+                    )
+                    raise
+                finally:
+                    set_query_context(thread_id, None)
+                    clear_turn_context(thread_id)
 
     except WebSocketDisconnect:
         pass

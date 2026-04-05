@@ -2,7 +2,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from backend.app.agent.tools import add_filter, start_collection
+from backend.app.agent.tools import add_filter, analyze_trends, start_collection
 from backend.app.agent.session_state import set_session, get_session
 from backend.app.agent.harness import (
     _session_semantics,
@@ -138,6 +138,69 @@ class HarnessRuntimeTest(unittest.TestCase):
 
         self.assertEqual(result.get("error_type"), "invalid_arguments")
         self.assertFalse(result.get("retry_same_call", True))
+
+    def test_tool_schema_allows_null_value_and_returns_structured_error(self):
+        session = {
+            "query": "",
+            "vector_type": "tag",
+            "q_emb": None,
+            "filters": [],
+            "active": True,
+        }
+        set_session(self.config, session)
+
+        result = json.loads(add_filter.invoke({"dimension": "color", "value": None}, config=self.config))
+
+        self.assertEqual(result.get("error_type"), "invalid_arguments")
+        self.assertFalse(result.get("retry_same_call", True))
+
+    @patch("backend.app.agent.tools.count_session", return_value=24)
+    def test_brand_only_request_autobinds_missing_add_filter_dimension_to_brand(self, mock_count):
+        session = {
+            "query": "",
+            "vector_type": "tag",
+            "q_emb": None,
+            "filters": [],
+            "active": True,
+        }
+        set_session(self.config, session)
+        set_turn_context(
+            self.thread_id,
+            build_turn_context(query_text="我只想看 Akris 这个品牌的图片", has_images=False),
+        )
+
+        with patch("backend.app.agent.tools.get_qdrant", return_value=object()):
+            result = json.loads(
+                add_filter.func(
+                    None,
+                    "Akris",
+                    config=self.config,
+                )
+            )
+
+        self.assertEqual(result.get("action"), "filter_added")
+        self.assertIn("brand=Akris", result.get("message", ""))
+
+    def test_brand_only_request_autobinds_missing_trend_dimension_to_brand(self):
+        set_turn_context(
+            self.thread_id,
+            build_turn_context(query_text="我只想看 Akris 这个品牌的图片", has_images=False),
+        )
+
+        with patch("backend.app.agent.tools.get_collection", return_value="fashion_items"), patch(
+            "backend.app.agent.tools.get_qdrant", return_value=object()
+        ), patch("backend.app.agent.tools.build_qdrant_filter", return_value=None), patch(
+            "backend.app.agent.tools.scroll_all", return_value=[]
+        ):
+            result = json.loads(
+                analyze_trends.invoke(
+                    {"dimension": None, "brand": "Akris"},
+                    config=self.config,
+                )
+            )
+
+        self.assertEqual(result.get("dimension"), "brand")
+        self.assertEqual(result.get("total_items_analyzed"), 0)
 
     @patch("backend.app.agent.tools.set_session_agent_runtime")
     @patch("backend.app.agent.tools.count_session", return_value=120)

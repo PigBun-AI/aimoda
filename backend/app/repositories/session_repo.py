@@ -105,6 +105,13 @@ def invalidate_session_by_token(refresh_token: str) -> bool:
     return cursor.rowcount > 0
 
 
+def invalidate_session_by_id(session_id: int) -> bool:
+    db = get_db()
+    cursor = db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+    db.commit()
+    return cursor.rowcount > 0
+
+
 def invalidate_all_user_sessions(user_id: int) -> int:
     db = get_db()
     cursor = db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))

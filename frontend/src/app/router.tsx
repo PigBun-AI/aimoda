@@ -66,6 +66,10 @@ export const router = createBrowserRouter([
                 element: <ProfilePage />,
               },
               {
+                path: '/membership',
+                element: <Navigate to="/profile?tab=access" replace />,
+              },
+              {
                 path: '/inspiration',
                 element: <InspirationPage />,
               },

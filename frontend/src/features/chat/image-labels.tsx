@@ -2,8 +2,6 @@ import { useRef, useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ImageResult } from './chat-types'
-import { searchSimilar } from './chat-api'
-import type { SearchResponse } from './chat-api'
 
 /** Preset Y positions by top_category when no bbox available */
 const PRESET_Y: Record<string, number> = {
@@ -72,15 +70,14 @@ function buildLabels(image: ImageResult): LabelData[] {
 
 interface ImageLabelsProps {
   image: ImageResult
-  onSearchResult?: (results: SearchResponse, labelName: string, searchType?: string, params?: any) => void
+  onLabelSearch?: (label: { name: string; category: string; topCategory: string }) => void | Promise<void>
+  activeLabelKey?: string | null
 }
 
-export function ImageLabels({ image, onSearchResult }: ImageLabelsProps) {
+export function ImageLabels({ image, onLabelSearch, activeLabelKey = null }: ImageLabelsProps) {
   const { t } = useTranslation('common')
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
-  const [searchingIndex, setSearchingIndex] = useState<number | null>(null)
-
   useEffect(() => {
     const updateSize = () => {
       if (containerRef.current) {
@@ -98,26 +95,12 @@ export function ImageLabels({ image, onSearchResult }: ImageLabelsProps) {
 
   const LINE_LENGTH = 80
 
-  const handleLabelClick = async (label: LabelData, index: number) => {
-    if (searchingIndex !== null) return
-    setSearchingIndex(index)
-
-    try {
-      const params = {
-        categories: [label.category],
-        image_id: image.image_id,
-        top_category: label.topCategory,
-        gender: image.gender,
-        page: 1,
-        page_size: 56,
-      }
-      const results = await searchSimilar(params)
-      onSearchResult?.(results, label.name, 'similar', params)
-    } catch (err) {
-      console.error('Label search failed:', err)
-    } finally {
-      setSearchingIndex(null)
-    }
+  const handleLabelClick = async (label: LabelData) => {
+    await onLabelSearch?.({
+      name: label.name,
+      category: label.category,
+      topCategory: label.topCategory,
+    })
   }
 
   return (
@@ -127,11 +110,20 @@ export function ImageLabels({ image, onSearchResult }: ImageLabelsProps) {
       style={{ overflow: 'visible' }}
     >
       {labels.map((label, index) => {
-        const isLeft =
+        const preferLeft =
           label.topCategory === 'bottoms' ||
           (label.topCategory === 'footwear' && label.xPercent < 50)
 
         const containerWidth = containerSize.width || 600
+        const labelAnchorX = (label.xPercent / 100) * containerWidth
+        const availableRightPx = Math.max(0, containerWidth - labelAnchorX - 16)
+        const availableLeftPx = Math.max(0, labelAnchorX - 16)
+        const estimatedLabelWidth = Math.min(240, Math.max(96, label.name.length * 8 + 28))
+        const shouldFlipToLeft = !preferLeft && availableRightPx < estimatedLabelWidth && availableLeftPx > availableRightPx
+        const shouldFlipToRight = preferLeft && availableLeftPx < estimatedLabelWidth && availableRightPx > availableLeftPx
+        const isLeft = shouldFlipToLeft ? true : shouldFlipToRight ? false : preferLeft
+        const availableLabelWidth = isLeft ? availableLeftPx : availableRightPx
+        const safeLabelWidth = Math.max(92, Math.min(220, availableLabelWidth - 10))
         const lineLengthPercent =
           containerWidth > 0 ? (LINE_LENGTH / containerWidth) * 100 : 15
         const lineEndX = isLeft
@@ -139,7 +131,7 @@ export function ImageLabels({ image, onSearchResult }: ImageLabelsProps) {
           : Math.min(100, label.xPercent + lineLengthPercent)
 
         const displayName = label.name
-        const isSearching = searchingIndex === index
+        const isSearching = activeLabelKey === `${label.category}:${label.topCategory}:${label.name}`.toLowerCase()
 
         return (
           <div key={index} className="absolute inset-0">
@@ -171,27 +163,33 @@ export function ImageLabels({ image, onSearchResult }: ImageLabelsProps) {
 
             {/* Label text — clickable, triggers inline search */}
             <div
-              className={`absolute bg-white/95 text-black text-xs px-2 py-1 rounded-full shadow-sm border border-border pointer-events-auto cursor-pointer hover:bg-white hover:shadow-md transition-all flex items-center gap-1 ${isSearching ? 'opacity-70' : ''}`}
+              className={`absolute border border-border bg-white/95 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-black shadow-sm pointer-events-auto cursor-pointer hover:bg-white hover:shadow-md transition-all ${isSearching ? 'opacity-70' : ''}`}
               style={{
                 left: isLeft ? 'auto' : `${lineEndX}%`,
                 right: isLeft ? `${100 - lineEndX}%` : 'auto',
                 marginLeft: isLeft ? 'auto' : '2px',
                 marginRight: isLeft ? '2px' : 'auto',
                 top: `${label.yPercent}%`,
-                transform: 'translateY(-70%)',
-                maxWidth: '200px',
-                whiteSpace: 'nowrap',
+                transform: 'translateY(-50%)',
+                width: `${safeLabelWidth}px`,
+                maxWidth: `${safeLabelWidth}px`,
+                minWidth: '92px',
+                whiteSpace: 'normal',
+                overflowWrap: 'anywhere',
+                lineHeight: 1.25,
               }}
               title={t('searchSimilarGarment', { name: displayName })}
               onClick={(e) => {
                 e.stopPropagation()
-                handleLabelClick(label, index)
+                void handleLabelClick(label)
               }}
             >
-              {displayName}
-              {isSearching && (
-                <Loader2 className="w-3 h-3 animate-spin text-primary" />
-              )}
+              <span className="flex items-center gap-1.5">
+                <span className="block flex-1 break-words text-left">{displayName}</span>
+                {isSearching && (
+                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+                )}
+              </span>
             </div>
           </div>
         )

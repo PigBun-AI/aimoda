@@ -28,38 +28,44 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
   const { t } = useTranslation('common')
   const previewImages = (images?.length ? images : data.sample_images)?.slice(0, 4) ?? []
   const hasFilters = data.filters_applied.length > 0
+  const filterCount = data.filters_applied.length
+  const summary = hasFilters
+    ? t('searchResultSummaryWithFilters', { count: data.total, filters: filterCount })
+    : t('searchResultSummary', { count: data.total })
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-normal shadow-sm">
-      {/* Header */}
-      <div className="px-3 sm:px-4 py-3 sm:py-4 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-sm bg-primary/10 flex items-center justify-center shrink-0">
-            <Images size={15} className="text-primary" />
+    <div className="overflow-hidden border border-border/70 bg-background/50 animate-in fade-in slide-in-from-bottom-1 duration-normal">
+      <div className="grid gap-4 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border/70 bg-muted/16">
+            <Images size={14} className="text-muted-foreground" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-foreground">{t('searchResultTitle')}</span>
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-primary/15 text-primary">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <span className="type-ui-label-sm text-foreground">{t('searchResultTitle')}</span>
+              <span className="type-ui-label-xs text-muted-foreground">
                 {t('imageCountWithUnit', { count: data.total })}
               </span>
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              {data.message}
+            <p className="type-ui-meta mt-1.5 max-w-[52ch] text-muted-foreground">
+              {summary}
             </p>
             {hasFilters && (
-              <div className="flex items-center gap-1 mt-2 flex-wrap">
-                <Filter size={10} className="text-muted-foreground shrink-0" />
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span className="type-ui-label-xs inline-flex items-center gap-1 text-muted-foreground">
+                  <Filter size={10} className="shrink-0" />
+                  {t('appliedFilters')}
+                </span>
                 {data.filters_applied.slice(0, 4).map((f, i) => (
                   <span
                     key={i}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground"
+                    className="type-ui-label-xs border border-border/70 bg-background px-1.5 py-1 text-foreground"
                   >
                     {formatFilterTag(f)}
                   </span>
                 ))}
                 {data.filters_applied.length > 4 && (
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="type-ui-meta text-muted-foreground">
                     +{data.filters_applied.length - 4}
                   </span>
                 )}
@@ -68,34 +74,30 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          {data.total > 0 && data.search_request_id && (
-            <button
-              onClick={() => onOpenDrawer(data.search_request_id)}
-              className="inline-flex items-center gap-1 text-xs bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-full transition-all font-medium shadow-sm whitespace-nowrap"
-            >
-              {t('viewAll')}
-              <ArrowRight size={10} />
-            </button>
-          )}
-        </div>
+        {data.total > 0 && data.search_request_id && (
+          <button
+            onClick={() => onOpenDrawer(data.search_request_id)}
+            className="type-ui-label-sm inline-flex min-h-9 items-center gap-1.5 self-start border border-transparent px-1 text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {t('viewAll')}
+            <ArrowRight size={11} />
+          </button>
+        )}
       </div>
 
-          {previewImages.length > 0 && data.search_request_id && (
-            <div
-              className="px-4 pb-4 cursor-pointer"
-              onClick={() => onOpenDrawer(data.search_request_id)}
-            >
-          <div className="border border-border/60 bg-muted/25 p-2.5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-foreground/75">{t('resultPreview')}</span>
-              <span className="text-[10px] text-muted-foreground">{t('topImageCount', { count: 4 })}</span>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {previewImages.length > 0 && data.search_request_id && (
+        <div
+          className="cursor-pointer border-t border-border/70 px-4 py-4"
+          onClick={() => onOpenDrawer(data.search_request_id)}
+        >
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="type-ui-label-xs text-foreground">{t('resultPreview')}</span>
+            <span className="type-ui-meta text-muted-foreground">{t('topImageCount', { count: 4 })}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {previewImages.map((img, i) => (
               <PreviewThumbnail key={i} img={img} />
             ))}
-            </div>
           </div>
         </div>
       )}
@@ -108,14 +110,14 @@ function PreviewThumbnail({ img }: { img: ImageResult }) {
   return (
     <div className="space-y-1 min-w-0">
       <div
-        className="bg-muted overflow-hidden group relative border border-border/60"
+        className="group relative overflow-hidden border border-border/70 bg-muted/30"
         style={{ aspectRatio: '1 / 2' }}
       >
         <FashionImage image={img} className="w-full h-full" />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
       </div>
       {img.brand && (
-        <div className="text-[9px] text-muted-foreground truncate px-0.5">
+        <div className="type-ui-meta truncate px-0.5 text-muted-foreground">
           {img.brand.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
         </div>
       )}

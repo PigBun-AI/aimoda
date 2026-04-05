@@ -3,7 +3,8 @@ export type UserRole = 'admin' | 'editor' | 'viewer'
 export interface AuthUser {
   id: string
   name: string
-  email: string
+  email: string | null
+  phone?: string | null
   role: UserRole
   permissions: string[]
 }
@@ -11,7 +12,8 @@ export interface AuthUser {
 export interface LoginResponse {
   user: {
     id: number
-    email: string
+    email: string | null
+    phone?: string | null
     role: UserRole
     createdAt: string
     updatedAt: string
@@ -31,6 +33,7 @@ export interface ReportSummary {
   status: 'draft' | 'published' | 'archived'
   updatedAt: string
   coverImageUrl: string
+  previewUrl?: string
 }
 
 export interface ReportDetail extends ReportSummary {
@@ -156,4 +159,25 @@ export interface Subscription {
   startsAt: string
   endsAt: string
   status: 'active' | 'expired'
+}
+
+export type FeatureCode = 'ai_chat' | 'fashion_reports' | 'inspiration' | 'image_generation' | 'video_generation'
+
+export type UsagePeriodType = 'daily' | 'lifetime' | 'none'
+
+export interface FeatureAccessStatus {
+  featureCode: FeatureCode
+  allowed: boolean
+  reason: 'allowed' | 'limit_exceeded' | 'subscription_required' | 'admin' | 'free_tier' | 'subscriber'
+  usagePeriodType: UsagePeriodType
+  periodKey: string | null
+  usedCount: number
+  limitCount: number
+  remainingCount: number
+  resetAt?: string | null
+}
+
+export interface MembershipSnapshot {
+  subscription: Subscription | null
+  features: Record<FeatureCode, FeatureAccessStatus>
 }

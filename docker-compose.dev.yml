@@ -1,4 +1,4 @@
 # Deprecated local overlay kept for compatibility.
-# Use `docker compose --env-file env/server.dev.env -p aimoda-dev up -d --build`
-# for the server-style dev stack instead.
+# Use `docker compose --env-file env/dev.env -p aimoda-dev up -d --build`
+# for the standard dev stack instead.
 services: {}

@@ -54,7 +54,7 @@ export function AdminPage() {
                 <Skeleton key={index} className="h-24 w-full rounded-lg" />
               ))
             : adminUsersQuery.data?.map((user) => {
-                const userName = user.name || user.email.split('@')[0]
+                const userName = user.name || user.email?.split('@')[0] || user.phone || `user-${user.id}`
                 const userPermissions = user.permissions || getPermissions(user.role)
                 return (
                   <div
@@ -67,7 +67,7 @@ export function AdminPage() {
                           {userName}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {user.email}
+                          {user.email ?? user.phone ?? '—'}
                         </p>
                       </div>
                       <Badge variant={roleBadgeVariant[user.role] || 'default'} size="sm">

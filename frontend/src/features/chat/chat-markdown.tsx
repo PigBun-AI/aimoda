@@ -8,7 +8,7 @@ interface ChatMarkdownProps {
 
 export const ChatMarkdown = memo(function ChatMarkdown({ content }: ChatMarkdownProps) {
   return (
-    <div className="chat-markdown text-[13.5px] text-foreground/80 leading-relaxed">
+    <div className="chat-markdown type-ui-body-md text-foreground/84">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

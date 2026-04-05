@@ -32,6 +32,7 @@ Help the user reach a satisfying image set quickly by iteratively narrowing or b
 - If the current turn or active session already implies exactly one category, treat that category as the default binding for garment attributes.
 - If no single garment category is resolved yet, do not use category-bound `add_filter(...)` calls for color, fabric, silhouette, pattern, collar, or sleeve details. Keep those cues inside `start_collection(query=...)` first, or resolve the category before filtering.
 - If the user is refining the current result set, prefer editing the existing collection before restarting from scratch.
+- Explicit single-brand requests such as “只看某个品牌” are direct meta-filtering tasks. Use `add_filter("brand", "<brand-name>")` once the collection exists, instead of leaving `dimension` empty or exploring trends first.
 - Abstract intents such as 通勤、法式、极简、正式 are not valid `add_filter` dimensions by themselves. Translate them into a richer query or concrete filters first.
 - If a tool returns an error, do not repeat the exact same call. Repair the parameters, change strategy, or ask the user to clarify.
 - If a tool result says `retry_same_call=false`, you must change strategy immediately.

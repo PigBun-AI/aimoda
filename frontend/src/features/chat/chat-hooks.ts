@@ -1,11 +1,19 @@
 // Chat hooks — SSE streaming state management
 
-import { useState, useCallback, useEffect, useLayoutEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import type { ChatMessage, ContentBlock, ToolStep, DrawerData, ImageResult, ChatSession, ChatComposerInput } from './chat-types'
 import { sendChatSSE, fetchSearchSessionById, listSessions, createSession, deleteSessionApi, getSessionMessages } from './chat-api'
 import { useSessionStore } from './session-store'
 import { deriveSessionTitleFromBlocks } from './session-title'
 import { normalizeContentBlocks } from './content-blocks'
+import {
+  appendOptimisticExchange,
+  applyHydratedMessages,
+  finishSessionStream,
+  replaceAssistantMessage,
+  requestSessionHydration,
+  useChatMessageStore,
+} from './chat-message-store'
 
 function toolResultLooksLikeError(content: string): boolean {
   try {
@@ -20,28 +28,24 @@ function toolResultLooksLikeError(content: string): boolean {
  * Main chat hook — manages messages, SSE streaming, and drawer state
  */
 export function useChat(sessionId: string | null) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [streamingSessionIds, setStreamingSessionIds] = useState<string[]>([])
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerData, setDrawerData] = useState<DrawerData | null>(null)
-  const isLoading = Boolean(sessionId && streamingSessionIds.includes(sessionId))
+  const { messages, isLoading } = useChatMessageStore(sessionId)
 
-  const { markSessionExecutionStatus, primeSessionForImmediateRun } = useSessionStore()
+  const { sessions, markSessionExecutionStatus, primeSessionForImmediateRun, syncSessionRunId, loadSessions } = useSessionStore()
+  const activeSession = sessionId ? sessions.find(session => session.id === sessionId) ?? null : null
+  const isRemoteRunning = activeSession?.execution_status === 'running'
+  const wasRemoteRunningRef = useRef(false)
 
-  // Clear stale UI state before paint when switching sessions to avoid old-message flashes.
-  useLayoutEffect(() => {
+  useEffect(() => {
     setDrawerOpen(false)
     setDrawerData(null)
-    setMessages([])
   }, [sessionId])
 
-  // Load historical messages when switching sessions
-  useEffect(() => {
-    if (!sessionId) {
-      return
-    }
+  const hydrateSessionMessages = useCallback((targetSessionId: string) => {
+    const { requestId, baseRevision } = requestSessionHydration(targetSessionId)
 
-    getSessionMessages(sessionId)
+    getSessionMessages(targetSessionId)
       .then(msgs => {
         // Map backend messages to frontend ChatMessage format with ContentBlock[]
         const mapped: ChatMessage[] = msgs.map(m => ({
@@ -56,10 +60,41 @@ export function useChat(sessionId: string | null) {
                 : [],
           ),
         }))
-        setMessages(mapped)
+        applyHydratedMessages(targetSessionId, requestId, baseRevision, mapped)
       })
       .catch(err => console.error('Failed to load session messages', err))
-  }, [sessionId])
+  }, [])
+
+  // Load historical messages when switching sessions
+  useEffect(() => {
+    if (!sessionId) {
+      return
+    }
+
+    hydrateSessionMessages(sessionId)
+  }, [hydrateSessionMessages, sessionId])
+
+  // When a running session is reopened after refresh, poll persisted drafts until it finishes.
+  useEffect(() => {
+    if (!sessionId || isLoading) return
+
+    if (!isRemoteRunning) {
+      if (wasRemoteRunningRef.current) {
+        wasRemoteRunningRef.current = false
+        hydrateSessionMessages(sessionId)
+      }
+      return
+    }
+
+    wasRemoteRunningRef.current = true
+    hydrateSessionMessages(sessionId)
+
+    const intervalId = window.setInterval(() => {
+      hydrateSessionMessages(sessionId)
+    }, 2000)
+
+    return () => window.clearInterval(intervalId)
+  }, [hydrateSessionMessages, isLoading, isRemoteRunning, sessionId])
 
   const sendMessage = useCallback(async (input: ChatComposerInput, overrideSessionId?: string) => {
     const sid = overrideSessionId || sessionId
@@ -67,20 +102,20 @@ export function useChat(sessionId: string | null) {
       if (block.type === 'text') return Boolean(block.text.trim())
       return true
     })
-    if (content.length === 0 || !sid || streamingSessionIds.includes(sid)) return
+    if (content.length === 0 || !sid || isLoading) return
 
-    setStreamingSessionIds(current => (current.includes(sid) ? current : [...current, sid]))
+    const optimisticRunId = `pending-${sid}-${Date.now()}`
     primeSessionForImmediateRun(sid, {
       title: deriveSessionTitleFromBlocks(content),
+      runId: optimisticRunId,
     })
-    markSessionExecutionStatus(sid, 'running')
+    markSessionExecutionStatus(sid, 'running', null, optimisticRunId)
 
     const userMsg: ChatMessage = {
       id: `u-${Date.now()}`,
       role: 'user',
       content,
     }
-    setMessages(prev => [...prev, userMsg])
 
     // Build history for API — include the user message we just added
     const history = [...messages, userMsg]
@@ -92,7 +127,8 @@ export function useChat(sessionId: string | null) {
       role: 'assistant',
       content: [],
     }
-    setMessages(prev => [...prev, assistantMsg])
+    appendOptimisticExchange(sid, userMsg, assistantMsg)
+    let activeRunId = optimisticRunId
 
     // SSE block streaming state
     const blockMap = new Map<number, ContentBlock>()
@@ -103,25 +139,17 @@ export function useChat(sessionId: string | null) {
 
     const commitAssistantBlocks = () => {
       const orderedBlocks = normalizeContentBlocks(getOrderedBlocks())
-      setMessages(prev => {
-        let updatedTarget = false
-        const updated = prev.map(message => {
-          if (message.id !== assistantMsg.id) {
-            return message
-          }
-          updatedTarget = true
-          return { ...message, content: orderedBlocks }
-        })
-        return updatedTarget ? updated : prev
-      })
+      replaceAssistantMessage(sid, assistantMsg.id, orderedBlocks)
     }
 
-    const ensureBlock = (index: number, fallbackType: 'text' | 'tool_use' | 'tool_result' = 'text'): ContentBlock => {
+    const ensureBlock = (index: number, fallbackType: 'text' | 'reasoning' | 'tool_use' | 'tool_result' = 'text'): ContentBlock => {
       const existing = blockMap.get(index)
       if (existing) return existing
 
       const next: ContentBlock =
-        fallbackType === 'tool_use'
+        fallbackType === 'reasoning'
+          ? { type: 'reasoning', text: '' }
+          : fallbackType === 'tool_use'
           ? { type: 'tool_use', id: `tool-${Date.now()}-${index}`, name: '', input: {} }
           : fallbackType === 'tool_result'
             ? { type: 'tool_result', tool_use_id: '', content: '' }
@@ -138,6 +166,8 @@ export function useChat(sessionId: string | null) {
           const blockType = event.block_type
           if (blockType === 'text') {
             ensureBlock(event.index, 'text')
+          } else if (blockType === 'reasoning') {
+            ensureBlock(event.index, 'reasoning')
           } else if (blockType === 'tool_use') {
             const id = typeof eventWithPayload.id === 'string' ? eventWithPayload.id : `tool-${Date.now()}-${event.index}`
             const name = typeof eventWithPayload.name === 'string' ? eventWithPayload.name : ''
@@ -158,6 +188,8 @@ export function useChat(sessionId: string | null) {
           const block = ensureBlock(event.index)
           if (!block) return
           if (block.type === 'text') {
+            block.text += typeof event.delta === 'string' ? event.delta : ''
+          } else if (block.type === 'reasoning') {
             block.text += typeof event.delta === 'string' ? event.delta : ''
           } else if (block.type === 'tool_use') {
             if (typeof event.delta === 'object' && event.delta !== null) {
@@ -192,38 +224,22 @@ export function useChat(sessionId: string | null) {
           commitAssistantBlocks()
         } else if (event.type === 'error') {
           streamFailedMessage = event.message
-          setMessages(prev => {
-            let updatedTarget = false
-            const updated = prev.map(message => {
-              if (message.id !== assistantMsg.id) return message
-              const errorContent: ContentBlock[] = [{ type: 'text', text: `Error: ${event.message}` }]
-              updatedTarget = true
-              return { ...message, content: errorContent }
-            })
-            return updatedTarget ? updated : prev
-          })
+          replaceAssistantMessage(sid, assistantMsg.id, [{ type: 'text', text: `Error: ${event.message}` }])
         }
+      }, (meta) => {
+        if (!meta.runId) return
+        activeRunId = meta.runId
+        syncSessionRunId(sid, meta.runId)
       })
-      markSessionExecutionStatus(sid, streamFailedMessage ? 'error' : 'completed', streamFailedMessage)
+      markSessionExecutionStatus(sid, streamFailedMessage ? 'error' : 'completed', streamFailedMessage, activeRunId)
     } catch (err) {
-      markSessionExecutionStatus(sid, 'error', err instanceof Error ? err.message : String(err))
-      setMessages(prev => {
-        let updatedTarget = false
-        const updated = prev.map(message => {
-          if (message.id !== assistantMsg.id) return message
-          const errorContent: ContentBlock[] = [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }]
-          updatedTarget = true
-          return {
-            ...message,
-            content: errorContent,
-          }
-        })
-        return updatedTarget ? updated : prev
-      })
+      markSessionExecutionStatus(sid, 'error', err instanceof Error ? err.message : String(err), activeRunId)
+      replaceAssistantMessage(sid, assistantMsg.id, [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }])
+    } finally {
+      finishSessionStream(sid)
+      void loadSessions()
     }
-
-    setStreamingSessionIds(current => current.filter(id => id !== sid))
-  }, [markSessionExecutionStatus, messages, sessionId, streamingSessionIds])
+  }, [isLoading, loadSessions, markSessionExecutionStatus, messages, primeSessionForImmediateRun, sessionId, syncSessionRunId])
 
   const openDrawer = useCallback(async (step: ToolStep) => {
     const searchRequestId = step.searchRequestId

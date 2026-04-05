@@ -1,5 +1,6 @@
 // Chat API client — SSE streaming + session CRUD
 
+import { ApiError } from '@/lib/api'
 import type { ChatSession, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
 
 const authTokenStorageKey = 'fashion-report-access-token'
@@ -37,6 +38,7 @@ export async function sendChatSSE(
   sessionId: string,
   history: Array<{ role: string; content: ContentBlock[] }>,
   onEvent: (event: SSEEvent) => void,
+  onOpen?: (meta: { runId: string | null }) => void,
 ): Promise<void> {
   const resp = await fetch('/api/chat', {
     method: 'POST',
@@ -46,8 +48,22 @@ export async function sendChatSSE(
 
   if (!resp.ok) {
     handle401(resp)
-    throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
+    let payload: { error?: string; data?: unknown } | null = null
+    try {
+      payload = await resp.json() as { error?: string; data?: unknown }
+    } catch {
+      payload = null
+    }
+    throw new ApiError(
+      payload?.error ?? `HTTP ${resp.status}: ${resp.statusText}`,
+      resp.status,
+      payload?.data,
+    )
   }
+
+  onOpen?.({
+    runId: resp.headers.get('X-Aimoda-Run-Id'),
+  })
 
   const reader = resp.body!.getReader()
   const decoder = new TextDecoder()

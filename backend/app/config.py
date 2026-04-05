@@ -1,9 +1,16 @@
-from pydantic_settings import BaseSettings
+import os
 from pathlib import Path
+from pydantic_settings import BaseSettings
+
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+DEFAULT_ENV_FILE = ROOT_DIR / "env" / "dev.env"
+ENV_FILE = os.getenv("AIMODA_ENV_FILE", str(DEFAULT_ENV_FILE))
 
 
 class Settings(BaseSettings):
     ENV: str = "development"
+    APP_TIMEZONE: str = "Asia/Shanghai"
     PORT: int = 3000
     JWT_SECRET: str
     FRONTEND_URL: str = "http://localhost"
@@ -26,9 +33,14 @@ class Settings(BaseSettings):
     LLM_API_KEY: str
     LLM_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     LLM_TEMPERATURE: float = 0.1
-    LLM_MAX_TOKENS: int = 4096
+    LLM_MAX_TOKENS: int = 32768
     AGENT_RUNTIME_HARNESS_ENABLED: bool = True
     AGENT_RUNTIME_HARNESS_MAX_SAME_ERROR_RETRIES: int = 1
+    FALLBACK_LLM_ENABLED: bool = True
+    FALLBACK_LLM_PROVIDER: str = "anthropic"
+    FALLBACK_LLM_MODEL: str = "MiniMax-M2.7-highspeed"
+    FALLBACK_LLM_API_KEY: str = ""
+    FALLBACK_LLM_BASE_URL: str = "https://api.minimaxi.com/anthropic"
 
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -55,8 +67,20 @@ class Settings(BaseSettings):
     OSS_PUBLIC_BASE: str | None = None
     REPORT_PREVIEW_TOKEN_TTL_SECONDS: int = 900
 
+    # SMS auth
+    SMS_PROVIDER: str = "mock"
+    SMS_CODE_TTL_SECONDS: int = 300
+    SMS_RESEND_INTERVAL_SECONDS: int = 60
+    SMS_DAILY_SEND_LIMIT: int = 20
+    SMS_MOCK_CODE: str = "123456"
+    ALIYUN_SMS_ACCESS_KEY_ID: str = ""
+    ALIYUN_SMS_ACCESS_KEY_SECRET: str = ""
+    ALIYUN_SMS_ENDPOINT: str = "dysmsapi.aliyuncs.com"
+    ALIYUN_SMS_SIGN_NAME: str = "深圳市像素澎湃科技"
+    ALIYUN_SMS_TEMPLATE_CODE: str = "SMS_498250051"
+
     model_config = {
-        "env_file": ".env",
+        "env_file": ENV_FILE,
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }

@@ -13,16 +13,31 @@ import type {
   StyleGapListResponse,
   Subscription,
   UpdateStyleGapPayload,
+  MembershipSnapshot,
 } from '@/lib/types'
 
 export class ApiError extends Error {
   status: number
+  data?: unknown
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, data?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.data = data
   }
+}
+
+export function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.message) {
+    return error.message
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  return fallback
 }
 
 interface ApiResponse<T> {
@@ -125,10 +140,15 @@ function extractData<T>(payload: unknown): T {
 }
 
 function normalizeAuthUser(input: LoginResponse['user']): AuthUser {
+  const displayName =
+    input.email?.split('@')[0]
+    ?? (input.phone ? `USER ${input.phone.slice(-4)}` : `USER ${input.id}`)
+
   return {
     id: String(input.id),
-    name: input.email.split('@')[0],
-    email: input.email,
+    name: displayName,
+    email: input.email ?? null,
+    phone: input.phone ?? null,
     role: input.role,
     permissions: rolePermissions[input.role],
   }
@@ -144,12 +164,29 @@ async function request<T>(path: string, options?: RequestInit, demoFallback?: T)
 
     if (!response.ok) {
       // Auto-logout on 401: clear stale token/session and reload to trigger login
-      if (response.status === 401 && !path.includes('/api/auth/login')) {
+      const shouldSuppressAutoLogout =
+        path === '/api/auth/login'
+        || path === '/api/auth/register'
+        || path === '/api/auth/sms/login'
+        || path === '/api/auth/sms/register'
+        || path === '/api/auth/sms/send-code'
+
+      if (response.status === 401 && !shouldSuppressAutoLogout) {
         clearAccessToken()
         window.localStorage.removeItem('fashion-report-session')
         window.location.reload()
       }
-      throw new ApiError(`Request failed with status ${response.status}`, response.status)
+      let payload: ApiResponse<unknown> | null = null
+      try {
+        payload = (await response.json()) as ApiResponse<unknown>
+      } catch {
+        payload = null
+      }
+      throw new ApiError(
+        payload?.error ?? `Request failed with status ${response.status}`,
+        response.status,
+        payload?.data,
+      )
     }
 
     const payload = (await response.json()) as unknown
@@ -205,6 +242,40 @@ export async function getCurrentUser(): Promise<AuthUser> {
   return normalizeAuthUser(data)
 }
 
+export async function sendSmsCode(payload: { phone: string; purpose: 'login' | 'register' }): Promise<void> {
+  await request('/api/auth/sms/send-code', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function loginWithSms(payload: { phone: string; code: string }): Promise<AuthUser> {
+  const data = await request<LoginResponse>('/api/auth/sms/login', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  setAccessToken(data.tokens.accessToken)
+  return normalizeAuthUser(data.user)
+}
+
+export async function register(payload: { email: string; password: string }): Promise<AuthUser> {
+  const data = await request<LoginResponse>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  setAccessToken(data.tokens.accessToken)
+  return normalizeAuthUser(data.user)
+}
+
+export async function registerWithSms(payload: { phone: string; code: string }): Promise<AuthUser> {
+  const data = await request<LoginResponse>('/api/auth/sms/register', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  setAccessToken(data.tokens.accessToken)
+  return normalizeAuthUser(data.user)
+}
+
 export interface PaginatedReports {
   reports: ReportSummary[]
   total: number
@@ -220,7 +291,17 @@ export async function getReports(page = 1, limit = 12): Promise<PaginatedReports
   })
 
   if (!response.ok) {
-    throw new ApiError(`Request failed with status ${response.status}`, response.status)
+    let payload: ApiResponse<unknown> | null = null
+    try {
+      payload = (await response.json()) as ApiResponse<unknown>
+    } catch {
+      payload = null
+    }
+    throw new ApiError(
+      payload?.error ?? `Request failed with status ${response.status}`,
+      response.status,
+      payload?.data,
+    )
   }
 
   const payload = await response.json() as {
@@ -235,7 +316,7 @@ export async function getReports(page = 1, limit = 12): Promise<PaginatedReports
 
   // Transform backend data to include coverImageUrl from OSS
   return {
-    reports: payload.data.map((report: ReportSummary & { coverUrl?: string }) => ({
+    reports: payload.data.map((report: ReportSummary & { coverUrl?: string; previewUrl?: string }) => ({
       ...report,
       coverImageUrl: report.coverUrl || `/report-files/${report.slug}/cover.jpg`,
     })),
@@ -279,15 +360,6 @@ export async function getReportById(id: string): Promise<ReportDetail> {
 
 export async function getAdminUsers(): Promise<AdminUser[]> {
   return request('/api/users', undefined, mockAdminUsers)
-}
-
-export async function register(payload: { email: string; password: string }): Promise<AuthUser> {
-  const data = await request<LoginResponse>('/api/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
-  setAccessToken(data.tokens.accessToken)
-  return normalizeAuthUser(data.user)
 }
 
 export async function getDashboard(): Promise<DashboardData> {
@@ -516,6 +588,10 @@ export async function redeemCode(payload: { code: string }): Promise<{ subscript
 
 export async function getMySubscription(): Promise<Subscription | null> {
   return request('/api/users/me/subscription')
+}
+
+export async function getMembershipSnapshot(): Promise<MembershipSnapshot> {
+  return request('/api/users/me/membership')
 }
 
 export async function deleteReport(id: string): Promise<void> {

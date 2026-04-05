@@ -1,13 +1,17 @@
-import { useState, useCallback, useRef } from 'react'
-import { ImagePlus, ArrowUp, X } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { Button } from '@/components/ui/button'
-import type { ChatComposerInput, ContentBlock, ImageSourceBase64 } from './chat-types'
+import { type ReactNode, useCallback, useRef, useState } from "react"
+import { ArrowUp, ImagePlus, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
+
+import { Button } from "@/components/ui/button"
+
+import type { ChatComposerInput, ContentBlock, ImageSourceBase64 } from "./chat-types"
 
 interface ChatInputProps {
   onSend?: (input: ChatComposerInput) => void
   placeholder?: string
   disabled?: boolean
+  infoMessage?: string
+  statusBar?: ReactNode
 }
 
 interface PendingImage {
@@ -22,8 +26,8 @@ const MAX_IMAGE_SIZE_MB = 5
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'))
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"))
     reader.readAsDataURL(file)
   })
 }
@@ -32,12 +36,14 @@ export function ChatInput({
   onSend,
   placeholder,
   disabled = false,
+  infoMessage,
+  statusBar,
 }: ChatInputProps) {
-  const { t } = useTranslation('common')
-  const [inputValue, setInputValue] = useState('')
+  const { t } = useTranslation("common")
+  const [inputValue, setInputValue] = useState("")
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const resolvedPlaceholder = placeholder ?? t('chatInputPlaceholder')
+  const resolvedPlaceholder = placeholder ?? t("chatInputPlaceholder")
 
   const handleSend = useCallback(() => {
     const trimmed = inputValue.trim()
@@ -46,27 +52,27 @@ export function ChatInput({
     const content: ContentBlock[] = []
     for (const image of pendingImages) {
       content.push({
-        type: 'image',
+        type: "image",
         source: image.source,
         mime_type: image.mimeType,
         file_name: image.fileName,
       })
     }
     if (trimmed) {
-      content.push({ type: 'text', text: trimmed })
+      content.push({ type: "text", text: trimmed })
     }
 
     onSend?.({ content })
-    setInputValue('')
+    setInputValue("")
     setPendingImages([])
     if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+      fileInputRef.current.value = ""
     }
   }, [disabled, inputValue, onSend, pendingImages])
 
-  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !disabled) {
-      e.preventDefault()
+  const handleKeyPress = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey && !disabled) {
+      event.preventDefault()
       handleSend()
     }
   }, [disabled, handleSend])
@@ -76,13 +82,13 @@ export function ChatInput({
     fileInputRef.current?.click()
   }, [disabled])
 
-  const handleFilesSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
+  const handleFilesSelected = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
     if (files.length === 0) return
 
     const nextImages: PendingImage[] = []
     for (const file of files) {
-      if (!file.type.startsWith('image/')) continue
+      if (!file.type.startsWith("image/")) continue
       if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) continue
 
       const dataUrl = await readFileAsDataUrl(file)
@@ -94,7 +100,7 @@ export function ChatInput({
         fileName: file.name,
         mimeType: matched[1],
         source: {
-          type: 'base64',
+          type: "base64",
           media_type: matched[1],
           data: matched[2],
         },
@@ -105,7 +111,7 @@ export function ChatInput({
       setPendingImages(current => [...current, ...nextImages])
     }
 
-    e.target.value = ''
+    event.target.value = ""
   }, [])
 
   const removePendingImage = useCallback((id: string) => {
@@ -115,72 +121,89 @@ export function ChatInput({
   const canSend = (inputValue.trim().length > 0 || pendingImages.length > 0) && !disabled
 
   return (
-    <div className="px-3 sm:px-4 pb-3 sm:pb-4 flex-shrink-0 bg-background">
-      <div className="border border-border rounded-lg transition-colors relative max-w-3xl mx-auto">
-        <div className="flex flex-col">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={handleFilesSelected}
-          />
-          {pendingImages.length > 0 && (
-            <div className="flex gap-2 px-4 pt-4 overflow-x-auto">
-              {pendingImages.map(image => (
-                <div key={image.id} className="relative shrink-0">
-                  <img
-                    src={`data:${image.source.media_type};base64,${image.source.data}`}
-                    alt={image.fileName}
-                    className="h-16 w-16 object-cover rounded-lg border border-border bg-muted"
-                  />
+    <div className="bg-background px-3 pb-3 sm:px-4 sm:pb-4">
+      <div className="mx-auto flex max-w-3xl flex-col gap-2">
+        {(statusBar || infoMessage) && (
+          <div className="border border-border/80 bg-muted/16 px-4 py-3">
+            <div className="flex flex-col gap-2">
+              {statusBar && <div className="min-w-0">{statusBar}</div>}
+              {infoMessage && (
+                <p className="type-ui-meta text-muted-foreground/88">
+                  {infoMessage}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="relative border border-border bg-background transition-colors">
+          <div className="flex flex-col">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={handleFilesSelected}
+            />
+
+            {pendingImages.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto px-4 pt-4">
+                {pendingImages.map(image => (
+                  <div key={image.id} className="relative shrink-0">
+                    <img
+                      src={`data:${image.source.media_type};base64,${image.source.data}`}
+                      alt={image.fileName}
+                      className="h-16 w-16 border border-border bg-muted object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePendingImage(image.id)}
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center border border-border bg-background text-muted-foreground hover:text-foreground"
+                      aria-label={t("removeImage", { fileName: image.fileName })}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex h-[100px] flex-col sm:h-[130px]">
+              <textarea
+                value={inputValue}
+                onChange={event => setInputValue(event.target.value)}
+                onKeyDown={handleKeyPress}
+                placeholder={resolvedPlaceholder}
+                disabled={disabled}
+                className="flex-1 w-full resize-none bg-transparent px-5 pt-4 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+              />
+
+              <div className="flex items-center justify-between px-4 pb-3 pt-2 shrink-0">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => removePendingImage(image.id)}
-                    className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center text-muted-foreground hover:text-foreground"
-                    aria-label={t('removeImage', { fileName: image.fileName })}
+                    onClick={handlePickImages}
+                    className="shrink-0 cursor-pointer p-2.5 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                    title={t("uploadImage")}
                   >
-                    <X size={12} />
+                    <ImagePlus size={18} />
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-          <div className="h-[100px] sm:h-[130px] flex flex-col">
-          <textarea
-            value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
-            onKeyDown={handleKeyPress}
-            placeholder={resolvedPlaceholder}
-            disabled={disabled}
-            className="flex-1 px-5 pt-4 text-sm resize-none outline-none bg-transparent w-full text-foreground placeholder:text-muted-foreground"
-          />
 
-          <div className="flex items-center justify-between px-4 pb-3 shrink-0">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handlePickImages}
-                className="p-2.5 rounded-lg transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
-                title={t('uploadImage')}
-              >
-                <ImagePlus size={18} />
-              </button>
+                <Button
+                  className={[
+                    "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center p-0",
+                    canSend ? "bg-foreground text-background hover:bg-foreground/88" : "bg-border text-muted-foreground",
+                  ].join(" ")}
+                  disabled={!canSend}
+                  onClick={handleSend}
+                >
+                  <ArrowUp size={16} />
+                </Button>
+              </div>
             </div>
-
-            <Button
-              className={[
-                'rounded-full w-11 h-11 p-0 flex items-center justify-center cursor-pointer',
-                canSend ? 'bg-primary text-primary-foreground' : 'bg-border text-muted-foreground',
-              ].join(' ')}
-              disabled={!canSend}
-              onClick={handleSend}
-            >
-              <ArrowUp size={16} />
-            </Button>
           </div>
-        </div>
         </div>
       </div>
     </div>

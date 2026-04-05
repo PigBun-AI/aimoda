@@ -63,6 +63,22 @@ def run_migration():
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_updated
         ON chat_sessions(user_id, updated_at DESC) WHERE status != 'deleted';
 
+    DO $$
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'chat_sessions'
+              AND column_name = 'id'
+              AND data_type <> 'uuid'
+        ) THEN
+            ALTER TABLE chat_sessions ALTER COLUMN id DROP DEFAULT;
+            ALTER TABLE chat_sessions ALTER COLUMN id TYPE UUID USING id::uuid;
+            ALTER TABLE chat_sessions ALTER COLUMN id SET DEFAULT uuid_generate_v4();
+        END IF;
+    END $$;
+
     -- ── 2. messages ──
     CREATE TABLE IF NOT EXISTS messages (
         id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -76,6 +92,29 @@ def run_migration():
         CONSTRAINT messages_session_id_fkey
             FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
     );
+
+    DO $$
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'messages'
+              AND column_name = 'content'
+              AND data_type <> 'jsonb'
+        ) THEN
+            ALTER TABLE messages ALTER COLUMN content DROP DEFAULT;
+            ALTER TABLE messages
+                ALTER COLUMN content TYPE JSONB
+                USING CASE
+                    WHEN content IS NULL OR btrim(content) = '' THEN '[]'::jsonb
+                    WHEN left(btrim(content), 1) = '[' THEN content::jsonb
+                    WHEN left(btrim(content), 1) = '{' THEN jsonb_build_array(content::jsonb)
+                    ELSE jsonb_build_array(jsonb_build_object('type', 'text', 'text', content))
+                END;
+            ALTER TABLE messages ALTER COLUMN content SET DEFAULT '[]'::jsonb;
+        END IF;
+    END $$;
 
     CREATE INDEX IF NOT EXISTS idx_messages_session_created
         ON messages(session_id, created_at ASC) WHERE deleted_at IS NULL;

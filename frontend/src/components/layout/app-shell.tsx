@@ -41,12 +41,40 @@ import { useSessionStore } from '@/features/chat/session-store'
 import { useChatLayoutStore } from '@/features/chat/chat-layout-store'
 import { useLoginDialog } from '@/features/auth/auth-store'
 import { LoginDialog } from '@/features/auth/login-dialog'
+import { useMembershipStatus } from '@/features/membership/use-membership'
 
 import { getSessionUser } from '@/features/auth/protected-route'
 import { BREAKPOINT_PX } from '@/lib/constants'
+import { useThemeStore } from '@/lib/theme-store'
 import { cn } from '@/lib/utils'
 
 const SIDEBAR_WIDTH = 250
+const SIDEBAR_ICON_BUTTON_CLASS =
+  'control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors cursor-pointer hover:border-border hover:text-foreground'
+const SIDEBAR_UTILITY_BUTTON_CLASS =
+  'type-action-label control-pill-md flex items-center justify-between gap-3 border border-border text-muted-foreground transition-colors cursor-pointer hover:border-foreground/35 hover:bg-accent hover:text-foreground'
+
+function formatSidebarSessionTimestamp(value: string, language: string) {
+  const locale = language === 'zh-CN' ? 'zh-CN' : 'en-US'
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  const datePart = new Intl.DateTimeFormat(locale, {
+    month: language === 'zh-CN' ? '2-digit' : 'short',
+    day: '2-digit',
+  }).format(date)
+
+  const timePart = new Intl.DateTimeFormat(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: language !== 'zh-CN',
+  }).format(date)
+
+  return `${datePart} · ${timePart}`
+}
 
 type SessionDialogState = {
   sessionId: string
@@ -68,7 +96,6 @@ export function AppShell() {
   const [isLargeScreen, setIsLargeScreen] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
   const [historyExpanded, setHistoryExpanded] = useState(true)
-  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'))
   const [renameDialog, setRenameDialog] = useState<SessionDialogState | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
@@ -76,6 +103,7 @@ export function AppShell() {
   const [isDeleting, setIsDeleting] = useState(false)
   const { isDrawerFullscreen } = useChatLayoutStore()
   const { openLogin } = useLoginDialog()
+  const { theme, toggleTheme } = useThemeStore()
 
   const {
     sessions: chatSessions,
@@ -99,6 +127,7 @@ export function AppShell() {
   const isChatImmersive = location.pathname === '/chat' && isDrawerFullscreen
 
   const hasRunningSession = chatSessions.some(session => session.execution_status === 'running')
+  const { planBadgeLabel } = useMembershipStatus()
 
   useEffect(() => {
     if (notifications.length === 0) return
@@ -112,11 +141,14 @@ export function AppShell() {
     }
   }, [dismissSessionNotification, notifications])
 
-  const navigation = [
-    { to: '/chat', label: t('common:aiAssistant'), icon: MessageCircle },
-    { to: '/reports', label: t('reports:title'), icon: LayoutDashboard },
-    { to: '/inspiration', label: t('common:inspiration'), icon: Sparkles },
-  ]
+  const navigation = useMemo(
+    () => [
+      { to: '/chat', label: t('common:aiAssistant'), icon: MessageCircle },
+      { to: '/reports', label: t('reports:title'), icon: LayoutDashboard },
+      { to: '/inspiration', label: t('common:inspiration'), icon: Sparkles },
+    ],
+    [t],
+  )
 
   useEffect(() => {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -158,19 +190,14 @@ export function AppShell() {
     return () => window.clearInterval(interval)
   }, [currentUserId, hasRunningSession, loadChatSessions])
 
-  const toggleTheme = useCallback(() => {
-    const next = !isDark
-    setIsDark(next)
-    document.documentElement.classList.toggle('dark', next)
-    localStorage.setItem('theme', next ? 'dark' : 'light')
-  }, [isDark])
-
   const toggleLanguage = useCallback(() => {
     const next = i18n.language === 'zh-CN' ? 'en' : 'zh-CN'
     i18n.changeLanguage(next)
   }, [i18n])
 
   const sidebarWidth = isLargeScreen && isSidebarOpen && !isChatImmersive ? SIDEBAR_WIDTH : 0
+  const currentLanguageLabel = i18n.language === 'zh-CN' ? '中文' : 'EN'
+  const currentThemeLabel = theme === 'dark' ? t('common:themeDark') : t('common:themeLight')
 
   const closeSidebarChrome = useCallback(() => {
     if (isFloating) setIsHovering(false)
@@ -243,58 +270,44 @@ export function AppShell() {
 
   const sidebarContent = (
     <>
-      <div className="flex items-center justify-between px-5 h-14 shrink-0">
-        <Link className="flex items-center transition-transform duration-fast hover:scale-[1.02]" to="/">
-          <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden h-[22px]" />
-          <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block h-[22px]" />
-        </Link>
+      <div className="shrink-0 border-b border-border px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <Link className="flex items-center transition-opacity duration-fast hover:opacity-70" to="/">
+            <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden h-[22px]" />
+            <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block h-[22px]" />
+          </Link>
 
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={toggleTheme}
-            className="p-2.5 rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
-            title={isDark ? t('common:switchLight') : t('common:switchDark')}
-          >
-            {isDark ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
+          <div className="flex items-center gap-1">
+            {!isFloating && isLargeScreen && (
+              <button
+                onClick={() => setIsSidebarOpen(false)}
+                className={SIDEBAR_ICON_BUTTON_CLASS}
+              >
+                <PanelLeftClose size={15} />
+              </button>
+            )}
 
-          <button
-            onClick={toggleLanguage}
-            className="p-2.5 rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
-            title={i18n.language === 'zh-CN' ? t('common:switchToEn') : t('common:switchToZh')}
-          >
-            <Globe size={15} />
-          </button>
-
-          {!isFloating && isLargeScreen && (
-            <button
-              onClick={() => setIsSidebarOpen(false)}
-              className="p-2.5 rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
-            >
-              <PanelLeftClose size={15} />
-            </button>
-          )}
-
-          {isFloating && (
-            <button
-              onClick={() => setIsHovering(false)}
-              className="p-2.5 rounded-md transition-colors cursor-pointer text-muted-foreground hover:text-foreground"
-              title={t('common:close')}
-            >
-              <PanelLeftClose size={15} />
-            </button>
-          )}
+            {isFloating && (
+              <button
+                onClick={() => setIsHovering(false)}
+                className={SIDEBAR_ICON_BUTTON_CLASS}
+                title={t('common:close')}
+              >
+                <PanelLeftClose size={15} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-center mt-4 px-4">
-        <Button className="w-full h-11 rounded-full cursor-pointer" onClick={handleCreateSession}>
-          <MessageCircle className="w-4 h-4 mr-1.5" />
-          <span className="text-sm font-medium">{t('common:fashionSearch')}</span>
+      <div className="mt-4 space-y-3 px-4">
+        <Button className="h-11 w-full cursor-pointer justify-between px-4" onClick={handleCreateSession}>
+          <span>{t('common:fashionSearch')}</span>
+          <MessageCircle className="h-4 w-4" />
         </Button>
       </div>
 
-      <nav className="mt-6 space-y-0.5 px-3">
+      <nav className="mt-6 space-y-2 px-4">
         {navigation.map(item => {
           const Icon = item.icon
           return (
@@ -303,11 +316,11 @@ export function AppShell() {
               to={item.to}
               className={({ isActive }) =>
                 [
-                  'group flex items-center gap-3 px-4 py-3 text-sm rounded-lg',
-                  'transition-all duration-fast cursor-pointer',
+                  'type-ui-label-sm group flex items-center justify-between gap-3 border px-4 py-3',
+                  'transition-colors duration-fast cursor-pointer',
                   isActive
-                    ? 'font-medium bg-accent text-foreground'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground',
                 ].join(' ')
               }
               onClick={event => {
@@ -315,22 +328,29 @@ export function AppShell() {
                 handleProtectedNavigate(item.to)
               }}
             >
-              <Icon className="w-[18px] h-[18px] shrink-0 group-hover:scale-110 transition-transform" />
-              <span>{item.label}</span>
+              <div className="flex items-center gap-3">
+                <Icon className="h-[16px] w-[16px] shrink-0" />
+                <div className="flex flex-col gap-1">
+                  <span>{item.label}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-55" />
+              </div>
             </NavLink>
           )
         })}
       </nav>
 
-      <div className="px-4 mt-4"><Separator /></div>
+      <div className="mt-5 px-4"><Separator /></div>
 
-      <div className="px-5 py-3 overflow-y-auto flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
         <button
-          className="flex items-center gap-2 text-sm font-medium cursor-pointer w-full text-muted-foreground"
+          className="type-ui-label-xs flex w-full items-center gap-2 text-muted-foreground cursor-pointer"
           onClick={() => setHistoryExpanded(value => !value)}
         >
           {historyExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          <History size={16} />
+          <History size={15} />
           <span>{t('common:chatHistory')}</span>
           {hasRunningSession && (
             <Badge variant="warning" size="sm" className="ml-auto">
@@ -341,91 +361,103 @@ export function AppShell() {
         </button>
 
         {historyExpanded && (
-          <div className="mt-2 space-y-1">
+          <div className="mt-4 space-y-2">
             {sessionsLoading ? (
-              <div className="py-2 text-sm text-center text-muted-foreground">{t('common:loading')}</div>
+              <div className="type-ui-label-xs border border-border px-4 py-4 text-center text-muted-foreground">{t('common:loading')}</div>
             ) : chatSessions.length === 0 ? (
-              <div className="py-2 text-sm text-center text-muted-foreground">
+              <div className="type-ui-label-xs border border-border px-4 py-4 text-center text-muted-foreground">
                 {t('common:noChatHistory')}
               </div>
             ) : (
               chatSessions.map(session => {
                 const isActive =
                   location.pathname === '/chat' && currentRouteSessionId === session.id
+                const metaTimestamp = formatSidebarSessionTimestamp(session.updated_at, i18n.language)
 
                 return (
                   <div
                     key={session.id}
                     className={cn(
-                      'group rounded-xl border px-3 py-2.5 transition-colors cursor-pointer',
+                      'group border px-3 py-3 transition-colors cursor-pointer',
                       isActive
-                        ? 'bg-accent border-border text-foreground'
-                        : 'border-transparent text-muted-foreground hover:bg-accent/70 hover:border-border',
+                        ? 'border-foreground bg-accent text-foreground'
+                        : 'border-border/70 text-muted-foreground hover:border-border hover:bg-accent/55',
                     )}
                     onClick={() => handleProtectedNavigate(`/chat?session=${session.id}`)}
                   >
-                    <div className="flex items-start gap-2">
-                      <MessageCircle className="mt-0.5 w-3.5 h-3.5 shrink-0 opacity-50" />
+                    <div className="flex items-start gap-2.5">
+                      <MessageCircle className="mt-[2px] h-3.5 w-3.5 shrink-0 opacity-45" />
 
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="truncate text-sm font-medium">{session.title}</span>
-                          {session.is_pinned && (
-                            <Pin className="h-3.5 w-3.5 shrink-0 text-foreground/70" />
-                          )}
-                        </div>
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-1.5">
+                              <span className="type-ui-body-sm truncate text-foreground">
+                                {session.title}
+                              </span>
+                              {session.is_pinned && (
+                                <Pin className="h-3.5 w-3.5 shrink-0 text-foreground/65" />
+                              )}
+                            </div>
 
-                        <div className="mt-1 flex items-center gap-2 flex-wrap">
-                          {session.execution_status === 'running' && (
-                            <Badge variant="warning" size="sm">
-                              <LoaderCircle className="h-3 w-3 animate-spin" />
-                              {t('common:running')}
-                            </Badge>
-                          )}
-                          {session.execution_status === 'error' && (
-                            <Badge variant="error" size="sm">
-                              <AlertTriangle className="h-3 w-3" />
-                              {t('common:failed')}
-                            </Badge>
-                          )}
-                          <span className="text-[11px] text-muted-foreground/90">
-                            {new Date(session.updated_at).toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
+                            <div className="type-ui-meta mt-1 flex min-w-0 items-center gap-2 whitespace-nowrap text-muted-foreground/88">
+                              {session.execution_status === 'running' && (
+                                <span className="inline-flex items-center gap-1 text-foreground/78">
+                                  <LoaderCircle className="h-3 w-3 animate-spin" />
+                                  <span>{t('common:running')}</span>
+                                </span>
+                              )}
+                              {session.execution_status === 'error' && (
+                                <span className="inline-flex items-center gap-1 text-[var(--badge-error-text)]">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  <span>{t('common:failed')}</span>
+                                </span>
+                              )}
+                              <span className="truncate">{metaTimestamp}</span>
+                            </div>
+                          </div>
 
-                      <div className="flex items-center gap-0.5 opacity-100 md:opacity-0 transition-opacity md:group-hover:opacity-100 group-focus-within:opacity-100">
-                        <button
-                          className="p-1.5 rounded-md hover:bg-background/80 transition-colors"
-                          onClick={async event => {
-                            event.stopPropagation()
-                            await toggleSessionPinned(session.id, !session.is_pinned)
-                          }}
-                          title={session.is_pinned ? t('common:unpin') : t('common:pin')}
-                        >
-                          {session.is_pinned ? <PinOff size={13} /> : <Pin size={13} />}
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md hover:bg-background/80 transition-colors"
-                          onClick={event => {
-                            event.stopPropagation()
-                            setRenameDialog({ sessionId: session.id, title: session.title })
-                            setRenameValue(session.title)
-                          }}
-                          title={t('common:rename')}
-                        >
-                          <PencilLine size={13} />
-                        </button>
-                        <button
-                          className="p-1.5 rounded-md hover:bg-destructive/10 hover:text-destructive transition-colors"
-                          onClick={event => {
-                            event.stopPropagation()
-                            setDeleteDialog({ sessionId: session.id, title: session.title })
-                          }}
-                          title={t('common:delete')}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                          <div
+                            className={cn(
+                              'flex items-center justify-end gap-0.5 overflow-hidden transition-[width,opacity] duration-fast w-[84px] opacity-100',
+                              isActive
+                                ? 'md:w-[84px] md:opacity-100'
+                                : 'md:w-0 md:opacity-0 md:group-hover:w-[84px] md:group-hover:opacity-100 md:group-focus-within:w-[84px] md:group-focus-within:opacity-100',
+                            )}
+                          >
+                            <button
+                              className="flex h-7 w-7 items-center justify-center border border-transparent transition-colors hover:border-border hover:bg-background/80"
+                              onClick={async event => {
+                                event.stopPropagation()
+                                await toggleSessionPinned(session.id, !session.is_pinned)
+                              }}
+                              title={session.is_pinned ? t('common:unpin') : t('common:pin')}
+                            >
+                              {session.is_pinned ? <PinOff size={13} /> : <Pin size={13} />}
+                            </button>
+                            <button
+                              className="flex h-7 w-7 items-center justify-center border border-transparent transition-colors hover:border-border hover:bg-background/80"
+                              onClick={event => {
+                                event.stopPropagation()
+                                setRenameDialog({ sessionId: session.id, title: session.title })
+                                setRenameValue(session.title)
+                              }}
+                              title={t('common:rename')}
+                            >
+                              <PencilLine size={13} />
+                            </button>
+                            <button
+                              className="flex h-7 w-7 items-center justify-center border border-transparent transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
+                              onClick={event => {
+                                event.stopPropagation()
+                                setDeleteDialog({ sessionId: session.id, title: session.title })
+                              }}
+                              title={t('common:delete')}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -439,14 +471,38 @@ export function AppShell() {
       <div className="mt-auto shrink-0">
         <div className="px-4"><Separator /></div>
 
-        <div className="p-4">
+        <div className="px-4 py-4">
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <button
+              onClick={toggleTheme}
+              className={cn(SIDEBAR_UTILITY_BUTTON_CLASS, 'justify-center')}
+              title={theme === 'dark' ? t('common:switchLight') : t('common:switchDark')}
+            >
+              <span className="flex items-center gap-2">
+                {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+                <span>{currentThemeLabel}</span>
+              </span>
+            </button>
+
+            <button
+              onClick={toggleLanguage}
+              className={cn(SIDEBAR_UTILITY_BUTTON_CLASS, 'justify-center')}
+              title={i18n.language === 'zh-CN' ? t('common:switchToEn') : t('common:switchToZh')}
+            >
+              <span className="flex items-center gap-2">
+                <Globe size={14} />
+                <span>{currentLanguageLabel}</span>
+              </span>
+            </button>
+          </div>
+
           {currentUser ? (
             <NavLink
               to="/profile"
               className={({ isActive }) =>
                 [
-                  'flex items-center gap-3 mt-3 px-2 py-2 rounded-lg transition-colors cursor-pointer',
-                  isActive ? 'bg-accent' : '',
+                  'mt-3 flex items-center gap-3 border px-4 py-3 transition-colors cursor-pointer',
+                  isActive ? 'border-foreground bg-accent' : 'border-border hover:border-foreground/50',
                 ].join(' ')
               }
               onClick={() => {
@@ -456,10 +512,15 @@ export function AppShell() {
             >
               <CircleUserRound className="w-5 h-5 shrink-0 text-muted-foreground" />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate text-foreground">
-                  {currentUser.name ?? t('common:user')}
-                </p>
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <p className="type-ui-body-sm truncate text-foreground">
+                    {currentUser.name ?? t('common:user')}
+                  </p>
+                  <span className="type-ui-label-xs shrink-0 border border-border px-1.5 py-0.5 text-muted-foreground">
+                    {planBadgeLabel}
+                  </span>
+                </div>
+                <p className="type-ui-label-sm text-muted-foreground">
                   {currentUser.role ?? 'guest'}
                 </p>
               </div>
@@ -467,13 +528,13 @@ export function AppShell() {
           ) : (
             <Button
               onClick={openLogin}
-              className="w-full h-12 rounded-lg cursor-pointer flex flex-col gap-0.5"
+              className="flex h-12 w-full cursor-pointer items-center justify-between px-4"
             >
               <div className="flex items-center gap-1.5">
                 <CircleUserRound className="w-4 h-4" />
-                <span className="text-sm font-bold">{t('common:login')}</span>
+                <span>{t('common:login')}</span>
               </div>
-              <span className="text-xs font-normal opacity-70">{t('common:startJourney')}</span>
+              <span className="type-caption opacity-70">{t('common:startJourney')}</span>
             </Button>
           )}
         </div>
@@ -537,12 +598,12 @@ export function AppShell() {
         <div className="fixed right-4 top-4 z-[80] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-3">
           {notifications.slice(0, 4).map(item => {
             const Icon = item.kind === 'completed' ? CheckCircle2 : BellRing
-            const iconClassName = item.kind === 'completed' ? 'text-emerald-500' : 'text-amber-500'
+            const iconClassName = item.kind === 'completed' ? 'text-foreground' : 'text-muted-foreground'
 
             return (
               <div
                 key={item.id}
-                className="w-full rounded-2xl border bg-background/96 p-4 text-left shadow-xl backdrop-blur"
+                className="w-full border border-border bg-background/96 p-4 text-left shadow-lg backdrop-blur"
               >
                 <div className="flex items-start gap-3">
                   <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', iconClassName)} />
@@ -553,11 +614,11 @@ export function AppShell() {
                       handleProtectedNavigate(`/chat?session=${item.sessionId}`)
                     }}
                   >
-                    <div className="text-sm font-semibold text-foreground">{item.title}</div>
-                    <div className="mt-1 text-sm leading-5 text-muted-foreground">{item.message}</div>
+                    <div className="type-ui-title-sm text-foreground">{item.title}</div>
+                    <div className="type-ui-body-sm mt-1 text-muted-foreground">{item.message}</div>
                   </button>
                   <button
-                    className="rounded-md p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-accent hover:opacity-100"
+                    className="border border-transparent p-1 text-muted-foreground opacity-70 transition-all hover:border-border hover:bg-accent hover:opacity-100"
                     onClick={() => {
                       dismissSessionNotification(item.id)
                     }}
@@ -589,7 +650,7 @@ export function AppShell() {
       {isFloating && !isChatImmersive && (
         <>
           <div
-            className="fixed top-2 left-2 z-50 overflow-hidden flex flex-col bg-background border border-border rounded-xl shadow-xl"
+            className="fixed top-2 left-2 z-50 flex flex-col overflow-hidden border border-border bg-background shadow-xl"
             style={{
               width: `${SIDEBAR_WIDTH}px`,
               maxHeight: 'calc(100dvh - 16px)',
@@ -609,7 +670,7 @@ export function AppShell() {
 
       {!isFloating && !isChatImmersive && (
         <aside
-          className="fixed left-0 top-0 z-50 h-dvh flex flex-col transition-transform duration-normal ease-out bg-secondary border-r border-border"
+          className="fixed left-0 top-0 z-50 flex h-dvh flex-col border-r border-border bg-secondary transition-transform duration-normal ease-out"
           style={{
             width: `${SIDEBAR_WIDTH}px`,
             transform: isSidebarOpen ? 'translateX(0)' : `translateX(-${SIDEBAR_WIDTH}px)`,
@@ -624,7 +685,7 @@ export function AppShell() {
         <button
           onClick={() => setIsSidebarOpen(false)}
           className="fixed top-4 z-[60] cursor-pointer"
-          style={{ left: `${SIDEBAR_WIDTH + 16}px` }}
+          style={{ left: `min(calc(100vw - 3rem), ${SIDEBAR_WIDTH + 16}px)` }}
         >
           <X className="w-5 h-5 text-muted-foreground" />
         </button>
@@ -635,13 +696,13 @@ export function AppShell() {
         style={{ marginLeft: isLargeScreen ? `${sidebarWidth}px` : 0 }}
       >
         <header className={cn(
-          'lg:hidden sticky top-0 z-30 flex items-center h-14 px-4 border-b border-border bg-background',
+          'sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background px-4 lg:hidden',
           isChatImmersive && 'hidden',
         )}>
           <div className="w-10 flex justify-start">
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="p-2 -ml-2 rounded-lg cursor-pointer active:bg-accent transition-colors"
+              className="-ml-1 control-icon-sm flex items-center justify-center border border-transparent transition-colors cursor-pointer hover:border-border active:bg-accent"
               aria-label={t('common:openMenu')}
             >
               <Menu className="w-5 h-5 text-foreground" />
@@ -658,14 +719,14 @@ export function AppShell() {
           <div className="w-10 flex justify-end items-center gap-0.5">
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-md cursor-pointer text-muted-foreground hover:text-foreground active:bg-accent transition-colors"
-              aria-label={isDark ? t('common:switchLight') : t('common:switchDark')}
+              className="control-icon-sm flex items-center justify-center border border-transparent cursor-pointer text-muted-foreground transition-colors hover:border-border hover:text-foreground active:bg-accent"
+              aria-label={theme === 'dark' ? t('common:switchLight') : t('common:switchDark')}
             >
-              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
             <button
               onClick={toggleLanguage}
-              className="p-2 -mr-2 rounded-md cursor-pointer text-muted-foreground hover:text-foreground active:bg-accent transition-colors"
+              className="-mr-1 control-icon-sm flex items-center justify-center border border-transparent cursor-pointer text-muted-foreground transition-colors hover:border-border hover:text-foreground active:bg-accent"
               aria-label={i18n.language === 'zh-CN' ? t('common:switchToEn') : t('common:switchToZh')}
             >
               <Globe size={16} />
@@ -679,7 +740,7 @@ export function AppShell() {
               variant="ghost"
               size="sm"
               onClick={() => setIsSidebarOpen(true)}
-              className="h-8 w-8 p-0 cursor-pointer bg-accent border border-border"
+              className="control-icon-sm cursor-pointer border border-border bg-background p-0"
             >
               <Menu className="w-4 h-4 text-muted-foreground" />
             </Button>

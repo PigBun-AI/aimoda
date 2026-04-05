@@ -13,6 +13,9 @@ RedemptionCodeStatus = Literal["unused", "used", "expired"]
 SubscriptionStatus = Literal["active", "expired"]
 ActivityAction = Literal["login", "view_report", "redeem_code", "upload_report"]
 ReportUploadJobStatus = Literal["pending", "processing", "completed", "failed"]
+UsagePeriodType = Literal["lifetime", "daily"]
+FeatureCode = Literal["ai_chat", "fashion_reports", "inspiration", "image_generation", "video_generation"]
+SmsPurpose = Literal["login", "register"]
 
 FREE_USER_VIEW_LIMIT = 3
 
@@ -35,8 +38,10 @@ class CamelModel(BaseModel):
 # --- User ---
 class UserRecord(CamelModel):
     id: int
-    email: str
-    password_hash: str
+    email: str | None = None
+    phone: str | None = None
+    phone_verified_at: str | None = None
+    password_hash: str | None = None
     role: UserRole
     created_at: str
     updated_at: str
@@ -44,7 +49,8 @@ class UserRecord(CamelModel):
 
 class SafeUser(CamelModel):
     id: int
-    email: str
+    email: str | None = None
+    phone: str | None = None
     role: UserRole
     created_at: str
     updated_at: str
@@ -57,7 +63,8 @@ class AuthTokens(BaseModel):
 
 class AuthenticatedUser(BaseModel):
     id: int
-    email: str
+    email: str | None = None
+    phone: str | None = None
     role: UserRole
     session_id: int | None = None
 
@@ -170,9 +177,32 @@ class DeviceInfo(BaseModel):
 # --- Report View Permission ---
 class ReportViewPermission(BaseModel):
     canView: bool
-    reason: Literal["allowed", "limit_exceeded", "already_viewed", "subscriber"]
+    reason: Literal["allowed", "limit_exceeded", "already_viewed", "subscriber", "subscription_required"]
     viewsRemaining: int
     totalLimit: int
+
+
+class FeatureUsageRecord(CamelModel):
+    id: int
+    user_id: int
+    feature_code: FeatureCode
+    period_type: UsagePeriodType
+    period_key: str
+    used_count: int
+    created_at: str
+    updated_at: str
+
+
+class FeatureAccessStatus(CamelModel):
+    feature_code: FeatureCode
+    allowed: bool
+    reason: Literal["allowed", "limit_exceeded", "subscription_required", "admin", "free_tier", "subscriber"]
+    usage_period_type: UsagePeriodType | Literal["none"]
+    period_key: str | None = None
+    used_count: int = 0
+    limit_count: int = -1
+    remaining_count: int = -1
+    reset_at: str | None = None
 
 
 # --- Request Schemas ---
@@ -210,6 +240,21 @@ class CreateUserRequest(BaseModel):
 class GenerateCodesRequest(BaseModel):
     type: RedemptionCodeType
     count: int = Field(default=1, ge=1, le=50)
+
+
+class SmsSendCodeRequest(BaseModel):
+    phone: str = Field(min_length=6, max_length=24)
+    purpose: SmsPurpose = "login"
+
+
+class SmsLoginRequest(BaseModel):
+    phone: str = Field(min_length=6, max_length=24)
+    code: str = Field(min_length=4, max_length=12)
+
+
+class SmsRegisterRequest(BaseModel):
+    phone: str = Field(min_length=6, max_length=24)
+    code: str = Field(min_length=4, max_length=12)
 
 
 class RedeemCodeRequest(BaseModel):

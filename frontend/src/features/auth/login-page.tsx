@@ -1,155 +1,301 @@
-import { FormEvent, useState, useCallback } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { login } from '@/lib/api'
+import { getApiErrorMessage, login, loginWithSms, sendSmsCode } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { queryClient } from '@/main'
-
 import { saveSession } from './protected-route'
+
+type LoginPayload =
+  | { mode: 'sms'; phone: string; code: string }
+  | { mode: 'admin'; email: string; password: string }
+
+const COUNTDOWN_SECONDS = 60
+const AUTH_INPUT_CLASS = 'h-12 rounded-none border border-border bg-background px-4 text-[14px] tracking-[0.01em]'
 
 export function LoginPage() {
   const { t } = useTranslation(['auth', 'common'])
   const navigate = useNavigate()
   const location = useLocation()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/reports'
 
+  const [mode, setMode] = useState<'sms' | 'admin'>('sms')
+  const [smsPhone, setSmsPhone] = useState('')
+  const [smsCode, setSmsCode] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [countdown, setCountdown] = useState(0)
+  const [isSendingCode, setIsSendingCode] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const productLines = useMemo(
+    () => [t('auth:productLineReports'), t('auth:productLineAssistant'), t('auth:productLineInspiration')],
+    [t],
+  )
+
   const mutation = useMutation({
-    mutationFn: login,
+    mutationFn: async (payload: LoginPayload) => {
+      if (payload.mode === 'sms') {
+        return loginWithSms({ phone: payload.phone, code: payload.code })
+      }
+      return login({ email: payload.email, password: payload.password })
+    },
     onSuccess: (user) => {
       queryClient.removeQueries()
       saveSession(JSON.stringify(user))
+      setError(null)
       navigate(redirectTo, { replace: true })
+    },
+    onError: (mutationError, variables) => {
+      const fallback = variables?.mode === 'admin' ? t('auth:invalidCredentials') : t('auth:loginFailed')
+      setError(getApiErrorMessage(mutationError, fallback))
     },
   })
 
-  const handleSubmit = useCallback((event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    mutation.mutate({ email, password })
-  }, [email, password, mutation])
+  useEffect(() => {
+    if (countdown <= 0) {
+      return
+    }
+
+    const timer = setTimeout(() => {
+      setCountdown((prev) => Math.max(prev - 1, 0))
+    }, 1000)
+
+    return () => clearTimeout(timer)
+  }, [countdown])
+
+  const handleSendCode = useCallback(async () => {
+    if (smsPhone.trim().length === 0) {
+      setError(t('common:fillAccount'))
+      return
+    }
+
+    setError(null)
+    setIsSendingCode(true)
+
+    try {
+      await sendSmsCode({ phone: smsPhone, purpose: 'login' })
+      setCountdown(COUNTDOWN_SECONDS)
+    } catch (sendError) {
+      setError(getApiErrorMessage(sendError, t('auth:loginFailed')))
+    } finally {
+      setIsSendingCode(false)
+    }
+  }, [smsPhone, t])
+
+  const renderResendLabel = () => {
+    if (countdown <= 0) {
+      return t('common:sendCode')
+    }
+
+    return t('common:resendCountdown', { n: countdown })
+  }
+
+  const handleSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      setError(null)
+
+      if (mode === 'sms') {
+        if (smsPhone.trim().length === 0) {
+          setError(t('common:fillAccount'))
+          return
+        }
+
+        if (smsCode.trim().length === 0) {
+          setError(t('common:fillCode'))
+          return
+        }
+
+        mutation.mutate({ mode: 'sms', phone: smsPhone, code: smsCode })
+        return
+      }
+
+      if (email.trim().length === 0) {
+        setError(t('common:fillEmail'))
+        return
+      }
+
+      if (password.length === 0) {
+        setError(t('common:fillPassword'))
+        return
+      }
+
+      mutation.mutate({ mode: 'admin', email, password })
+    },
+    [mode, smsPhone, smsCode, email, password, mutation, t],
+  )
 
   return (
-    <div className="min-h-dvh flex flex-col lg:flex-row bg-background">
-      {/* Left side - Brand (Desktop) */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col justify-center px-8 xl:px-16 border-r border-border bg-secondary relative overflow-hidden">
-        {/* Decorative elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-brand-orange/15 opacity-50 blur-3xl" />
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-brand-orange/15 opacity-30 blur-3xl" />
-        </div>
+    <div className="min-h-dvh bg-background px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+      <div className="mx-auto grid min-h-[calc(100dvh-2.5rem)] w-full max-w-[1320px] border border-border bg-card lg:grid-cols-[minmax(320px,0.95fr)_minmax(420px,1fr)]">
+        <aside className="flex flex-col justify-between border-b border-border bg-background px-6 py-6 md:px-8 md:py-8 lg:border-b-0 lg:border-r lg:px-10 lg:py-10">
+          <div className="space-y-8">
+            <div className="space-y-4 border-b border-border pb-6">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                aimoda
+              </p>
+              <img src="/aimoda-logo.svg" alt="aimoda" className="h-8 dark:hidden" />
+              <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-8 dark:block" />
+              <h1 className="max-w-[10ch] font-serif text-[2.5rem] font-medium leading-[0.9] tracking-[-0.05em] text-foreground sm:text-[3.4rem]">
+                {t('auth:welcomeBack')}
+              </h1>
+              <p className="max-w-[34ch] text-[11px] leading-5 tracking-[0.06em] text-muted-foreground">
+                {t('auth:loginToView')}
+              </p>
+            </div>
 
-        <div className="max-w-lg relative z-10">
-          <header className="mb-8">
-            <p className="text-xs tracking-[0.3em] uppercase mb-3 text-muted-foreground">
-              AI-Powered Fashion Intelligence
-            </p>
-            <h1 className="mb-6">
-              <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden" style={{ height: 'clamp(40px, 5vw, 56px)' }} />
-              <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block" style={{ height: 'clamp(40px, 5vw, 56px)' }} />
-            </h1>
-            <div className="w-12 h-px mb-6 bg-brand-orange opacity-40" />
-            <p className="leading-relaxed text-muted-foreground text-base xl:text-lg">
-              {t('brandTagline')}
-            </p>
-          </header>
-
-          <ul className="space-y-3 text-sm xl:text-base text-muted-foreground">
-            {[t('common:brandFeature1'), t('common:brandFeature2'), t('common:brandFeature3')].map((item) => (
-              <li key={item} className="flex items-center gap-3">
-                <span className="w-1.5 h-1.5 rounded-full bg-brand-orange shrink-0" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      {/* Right side - Login Form */}
-      <div className="flex-1 flex items-center justify-center px-4 py-8 sm:px-6 lg:px-8 bg-background">
-        <div className="w-full max-w-sm">
-          {/* Mobile Logo */}
-          <div className="lg:hidden mb-8 text-center">
-            <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden mx-auto" style={{ height: '36px' }} />
-            <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block mx-auto" style={{ height: '36px' }} />
+            <div className="grid gap-0 border border-border">
+              {productLines.map((item, index) => (
+                <div key={item} className={cn('flex items-center justify-between px-4 py-4 text-[11px] uppercase tracking-[0.14em] text-muted-foreground', index < productLines.length - 1 && 'border-b border-border')}>
+                  <span>{item}</span>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                </div>
+              ))}
+            </div>
           </div>
 
-          {/* Form Header */}
-          <header className="mb-6 sm:mb-8">
-            <h2 className="text-xl sm:text-2xl font-medium mb-2 text-foreground">
-              {t('welcomeBack')}
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {t('loginToView')}
-            </p>
-          </header>
+          <div className="border-t border-border pt-6 text-[11px] leading-5 tracking-[0.04em] text-muted-foreground">
+            {t('auth:accessHint')}
+          </div>
+        </aside>
 
-          {/* Login Form */}
-          <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm text-muted-foreground">
-                {t('email')}
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-                autoComplete="email"
-                className="h-11 sm:h-12 text-base"
-              />
+        <section className="flex items-center px-6 py-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
+          <div className="w-full max-w-[520px] space-y-8">
+            <div className="space-y-5 border-b border-border pb-5">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                {t('auth:authMethods')}
+              </p>
+
+              <div className="grid grid-cols-2 gap-2 border border-border p-1">
+                {([
+                  ['sms', t('common:smsLogin')],
+                  ['admin', t('common:emailLogin')],
+                ] as const).map(([value, label]) => {
+                  const active = mode === value
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      className={cn(
+                        'h-11 border px-4 text-[10px] font-semibold uppercase tracking-[0.18em] transition-colors',
+                        active
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
+                      )}
+                      onClick={() => {
+                        setMode(value)
+                        setError(null)
+                      }}
+                      disabled={active}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm text-muted-foreground">
-                {t('password')}
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                required
-                autoComplete="current-password"
-                className="h-11 sm:h-12 text-base"
-              />
-            </div>
-
-            {/* Error Message */}
-            {mutation.isError && (
-              <div className="p-3 rounded-[var(--radius-sm)] bg-destructive/10 border border-destructive/20" role="alert">
-                <p className="text-sm text-destructive">{t('loginFailed')}，{t('invalidCredentials')}。</p>
+            {error && (
+              <div className="border border-foreground/20 bg-foreground/[0.03] px-4 py-3 text-[12px] leading-5 tracking-[0.03em] text-foreground dark:bg-foreground/[0.06]">
+                {error}
               </div>
             )}
 
-            {/* Submit Button */}
-            <Button
-              className="w-full h-11 sm:h-12 text-base"
-              loading={mutation.isPending}
-              type="submit"
-            >
-              {mutation.isPending ? t('loggingIn') : t('login')}
-            </Button>
-          </form>
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              {mode === 'sms' ? (
+                <div className="space-y-5">
+                  <div className="space-y-2.5">
+                    <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      {t('auth:mobileLabel')}
+                    </label>
+                    <Input
+                      value={smsPhone}
+                      onChange={(event) => setSmsPhone(event.target.value)}
+                      placeholder={t('common:enterPhone')}
+                      autoComplete="tel"
+                      className={AUTH_INPUT_CLASS}
+                    />
+                  </div>
 
-          {/* Register Link */}
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            {t('noAccount')}{' '}
-            <Link to="/register" className="underline text-foreground hover:text-brand-blue transition-colors">
-              {t('register')}
-            </Link>
-          </p>
+                  <div className="space-y-2.5">
+                    <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      {t('auth:codeLabel')}
+                    </label>
+                    <div className="grid items-stretch gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
+                      <Input
+                        value={smsCode}
+                        onChange={(event) => setSmsCode(event.target.value)}
+                        placeholder={t('common:enterCode')}
+                        autoComplete="one-time-code"
+                        className={AUTH_INPUT_CLASS}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleSendCode}
+                        disabled={isSendingCode || countdown > 0 || mutation.isPending}
+                        className="h-12 rounded-none"
+                      >
+                        {isSendingCode ? t('common:sending') : renderResendLabel()}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  <div className="space-y-2.5">
+                    <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      {t('auth:email')}
+                    </label>
+                    <Input
+                      type="email"
+                      placeholder={t('common:enterEmail')}
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      autoComplete="email"
+                      className={AUTH_INPUT_CLASS}
+                    />
+                  </div>
 
-          {/* Copyright */}
-          <p className="mt-8 sm:mt-12 text-center text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} aimoda. All rights reserved.
-          </p>
-        </div>
+                  <div className="space-y-2.5">
+                    <label className="block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      {t('auth:password')}
+                    </label>
+                    <Input
+                      type="password"
+                      placeholder={t('common:enterPassword')}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      autoComplete="current-password"
+                      className={AUTH_INPUT_CLASS}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <Button type="submit" className="h-12 w-full rounded-none" loading={mutation.isPending}>
+                {t('common:login')}
+              </Button>
+            </form>
+
+            <div className="grid gap-4 border-t border-border pt-4 text-[10px] leading-5 tracking-[0.04em] text-muted-foreground">
+              <p>
+                {t('common:agreeToTerms')}
+                <span className="mx-2 text-foreground">{t('common:userAgreement')}</span>
+                <span>/</span>
+                <span className="mx-2 text-foreground">{t('common:privacyPolicy')}</span>
+              </p>
+              <p>
+                {t('auth:noAccount')} <Link to="/register" className="text-foreground underline underline-offset-4">{t('auth:register')}</Link>
+              </p>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   )

@@ -3,20 +3,20 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-all duration-150',
+  'type-kicker inline-flex min-h-6 items-center gap-1 rounded-[2px] border px-2 py-1 transition-all duration-150',
   {
     variants: {
       variant: {
-        default: 'bg-accent text-muted-foreground border-transparent',
-        primary: 'bg-primary text-primary-foreground border-transparent',
-        success: 'border-transparent bg-[var(--badge-success-bg)] text-[var(--badge-success-text)]',
-        warning: 'border-transparent bg-[var(--badge-warning-bg)] text-[var(--badge-warning-text)]',
-        error: 'border-transparent bg-[var(--badge-error-bg)] text-[var(--badge-error-text)]',
+        default: 'border-border bg-transparent text-muted-foreground',
+        primary: 'border-primary bg-primary text-primary-foreground',
+        success: 'border-border bg-[var(--badge-success-bg)] text-[var(--badge-success-text)]',
+        warning: 'border-dashed border-border bg-[var(--badge-warning-bg)] text-[var(--badge-warning-text)]',
+        error: 'border-foreground bg-[var(--badge-error-bg)] text-[var(--badge-error-text)]',
       },
       size: {
-        sm: 'text-[10px] px-1.5 py-0',
-        default: 'text-xs px-2.5 py-0.5',
-        lg: 'text-sm px-3 py-1',
+        sm: 'min-h-5 px-1.5 py-0.5',
+        default: 'min-h-6 px-2 py-1',
+        lg: 'min-h-7 px-2.5 py-1',
       },
     },
     defaultVariants: {

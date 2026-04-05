@@ -1,35 +1,66 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { ArrowLeft, ChevronLeft, ChevronRight, Languages, Moon, Sun, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+
+import { useTheme } from '@/components/theme-toggle'
+
 import { getImageListContext } from './image-context'
 import { ImageInfoPanel } from './image-info-panel'
 import { ImageViewer } from './image-viewer'
 import { ImageActionBar } from './image-action-bar'
 import { SearchResultsGrid } from './search-results-grid'
-import { searchSimilar, searchByColor, fetchImageDetail } from './chat-api'
-import type { SearchResponse } from './chat-api'
-import type { ImageResult } from './chat-types'
+import { fetchImageDetail } from './chat-api'
+import { useImageDetailSearch } from './image-detail-search'
+import type { ImageResult, ExtractedColor } from './chat-types'
+
+function formatBrand(brand: string) {
+  if (!brand) return ''
+  return brand
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+function formatSeasonLabel(image: ImageResult, t: (key: string) => string) {
+  const parts: string[] = []
+
+  if (image.year) parts.push(String(image.year))
+
+  if (image.season) {
+    const seasonMap: Record<string, string> = {
+      spring: t('seasonSpringSummer'),
+      summer: t('seasonSpringSummer'),
+      fall: t('seasonFallWinter'),
+      winter: t('seasonFallWinter'),
+      'spring-summer': t('seasonSpringSummer'),
+      'fall-winter': t('seasonFallWinter'),
+      resort: t('seasonResort'),
+      'pre-fall': t('seasonPreFall'),
+      cruise: t('seasonResort'),
+    }
+    const normalized = typeof image.season === 'string' ? image.season.toLowerCase() : ''
+    parts.push(seasonMap[normalized] || String(image.season))
+  }
+
+  if (image.quarter) parts.push(String(image.quarter))
+
+  return parts.join(' / ')
+}
 
 export function ImageDetailPage() {
-  const { t } = useTranslation('common')
+  const { t, i18n } = useTranslation('common')
+  const { theme, toggleTheme } = useTheme()
   const { imageId } = useParams<{ imageId: string }>()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const contextId = searchParams.get('contextId')
   const searchResultsRef = useRef<HTMLDivElement>(null)
 
-  // Image data state — loaded from context OR fetched from API
   const [fetchedImage, setFetchedImage] = useState<ImageResult | null>(null)
   const [isFetching, setIsFetching] = useState(false)
 
-  // Search results state
-  const [searchResults, setSearchResults] = useState<SearchResponse | null>(null)
-  const [searchLabel, setSearchLabel] = useState('')
-  const [isSearchLoading, setIsSearchLoading] = useState(false)
-  const lastSearchRef = useRef<{ type: string; params: any } | null>(null)
-
-  // Try to get from context first (legacy multi-image mode)
   const context = useMemo(() => {
     if (!contextId) return null
     return getImageListContext(contextId)
@@ -39,179 +70,236 @@ export function ImageDetailPage() {
 
   const currentIndex = useMemo(() => {
     if (!imageId) return -1
-    return images.findIndex((img) => img.image_id === imageId)
+    return images.findIndex(img => img.image_id === imageId)
   }, [images, imageId])
 
-  // Fetch from API if no context is available
   useEffect(() => {
     if (context || !imageId) return
+
     setIsFetching(true)
     fetchImageDetail(imageId)
-      .then((data) => setFetchedImage(data))
-      .catch((err) => console.error('Failed to fetch image detail:', err))
+      .then(data => setFetchedImage(data))
+      .catch(err => console.error('Failed to fetch image detail:', err))
       .finally(() => setIsFetching(false))
   }, [imageId, context])
 
-  // Determine current image: context-based or API-fetched
   const currentImage = currentIndex >= 0 ? images[currentIndex] : fetchedImage
   const hasMultiple = images.length > 1
+  const {
+    searchResults,
+    searchLabel,
+    isSearchLoading,
+    activeSearchTarget,
+    searchByBrand,
+    searchByPalette,
+    searchByLabel,
+    changePage,
+    resetSearch,
+  } = useImageDetailSearch(searchResultsRef)
 
-  const goPrev = () => {
-    if (currentIndex > 0) {
-      const prev = images[currentIndex - 1]
-      navigate(`/image/${prev.image_id}${contextId ? `?contextId=${contextId}` : ''}`, {
-        replace: true,
-      })
-      setSearchResults(null)
-      lastSearchRef.current = null
+  useEffect(() => {
+    resetSearch()
+  }, [currentImage?.image_id, resetSearch])
+
+  const goPrev = useCallback(() => {
+    if (currentIndex <= 0) return
+    const prev = images[currentIndex - 1]
+    navigate(`/image/${prev.image_id}${contextId ? `?contextId=${contextId}` : ''}`, { replace: true })
+  }, [contextId, currentIndex, images, navigate])
+
+  const goNext = useCallback(() => {
+    if (currentIndex >= images.length - 1) return
+    const next = images[currentIndex + 1]
+    navigate(`/image/${next.image_id}${contextId ? `?contextId=${contextId}` : ''}`, { replace: true })
+  }, [contextId, currentIndex, images, navigate])
+
+  const handleClose = useCallback(() => {
+    if (window.history.length > 1) {
+      navigate(-1)
+      return
     }
-  }
-
-  const goNext = () => {
-    if (currentIndex < images.length - 1) {
-      const next = images[currentIndex + 1]
-      navigate(`/image/${next.image_id}${contextId ? `?contextId=${contextId}` : ''}`, {
-        replace: true,
-      })
-      setSearchResults(null)
-      lastSearchRef.current = null
-    }
-  }
-
-  const handleClose = () => {
     window.close()
-  }
+  }, [navigate])
 
-  /** Callback from ImageLabels, ImageInfoPanel, ImageViewer */
-  const handleSearchResult = useCallback((
-    results: SearchResponse,
-    labelName: string,
-    searchType?: string,
-    params?: any,
+  const handleBrandSearch = useCallback(async (brand: string) => {
+    await searchByBrand(brand, t('brandSearchLabel', { brand: formatBrand(brand) }))
+  }, [searchByBrand, t])
+
+  const handleColorSearch = useCallback(async (color: ExtractedColor) => {
+    await searchByPalette(
+      color.hex,
+      color.color_name,
+      currentImage?.gender,
+      `${color.color_name} (${color.hex})`,
+    )
+  }, [currentImage?.gender, searchByPalette])
+
+  const handleLabelSearch = useCallback(async (
+    label: { name: string; category: string; topCategory: string },
   ) => {
-    setSearchResults(results)
-    setSearchLabel(labelName)
-    if (searchType && params) {
-      lastSearchRef.current = { type: searchType, params }
-    }
-    setTimeout(() => {
-      searchResultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }, 100)
-  }, [])
-
-  /** Handle pagination */
-  const handlePageChange = useCallback(async (page: number) => {
-    const params = lastSearchRef.current
-    if (!params) return
-    setIsSearchLoading(true)
-    try {
-      let results: SearchResponse
-      if (params.type === 'color') {
-        results = await searchByColor({ ...params.params, page })
-      } else {
-        results = await searchSimilar({ ...params.params, page })
-      }
-      setSearchResults(results)
-    } catch (err) {
-      console.error('Pagination failed:', err)
-    } finally {
-      setIsSearchLoading(false)
-    }
-  }, [])
+    if (!currentImage) return
+    await searchByLabel({
+      ...label,
+      imageId: currentImage.image_id,
+      gender: currentImage.gender,
+    })
+  }, [currentImage, searchByLabel])
 
   const isLoading = !currentImage && (isFetching || context !== null)
+  const titleBrand = currentImage?.brand ? formatBrand(currentImage.brand) : t('image')
+  const imageMeta = currentImage ? formatSeasonLabel(currentImage, t) : ''
+  const closeHref = contextId ? '/chat' : '/inspiration'
+  const currentLanguageLabel = i18n.language === 'zh-CN' ? 'EN' : '中'
+  const toggleLanguage = useCallback(() => {
+    const nextLanguage = i18n.language === 'zh-CN' ? 'en' : 'zh-CN'
+    void i18n.changeLanguage(nextLanguage)
+    localStorage.setItem('i18nextLng', nextLanguage)
+  }, [i18n])
 
   return (
     <div className="min-h-screen bg-background">
-      {/* ── Top bar ── */}
-      <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border/50">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          {/* Left: logo + navigation */}
-          <div className="flex items-center gap-3">
-            <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden h-5 w-auto" />
-            <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden dark:block h-5 w-auto" />
+      <header data-image-detail-header="true" className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-md">
+        <div className="mx-auto flex min-h-16 max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <button
+              onClick={() => navigate(-1)}
+              className="control-icon-sm flex shrink-0 items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              aria-label={t('back')}
+            >
+              <ArrowLeft size={16} />
+            </button>
+
+            <div className="hidden h-6 w-px bg-border sm:block" />
+
+            <Link to="/" className="shrink-0 transition-opacity hover:opacity-70">
+              <img src="/aimoda-logo.svg" alt="aimoda" className="h-[20px] w-auto dark:hidden" />
+              <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-[20px] w-auto dark:block" />
+            </Link>
+
+            <div className="hidden min-w-0 border-l border-border pl-4 sm:block">
+              <div className="flex min-w-0 items-center gap-3">
+                <h1 className="type-ui-title-md truncate text-foreground">
+                  {titleBrand}
+                </h1>
+                {imageMeta && (
+                  <span className="type-kicker truncate text-muted-foreground">
+                    {imageMeta}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              aria-label={theme === 'dark' ? t('switchLight') : t('switchDark')}
+              title={theme === 'dark' ? t('switchLight') : t('switchDark')}
+            >
+              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className="type-action-label control-pill-sm flex min-w-[56px] items-center justify-center gap-1 border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              aria-label={i18n.language === 'zh-CN' ? t('switchToEn') : t('switchToZh')}
+              title={i18n.language === 'zh-CN' ? t('switchToEn') : t('switchToZh')}
+            >
+              <Languages size={14} />
+              <span>{currentLanguageLabel}</span>
+            </button>
             {hasMultiple && currentIndex > 0 && (
               <button
                 onClick={goPrev}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
+                className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
                 aria-label={t('previousImage')}
               >
-                <ChevronLeft size={18} className="text-foreground/70" />
+                <ChevronLeft size={16} />
               </button>
             )}
             {hasMultiple && (
-              <span className="text-xs text-muted-foreground font-mono tabular-nums">
+              <div className="type-kicker control-pill-sm hidden min-w-[82px] items-center justify-center border border-border text-muted-foreground sm:flex">
                 {currentIndex + 1} / {images.length}
-              </span>
+              </div>
             )}
             {hasMultiple && currentIndex < images.length - 1 && (
               <button
                 onClick={goNext}
-                className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
+                className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
                 aria-label={t('nextImage')}
               >
-                <ChevronRight size={18} className="text-foreground/70" />
+                <ChevronRight size={16} />
               </button>
             )}
+            <Link
+              to={closeHref}
+              className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              aria-label={t('close')}
+              onClick={(event) => {
+                if (window.history.length <= 1) return
+                event.preventDefault()
+                handleClose()
+              }}
+            >
+              <X size={16} />
+            </Link>
           </div>
-          {/* Right: close */}
-          <button
-            onClick={handleClose}
-            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-muted transition-colors"
-            aria-label={t('close')}
-          >
-            <X size={18} className="text-foreground/70" />
-          </button>
         </div>
       </header>
 
-      {/* ── Main content ── */}
       {isLoading && (
-        <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 56px)' }}>
-          <div className="flex flex-col items-center gap-2">
+        <div className="flex items-center justify-center px-4 py-10" style={{ minHeight: 'calc(100vh - 64px)' }}>
+          <div className="flex min-w-[240px] max-w-full flex-col items-center gap-4 border border-border px-8 py-10">
             <div className="flex gap-1">
-              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.3s]" />
-              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce [animation-delay:-0.15s]" />
-              <span className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
+              <span className="h-1.5 w-1.5 animate-pulse bg-muted-foreground" style={{ animationDelay: '0s' }} />
+              <span className="h-1.5 w-1.5 animate-pulse bg-muted-foreground" style={{ animationDelay: '0.2s' }} />
+              <span className="h-1.5 w-1.5 animate-pulse bg-muted-foreground" style={{ animationDelay: '0.4s' }} />
             </div>
-            <p className="text-sm text-muted-foreground">{t('loadingImageDetails')}</p>
+            <p className="type-kicker-wide text-muted-foreground">
+              {t('loadingImageDetails')}
+            </p>
           </div>
         </div>
       )}
 
       {currentImage && (
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
-          {/* Three-column layout: Info | Image | Actions */}
-          <div className="flex flex-col lg:flex-row" style={{ maxHeight: 'calc(100vh - 56px)' }}>
-            {/* Left: Info panel — collapses to top on mobile */}
-            <div className="order-2 lg:order-1 shrink-0">
-              <ImageInfoPanel
-                image={currentImage}
-                onSearchResult={handleSearchResult}
-              />
-            </div>
+        <div className="mx-auto max-w-screen-2xl px-4 py-4 sm:px-6 sm:py-6">
+          <section
+            className="overflow-hidden border border-border"
+            style={{ height: 'calc(100dvh - 64px - (clamp(16px, 2vw, 24px) * 2))' }}
+          >
+            <div className="grid h-full min-h-0 gap-0 xl:grid-cols-[320px_minmax(0,1fr)_88px]">
+              <div className="min-h-0 border-b border-border xl:border-b-0 xl:border-r">
+                <ImageInfoPanel
+                  image={currentImage}
+                  activeSearchTarget={activeSearchTarget}
+                  onBrandSearch={handleBrandSearch}
+                  onColorSearch={handleColorSearch}
+                />
+              </div>
 
-            {/* Center: Image viewer — takes remaining space */}
-            <div className="order-1 lg:order-2 flex-1 relative flex items-center justify-center min-h-[50vh] lg:min-h-0 overflow-hidden">
-              <ImageViewer
-                image={currentImage}
-                onSearchResult={handleSearchResult}
-              />
-            </div>
+              <div className="relative min-h-0 border-b border-border bg-background xl:border-b-0">
+                <ImageViewer
+                  image={currentImage}
+                  activeLabelKey={activeSearchTarget?.type === 'label' ? activeSearchTarget.key : null}
+                  onLabelSearch={handleLabelSearch}
+                />
+              </div>
 
-            {/* Right: Action bar — collapses to bottom on mobile */}
-            <div className="order-3 shrink-0">
-              <ImageActionBar image={currentImage} />
+              <div className="min-h-0 xl:border-l">
+                <ImageActionBar image={currentImage} />
+              </div>
             </div>
-          </div>
+          </section>
 
-          {/* Search results — below the main content */}
-          {searchResults && searchResults.images.length > 0 && (
-            <div ref={searchResultsRef} className="pb-8" style={{ scrollMarginTop: '72px' }}>
+          {searchResults && (
+            <div ref={searchResultsRef} className="mt-8">
               <SearchResultsGrid
                 searchResults={searchResults}
                 labelName={searchLabel}
-                onPageChange={handlePageChange}
+                onPageChange={changePage}
                 isLoading={isSearchLoading}
               />
             </div>

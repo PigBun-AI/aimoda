@@ -1,9 +1,14 @@
 # Server Deployment
 
-This project uses a single Docker Compose file plus two committed environment files:
+This project uses a single Docker Compose file plus two environment entry points:
 
-- `env/server.dev.env`
-- `env/server.prod.env`
+- `env/dev.env`
+- `env/prod.env`
+
+Checked-in templates live next to them:
+
+- `env/dev.env.example`
+- `env/prod.env.example`
 
 Each environment is isolated by `COMPOSE_PROJECT_NAME`, Docker volumes, and a localhost-only HTTP port.
 
@@ -29,8 +34,17 @@ The application stacks are not exposed publicly. Only the host-level Nginx liste
 ## Manual deploy
 
 ```bash
+cp env/dev.env.example env/dev.env
+cp env/prod.env.example env/prod.env
 ./scripts/deploy-stack.sh dev
 ./scripts/deploy-stack.sh prod
+```
+
+For local use, keep the same env semantics:
+
+```bash
+docker compose --env-file env/dev.env -p aimoda-dev up -d --build
+docker compose --env-file env/prod.env -p aimoda-prod up -d --build
 ```
 
 ## GitHub Actions secrets

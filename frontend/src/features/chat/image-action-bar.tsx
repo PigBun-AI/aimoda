@@ -1,6 +1,7 @@
-import { useCallback } from 'react'
+import { type ReactNode, useCallback } from 'react'
 import { Download, Heart, Link2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+
 import type { ImageResult } from './chat-types'
 
 interface ImageActionBarProps {
@@ -9,6 +10,7 @@ interface ImageActionBarProps {
 
 export function ImageActionBar({ image }: ImageActionBarProps) {
   const { t } = useTranslation('common')
+
   const handleDownload = useCallback(() => {
     const a = document.createElement('a')
     a.href = image.image_url
@@ -29,35 +31,42 @@ export function ImageActionBar({ image }: ImageActionBarProps) {
   }, [image])
 
   return (
-    <div
-      className="w-full lg:w-[60px] shrink-0 flex lg:flex-col items-center justify-center lg:justify-end gap-4 p-4 lg:pb-8"
-    >
-      <button
-        type="button"
+    <div className="flex w-full shrink-0 flex-row items-stretch justify-between gap-0 lg:h-full lg:w-[88px] lg:flex-col">
+      <ActionButton
+        icon={<Link2 className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+        label={t('copyLink')}
         onClick={handleCopyLink}
-        className="transition-opacity hover:opacity-70"
-        title={t('copyLink')}
-        aria-label={t('copyLink')}
-      >
-        <Link2 className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-      </button>
-      <button
-        type="button"
+      />
+      <ActionButton
+        icon={<Download className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+        label={t('download')}
         onClick={handleDownload}
-        className="transition-opacity hover:opacity-70"
-        title={t('download')}
-        aria-label={t('download')}
-      >
-        <Download className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-      </button>
-      <button
-        type="button"
-        className="transition-opacity hover:opacity-70"
-        title={t('favorite')}
-        aria-label={t('favorite')}
-      >
-        <Heart className="w-7 h-7 text-foreground" strokeWidth={1.5} />
-      </button>
+      />
+      <ActionButton
+        icon={<Heart className="h-[18px] w-[18px]" strokeWidth={1.5} />}
+        label={t('favorite')}
+      />
     </div>
+  )
+}
+
+interface ActionButtonProps {
+  icon: ReactNode
+  label: string
+  onClick?: () => void
+}
+
+function ActionButton({ icon, label, onClick }: ActionButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-h-[76px] flex-1 flex-col items-center justify-center gap-2 border-t border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground first:border-t-0 lg:border-b lg:border-t-0"
+      title={label}
+      aria-label={label}
+    >
+      {icon}
+      <span className="text-[9px] font-semibold uppercase tracking-[0.18em]">{label}</span>
+    </button>
   )
 }

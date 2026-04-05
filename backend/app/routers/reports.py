@@ -20,7 +20,6 @@ from ..dependencies import (
 )
 from ..exceptions import AppError
 from ..models import AuthenticatedUser
-from ..repositories.report_view_repo import has_viewed_report
 from ..repositories.session_repo import is_session_valid
 from ..repositories.subscription_repo import find_active_subscription_by_user_id
 from ..services.report_service import (
@@ -321,9 +320,7 @@ def _inject_report_preview_patch(html: bytes, report_id: int) -> bytes:
 def _can_access_report_preview(user: AuthenticatedUser, report_id: int) -> bool:
     if user.role in ("admin", "editor"):
         return True
-    if find_active_subscription_by_user_id(user.id) is not None:
-        return True
-    return has_viewed_report(user.id, report_id)
+    return find_active_subscription_by_user_id(user.id) is not None
 
 
 def _can_access_upload_job(user: AuthenticatedUser, uploaded_by: int) -> bool:
@@ -332,16 +329,46 @@ def _can_access_upload_job(user: AuthenticatedUser, uploaded_by: int) -> bool:
     return user.id == uploaded_by
 
 
+def _set_report_preview_cookie(response: Response, user: AuthenticatedUser) -> None:
+    preview_token = issue_report_preview_token(user)
+    response.set_cookie(
+        key=REPORT_PREVIEW_COOKIE_NAME,
+        value=preview_token,
+        max_age=settings.REPORT_PREVIEW_TOKEN_TTL_SECONDS,
+        httponly=True,
+        secure=_should_secure_preview_cookie(),
+        samesite="lax",
+        path="/api/reports",
+    )
+
+
 @router.get("")
 def list_reports(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    response: Response,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=12, ge=1, le=100),
 ):
     reports, total = get_reports(page, limit)
+    preview_token = issue_report_preview_token(user)
+    response.set_cookie(
+        key=REPORT_PREVIEW_COOKIE_NAME,
+        value=preview_token,
+        max_age=settings.REPORT_PREVIEW_TOKEN_TTL_SECONDS,
+        httponly=True,
+        secure=_should_secure_preview_cookie(),
+        samesite="lax",
+        path="/api/reports",
+    )
     return {
         "success": True,
-        "data": [r.model_dump(by_alias=True) for r in reports],
+        "data": [
+            {
+                **r.model_dump(by_alias=True),
+                "previewUrl": _build_report_preview_url(r),
+            }
+            for r in reports
+        ],
         "meta": {
             "total": total,
             "page": page,
@@ -392,16 +419,7 @@ def get_single_report(
     log_activity(user.id, "view_report")
 
     view_stat = get_view_status(user.id, user.role)
-    preview_token = issue_report_preview_token(user)
-    response.set_cookie(
-        key=REPORT_PREVIEW_COOKIE_NAME,
-        value=preview_token,
-        max_age=settings.REPORT_PREVIEW_TOKEN_TTL_SECONDS,
-        httponly=True,
-        secure=_should_secure_preview_cookie(),
-        samesite="lax",
-        path="/api/reports",
-    )
+    _set_report_preview_cookie(response, user)
 
     report_data = report.model_dump(by_alias=True)
     report_data["previewUrl"] = _build_report_preview_url(report)
@@ -411,6 +429,54 @@ def get_single_report(
         "data": report_data,
         "meta": {"viewStatus": view_stat},
     }
+
+
+@router.get("/{report_id}/open")
+def open_report_preview(
+    report_id: int,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+):
+    check_report_view_permission_dep(report_id, user)
+
+    report = get_report(report_id)
+    if not report:
+        return {"success": False, "error": "未找到对应报告"}
+
+    log_activity(user.id, "view_report")
+
+    response = RedirectResponse(
+        url=_build_report_preview_url(report),
+        status_code=307,
+    )
+    _set_report_preview_cookie(response, user)
+    return response
+
+
+@router.get("/{report_id}/launch")
+def launch_report_preview(
+    report_id: int,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+):
+    """Set preview auth and jump straight into the report HTML in a new tab."""
+    check_report_view_permission_dep(report_id, user)
+
+    report = get_report(report_id)
+    if not report:
+        return {"success": False, "error": "未找到对应报告"}
+
+    log_activity(user.id, "view_report")
+
+    redirect = RedirectResponse(url=_build_report_preview_url(report), status_code=307)
+    redirect.set_cookie(
+        key=REPORT_PREVIEW_COOKIE_NAME,
+        value=issue_report_preview_token(user),
+        max_age=settings.REPORT_PREVIEW_TOKEN_TTL_SECONDS,
+        httponly=True,
+        secure=_should_secure_preview_cookie(),
+        samesite="lax",
+        path="/api/reports",
+    )
+    return redirect
 
 
 @router.get("/{report_id}/preview/{asset_path:path}")

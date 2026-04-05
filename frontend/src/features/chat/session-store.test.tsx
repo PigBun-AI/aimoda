@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react'
 
 import i18n from '@/i18n'
 import {
+  createNewSession,
   loadSessions,
   markSessionExecutionStatus,
   primeSessionForImmediateRun,
@@ -17,9 +18,10 @@ vi.mock('./chat-api', () => ({
   updateSession: vi.fn(),
 }))
 
-import { listSessions } from './chat-api'
+import { createSession, listSessions } from './chat-api'
 
 const mockedListSessions = vi.mocked(listSessions)
+const mockedCreateSession = vi.mocked(createSession)
 
 describe('session store', () => {
   beforeEach(() => {
@@ -164,6 +166,53 @@ describe('session store', () => {
     expect(result.current.sessions[0]?.execution_status).toBe('running')
   })
 
+  it('does not preserve optimistic running state once the same run id is completed by the server', async () => {
+    const { result } = renderHook(() => useSessionStore())
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'idle',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    act(() => {
+      markSessionExecutionStatus('session-1', 'running', null, 'run-1')
+    })
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'completed',
+        current_run_id: null,
+        last_run_id: 'run-1',
+        last_run_completed_at: '2026-03-21T09:31:00.000Z',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:31:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    expect(result.current.sessions[0]).toMatchObject({
+      execution_status: 'completed',
+      current_run_id: null,
+      last_run_id: 'run-1',
+    })
+  })
+
   it('only promotes a provisional title on the first turn', async () => {
     const { result } = renderHook(() => useSessionStore())
 
@@ -283,6 +332,127 @@ describe('session store', () => {
       title: '蓝色连衣裙',
       title_source: 'heuristic',
       message_count: 1,
+    })
+  })
+
+  it('accepts a fresher ai title after the first turn completes', async () => {
+    const { result } = renderHook(() => useSessionStore())
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: '新对话',
+        title_source: 'default',
+        title_locked: false,
+        message_count: 0,
+        execution_status: 'idle',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    act(() => {
+      primeSessionForImmediateRun('session-1', { title: '蓝色连衣裙' })
+      markSessionExecutionStatus('session-1', 'running')
+    })
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: '高级蓝色通勤连衣裙',
+        title_source: 'ai',
+        title_locked: false,
+        message_count: 2,
+        execution_status: 'completed',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:08.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    expect(result.current.sessions[0]).toMatchObject({
+      title: '高级蓝色通勤连衣裙',
+      title_source: 'ai',
+      execution_status: 'completed',
+    })
+  })
+
+  it('creates a new session with the supplied provisional title', async () => {
+    mockedCreateSession.mockResolvedValueOnce({
+      id: 'session-2',
+      user_id: 1,
+      title: '红色连衣裙',
+      title_source: 'default',
+      title_locked: false,
+      message_count: 0,
+      execution_status: 'idle',
+      created_at: '2026-03-21T10:00:00.000Z',
+      updated_at: '2026-03-21T10:00:00.000Z',
+    })
+
+    await act(async () => {
+      await createNewSession('红色连衣裙')
+    })
+
+    expect(mockedCreateSession).toHaveBeenCalledWith('红色连衣裙')
+  })
+
+  it('replaces a heuristic title with the finalized ai title from polling', async () => {
+    const { result } = renderHook(() => useSessionStore())
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: '新对话',
+        title_source: 'default',
+        title_locked: false,
+        message_count: 0,
+        execution_status: 'idle',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    act(() => {
+      primeSessionForImmediateRun('session-1', { title: '蓝色连衣裙' })
+    })
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: '巴黎秀场蓝色连衣裙趋势',
+        title_source: 'ai',
+        title_locked: false,
+        message_count: 2,
+        execution_status: 'completed',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:05.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    expect(result.current.sessions[0]).toMatchObject({
+      title: '巴黎秀场蓝色连衣裙趋势',
+      title_source: 'ai',
+      execution_status: 'completed',
     })
   })
 })

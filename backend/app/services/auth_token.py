@@ -31,6 +31,7 @@ def _create_token(user: SafeUser, token_type: str, session_id: int | None = None
     payload: dict = {
         "sub": str(user.id),
         "email": user.email,
+        "phone": user.phone,
         "role": user.role,
         "type": token_type,
         "jti": str(uuid.uuid4()),
@@ -56,6 +57,7 @@ def issue_report_preview_token(user: AuthenticatedUser) -> str:
     payload: dict = {
         "sub": str(user.id),
         "email": user.email,
+        "phone": user.phone,
         "role": user.role,
         "type": "report_preview",
         "jti": str(uuid.uuid4()),
@@ -80,6 +82,7 @@ def verify_access_token(token: str) -> AuthenticatedUser:
     return AuthenticatedUser(
         id=int(payload["sub"]),
         email=payload["email"],
+        phone=payload.get("phone"),
         role=payload["role"],
         session_id=payload.get("sessionId"),
     )
@@ -97,6 +100,7 @@ def verify_report_preview_token(token: str) -> AuthenticatedUser:
     return AuthenticatedUser(
         id=int(payload["sub"]),
         email=payload["email"],
+        phone=payload.get("phone"),
         role=payload["role"],
         session_id=payload.get("sessionId"),
     )
