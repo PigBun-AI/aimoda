@@ -29,6 +29,22 @@ if [[ -z "$PROJECT_NAME" ]]; then
   exit 1
 fi
 
+EXPECTED_NGINX_PORT=""
+case "$TARGET_ENV" in
+  dev)
+    EXPECTED_NGINX_PORT="38181"
+    ;;
+  prod)
+    EXPECTED_NGINX_PORT="38080"
+    ;;
+esac
+
+ACTUAL_NGINX_PORT=$(grep -E '^NGINX_PORT=' "$ENV_FILE" | cut -d= -f2-)
+if [[ -n "$EXPECTED_NGINX_PORT" && "$ACTUAL_NGINX_PORT" != "$EXPECTED_NGINX_PORT" ]]; then
+  echo "NGINX_PORT mismatch for $TARGET_ENV: expected $EXPECTED_NGINX_PORT but found ${ACTUAL_NGINX_PORT:-<missing>} in $ENV_FILE" >&2
+  exit 1
+fi
+
 cd "$ROOT_DIR"
 echo "Deploying $TARGET_ENV stack ($PROJECT_NAME) from $ROOT_DIR"
 
