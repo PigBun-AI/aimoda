@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -33,12 +32,6 @@ export function ReportsPage() {
   const totalPages = reportsQuery.data?.totalPages ?? 1
   const totalReports = reportsQuery.data?.total ?? reports.length
   const isLocked = reportsQuery.error instanceof ApiError && reportsQuery.error.status === 403
-
-  const statusConfig = {
-    draft: { label: t('draft'), variant: 'default' as const },
-    published: { label: t('published'), variant: 'primary' as const },
-    archived: { label: t('archived'), variant: 'error' as const },
-  }
 
   return (
     <section className="space-y-8 sm:space-y-10">
@@ -88,8 +81,6 @@ export function ReportsPage() {
                   <Skeleton key={index} className="h-[26rem] w-full rounded-[var(--radius)]" />
                 ))
               : reports.map((report, index) => {
-                  const status = statusConfig[report.status as keyof typeof statusConfig]
-
                   return (
                     <a
                       key={report.id}
@@ -99,23 +90,18 @@ export function ReportsPage() {
                       className="group block h-full text-left"
                     >
                       <Card className="h-full overflow-hidden bg-card">
-                        <div className="grid min-h-[26rem] grid-rows-[18rem_auto] xl:grid-cols-[minmax(220px,0.9fr)_minmax(0,1.1fr)] xl:grid-rows-1">
-                          <div className="relative border-b border-border bg-[#f0f0ec] dark:bg-[#141414] xl:border-b-0 xl:border-r">
-                            <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between border-b border-border px-4 py-3">
+                        <div className="grid min-h-[28rem] md:grid-cols-[minmax(220px,0.92fr)_minmax(0,1.15fr)] md:grid-rows-[minmax(0,1fr)_112px]">
+                          <div className="relative border-b border-border bg-[#f0f0ec] dark:bg-[#141414] md:row-span-2 md:border-b-0 md:border-r">
+                            <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-start border-b border-border px-5 py-4">
                               <span className="type-kicker text-muted-foreground">
                                 {report.season}
                               </span>
-                              {status && (
-                                <Badge variant={status.variant} className="text-[9px]">
-                                  {status.label}
-                                </Badge>
-                              )}
                             </div>
 
                             <img
                               src={report.coverImageUrl}
                               alt={report.title}
-                              className="h-full w-full object-contain object-center px-8 pb-8 pt-16 transition-transform duration-normal group-hover:scale-[1.015] sm:px-10 sm:pb-10 sm:pt-[4.5rem]"
+                              className="h-full w-full object-contain object-center px-8 pb-8 pt-18 transition-transform duration-normal group-hover:scale-[1.015] sm:px-10 sm:pb-10 sm:pt-20"
                               loading="lazy"
                               onError={(event) => {
                                 const target = event.target as HTMLImageElement
@@ -125,7 +111,7 @@ export function ReportsPage() {
                               }}
                             />
 
-                            <div className="hidden h-full w-full items-center justify-center px-8 pb-8 pt-16 text-center">
+                            <div className="hidden h-full w-full items-center justify-center px-8 pb-8 pt-18 text-center sm:px-10 sm:pb-10 sm:pt-20">
                               <div className="space-y-3 border border-border px-6 py-5">
                                 <p className="type-kicker text-muted-foreground">
                                   {report.brand}
@@ -137,35 +123,40 @@ export function ReportsPage() {
                             </div>
                           </div>
 
-                          <div className="flex min-w-0 flex-1 flex-col justify-between p-5 sm:p-6">
-                            <div className="space-y-6">
-                              <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
-                                <div className="min-w-0 space-y-2.5">
+                          <div className="flex min-w-0 flex-col justify-between px-5 py-5 sm:px-6 sm:py-6">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0 space-y-5">
+                                <div className="flex items-start justify-between gap-4">
                                   <p className="type-kicker text-muted-foreground">
                                     {report.brand}
                                   </p>
-                                  <h2 className="type-section-title line-clamp-2 text-foreground transition-opacity duration-fast group-hover:opacity-75 sm:text-[1.9rem]">
+                                  <span className="type-kicker shrink-0 text-muted-foreground">
+                                    {formatIssueNumber(page, limit, index)}
+                                  </span>
+                                </div>
+                                <div className="border-b border-border pb-5">
+                                  <h2 className="font-role-editorial block max-w-[10ch] text-[clamp(2.05rem,1.55rem+1.4vw,3rem)] leading-[0.94] tracking-[0.008em] text-foreground transition-opacity duration-fast group-hover:opacity-75">
                                     {report.title}
                                   </h2>
                                 </div>
-                                <span className="type-kicker shrink-0 text-muted-foreground">
-                                  {formatIssueNumber(page, limit, index)}
-                                </span>
-                              </div>
-
-                              <div className="space-y-3">
-                                <p className="type-body-muted">
-                                  {report.brand} · {report.season}
-                                </p>
-                                <div className="type-kicker inline-flex w-fit items-center border border-border px-2.5 py-1 text-foreground transition-colors group-hover:border-foreground/40">
-                                  {t('viewDetails')}
+                                <div className="space-y-4 pt-0.5">
+                                  <p className="type-ui-body-md text-muted-foreground">
+                                    {report.brand} · {report.season}
+                                  </p>
+                                  <div className="inline-flex min-h-10 items-center border border-border px-4 type-ui-label-sm text-foreground transition-colors group-hover:border-foreground/45">
+                                    {t('viewDetails')}
+                                  </div>
                                 </div>
                               </div>
                             </div>
+                          </div>
 
-                            <div className="type-meta mt-8 flex items-center justify-between border-t border-border pt-4 text-muted-foreground">
-                              <span>{formatReportDate(report.updatedAt, i18n.language)}</span>
-                              <span className="text-foreground/78 transition-opacity duration-fast group-hover:opacity-100 xl:opacity-0">
+                          <div className="flex items-end border-t border-border px-5 py-4 sm:px-6">
+                            <div className="flex w-full items-end justify-between gap-4">
+                              <span className="type-ui-body-sm text-muted-foreground">
+                                {formatReportDate(report.updatedAt, i18n.language)}
+                              </span>
+                              <span className="type-kicker text-muted-foreground">
                                 {report.season}
                               </span>
                             </div>
