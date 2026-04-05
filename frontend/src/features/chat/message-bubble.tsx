@@ -346,15 +346,15 @@ function ToolTraceGroup({
       >
         <div className="flex items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-          <span className="type-ui-title-sm text-foreground/84">{t('toolTraceTitle')}</span>
-          <span className="type-ui-meta text-muted-foreground">{t('toolCallsCount', { count: stats.toolCount })}</span>
-          {stats.runningCount > 0 && <span className="type-ui-meta text-foreground">{t('toolRunningCount', { count: stats.runningCount })}</span>}
-          {stats.errorCount > 0 && <span className="type-ui-meta text-foreground">{t('toolErrorCount', { count: stats.errorCount })}</span>}
+          <span className="type-ui-label-sm text-foreground/84">{t('toolTraceTitle')}</span>
+          <span className="type-ui-label-xs text-muted-foreground">{t('toolCallsCount', { count: stats.toolCount })}</span>
+          {stats.runningCount > 0 && <span className="type-ui-label-xs text-foreground">{t('toolRunningCount', { count: stats.runningCount })}</span>}
+          {stats.errorCount > 0 && <span className="type-ui-label-xs text-foreground">{t('toolErrorCount', { count: stats.errorCount })}</span>}
           {stats.toolCount > 0 && stats.runningCount === 0 && stats.errorCount === 0 && (
-            <span className="type-ui-meta text-foreground">{t('toolDoneCount', { count: stats.doneCount })}</span>
+            <span className="type-ui-label-xs text-foreground">{t('toolDoneCount', { count: stats.doneCount })}</span>
           )}
         </div>
-        <span className="type-ui-meta text-muted-foreground">{collapsed ? t('expand') : t('collapse')}</span>
+        <span className="type-ui-label-xs text-muted-foreground">{collapsed ? t('expand') : t('collapse')}</span>
       </button>
 
       {!collapsed && (
@@ -400,11 +400,11 @@ function ReasoningBlockView({ block }: { block: { type: 'reasoning'; text: strin
       >
         <div className="flex items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-          <span className="type-ui-title-sm text-foreground/84">
+          <span className="type-ui-label-sm text-foreground/84">
             {t('reasoningTraceTitle')}
           </span>
         </div>
-        <span className="type-ui-meta text-muted-foreground">
+        <span className="type-ui-label-xs text-muted-foreground">
           {collapsed ? t('expand') : t('collapse')}
         </span>
       </button>

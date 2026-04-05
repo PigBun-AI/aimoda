@@ -1,7 +1,9 @@
 // ImageDrawer — 结果面板（仿 aimoda-web ResultPanelContainer）
 
+import { useEffect, useRef, useState } from 'react'
 import { Maximize2, Minimize2, X, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { DrawerData } from './chat-types'
 import { FashionImage } from './fashion-image'
@@ -40,11 +42,37 @@ export function ImageDrawer({
   onToggleFullscreen,
 }: ImageDrawerProps) {
   const { t } = useTranslation('common')
+  const gridRef = useRef<HTMLDivElement | null>(null)
+  const [columnCount, setColumnCount] = useState(isFullscreen ? 6 : 4)
   if (!open || !data) return null
 
   const safeImages = data.images || []
   const displayCount = data.total || safeImages.length
   const thumbnailWidth = isFullscreen ? 1120 : 760
+
+  useEffect(() => {
+    const gridEl = gridRef.current
+    if (!gridEl) return
+
+    const updateColumns = () => {
+      const width = gridEl.clientWidth
+      const minCardWidth = isFullscreen ? 150 : 132
+      const gap = isFullscreen ? 16 : 12
+      const maxColumns = isFullscreen ? 7 : 5
+      const minColumns = width < 320 ? 1 : 2
+      const next = Math.floor((width + gap) / (minCardWidth + gap))
+      setColumnCount(Math.max(minColumns, Math.min(maxColumns, next || minColumns)))
+    }
+
+    updateColumns()
+
+    const observer = new ResizeObserver(() => {
+      updateColumns()
+    })
+    observer.observe(gridEl)
+
+    return () => observer.disconnect()
+  }, [isFullscreen])
 
   const handleImageClick = (img: typeof safeImages[number]) => {
     window.open(`/image/${img.image_id}`, '_blank')
@@ -86,13 +114,14 @@ export function ImageDrawer({
 
       <div className="flex-1 overflow-y-auto px-4 py-3 sm:px-5">
         <div
-          className="grid"
-          style={{
-            gridTemplateColumns: isFullscreen
-              ? 'repeat(auto-fill, minmax(220px, 1fr))'
-              : 'repeat(auto-fill, minmax(148px, 1fr))',
-            gap: isFullscreen ? '28px 18px' : '24px 16px',
-          }}
+          ref={gridRef}
+          className={cn(
+            'grid',
+            isFullscreen
+              ? 'gap-y-7 gap-x-4'
+              : 'gap-y-6 gap-x-3 xl:gap-x-4',
+          )}
+          style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
         >
           {safeImages.map((img, i) => (
             <div key={i} className="w-full space-y-2">

@@ -136,7 +136,7 @@ export function ChatInput({
           </div>
         )}
 
-        <div className="relative rounded-lg border border-border bg-background transition-colors">
+        <div className="relative border border-border bg-background transition-colors">
           <div className="flex flex-col">
             <input
               ref={fileInputRef}
@@ -154,12 +154,12 @@ export function ChatInput({
                     <img
                       src={`data:${image.source.media_type};base64,${image.source.data}`}
                       alt={image.fileName}
-                      className="h-16 w-16 rounded-lg border border-border bg-muted object-cover"
+                      className="h-16 w-16 border border-border bg-muted object-cover"
                     />
                     <button
                       type="button"
                       onClick={() => removePendingImage(image.id)}
-                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:text-foreground"
+                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center border border-border bg-background text-muted-foreground hover:text-foreground"
                       aria-label={t("removeImage", { fileName: image.fileName })}
                     >
                       <X size={12} />
@@ -184,7 +184,7 @@ export function ChatInput({
                   <button
                     type="button"
                     onClick={handlePickImages}
-                    className="shrink-0 cursor-pointer rounded-lg p-2.5 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                    className="shrink-0 cursor-pointer p-2.5 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
                     title={t("uploadImage")}
                   >
                     <ImagePlus size={18} />
@@ -193,7 +193,7 @@ export function ChatInput({
 
                 <Button
                   className={[
-                    "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full p-0",
+                    "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center p-0",
                     canSend ? "bg-foreground text-background hover:bg-foreground/88" : "bg-border text-muted-foreground",
                   ].join(" ")}
                   disabled={!canSend}
