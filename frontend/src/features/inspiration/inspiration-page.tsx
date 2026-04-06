@@ -159,9 +159,6 @@ export function InspirationPage() {
                         <div className="space-y-5">
                           <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
                             <div className="min-w-0 space-y-2">
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                {gallery.source || 'curation'}
-                              </p>
                               <h2 className="line-clamp-2 font-serif text-[1.45rem] leading-[0.98] font-medium tracking-[-0.035em] text-foreground transition-opacity duration-fast group-hover:opacity-75 sm:text-[1.8rem]">
                                 {gallery.title}
                               </h2>

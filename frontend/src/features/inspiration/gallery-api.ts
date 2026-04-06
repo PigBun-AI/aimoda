@@ -44,7 +44,6 @@ export interface Gallery {
   category: string
   tags: string[]
   cover_url: string
-  source: string
   status: string
   image_count: number
   created_at: string

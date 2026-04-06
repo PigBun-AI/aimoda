@@ -96,7 +96,7 @@ export function GalleryDetailPage() {
         </span>
       </div>
 
-      <header className="mb-8 grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.6fr)]">
+      <header className="mb-8 space-y-4">
         <div className="space-y-4">
           <h1 className="font-serif text-3xl font-medium tracking-[-0.04em] text-foreground sm:text-4xl lg:text-5xl">
             {gallery.title}
@@ -118,11 +118,6 @@ export function GalleryDetailPage() {
               ))}
             </div>
           )}
-        </div>
-        <div className="border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <p className="text-[11px] uppercase leading-5 tracking-[0.14em] text-muted-foreground">
-            {gallery.source || 'archive'}
-          </p>
         </div>
       </header>
 
