@@ -199,12 +199,12 @@ OpenClaw Agent 通过 MCP 工具与平台交互，流程如下：
 ┌─────────────────────────────────────────────────────────────┐
 │                     OpenClaw Agent                           │
 │                                                              │
-│  1. get_report_spec ──────────────────────────────────┐     │
+│  1. get_openclaw_upload_contract ────────────────────┐     │
 │       │                                                   │   │
 │       ▼                                                   │   │
 │  ┌─────────────────┐    2. 生成报告    ┌─────────────┐  │   │
-│  │ 获取文件夹结构  │ ──────────────▶  │ 按规范生成  │  │   │
-│  │ + iframe 规范   │                  │ HTML+images │  │   │
+│  │ 获取机器合同    │ ──────────────▶  │ 按合同生成  │  │   │
+│  │ + next_action   │                  │ HTML+assets │  │   │
 │  └─────────────────┘                  └──────┬──────┘  │   │
 │                                                │          │   │
 │                                                ▼          │   │
@@ -229,44 +229,28 @@ OpenClaw Agent 通过 MCP 工具与平台交互，流程如下：
 
 | 工具 | 功能 | 优先级 |
 |------|------|--------|
-| `get_report_spec` | 查询最新的文件夹结构规范 + iframe 解析规则 | P0 |
+| `get_openclaw_upload_contract` | 查询 OpenClaw 机器可执行上传合同 + next_action | P0 |
+| `get_openclaw_report_template` | 查询推荐 ZIP 模板与 manifest 模板 | P0 |
+| `get_report_spec` | 查询完整人类可读规范，供调试/人工核对 | P2 |
 | `prepare_report_upload` | 创建直传 OSS 的上传任务，返回预签名 URL | P1 |
 | `complete_report_upload` | 直传完成后通知平台开始异步处理 | P1 |
 | `get_report_upload_status` | 查询异步任务状态与最终报告结果 | P1 |
 | `upload_report` | 旧版代理上传，保留兼容但不推荐 | Deprecated |
 
-### get_report_spec 返回规范
+### get_openclaw_upload_contract 返回合同
 
 ```typescript
-interface ReportSpec {
-  version: "2.0.0",
-  updatedAt: "2026-04-03",
-  description: "AiModa Fashion Report Zip 规范 - Agent 生成前请查阅",
-  folderStructure: {
-    root: "{report-root}/",
-    required: [
-      "manifest.json",   // 必选：报告 manifest
-      "entryHtml"        // 必选：manifest.entryHtml 指向的主入口 HTML
-    ],
-    optional: [
-      "additional html pages",
-      "assets/",
-      "cover image",
-      "features file"
-    ],
-    recommendedLayout: {
-      manifest: "manifest.json",
-      pagesDir: "pages/",
-      assetsDir: "assets/"
-    }
-  },
-  manifest: {
-    requiredFields: ["slug", "title", "brand", "season", "year", "entryHtml"]
-  },
-  htmlRules: {
-    entryHtml: "主入口页面，可不是 index.html",
-    additionalHtml: "允许任意数量",
-    relativeLinksOnly: "所有本地页面与资源都必须使用 zip 内部相对路径"
+interface OpenClawUploadContract {
+  version: "1.0.0",
+  requiredManifestFields: ["slug", "brand", "season", "year", "entryHtml"],
+  optionalManifestFields: ["overviewHtml", "coverImage"],
+  hardFailures: Array<{ code: string; when: string }>,
+  serverAutofixes: string[],
+  workflow: string[],
+  toolPolicy: {
+    alwaysCallContractFirst: true,
+    neverUseLegacyUpload: true,
+    alwaysFollowNextAction: true
   }
 }
 ```
@@ -290,6 +274,9 @@ interface ReportSpec {
     },
     "objectKey": "report-uploads/job-123/report.zip",
     "expiresAt": "2026-04-05T12:00:00Z"
+  },
+  "next_action": {
+    "type": "upload_zip_to_oss"
   }
 }
 ```
@@ -305,10 +292,13 @@ interface ReportSpec {
 ```json
 {
   "success": true,
-  "message": "报告处理任务已启动",
   "job": {
     "id": "job-123",
     "status": "processing"
+  },
+  "next_action": {
+    "type": "poll_report_upload_status",
+    "job_id": "job-123"
   }
 }
 ```
@@ -317,11 +307,18 @@ interface ReportSpec {
 
 ```json
 {
-  "success": false,
+  "success": true,
   "job": {
     "id": "job-123",
     "status": "failed",
-    "errorMessage": "manifest.json 缺失"
+    "errorMessage": "{\"code\":\"missing_manifest_field\",\"message\":\"manifest 缺少必填字段 entryHtml\"}"
+  },
+  "error": {
+    "code": "missing_manifest_field",
+    "message": "manifest 缺少必填字段 entryHtml"
+  },
+  "next_action": {
+    "type": "fix_report_package_and_retry"
   }
 }
 ```

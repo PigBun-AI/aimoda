@@ -21,6 +21,7 @@ from ..repositories.report_upload_job_repo import (
     mark_upload_job_processing,
 )
 from .oss_service import get_oss_service, OSSService
+from .report_package_errors import serialize_report_error
 from .report_service import upload_report_archive
 
 logger = logging.getLogger(__name__)
@@ -129,7 +130,7 @@ def _process_report_upload_job(job_id: str, archive_path: Path, uploaded_by: int
         logger.info("Completed report upload job %s -> report %s", job_id, report.slug)
     except Exception as exc:
         logger.exception("Report upload job %s failed: %s", job_id, exc)
-        mark_upload_job_failed(job_id, str(exc))
+        mark_upload_job_failed(job_id, serialize_report_error(exc))
         archive_path.unlink(missing_ok=True)
 
 
@@ -147,5 +148,5 @@ def _process_report_upload_job_from_oss(job_id: str, source_object_key: str, upl
             logger.warning("Failed to delete staged OSS object %s: %s", source_object_key, cleanup_exc)
     except Exception as exc:
         logger.exception("Direct OSS report upload job %s failed: %s", job_id, exc)
-        mark_upload_job_failed(job_id, str(exc))
+        mark_upload_job_failed(job_id, serialize_report_error(exc))
         archive_path.unlink(missing_ok=True)

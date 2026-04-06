@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from backend.app.exceptions import AppError
+from backend.app.services.report_package_errors import ReportPackageError
 from backend.app.services.report_scanner import extract_report_metadata, validate_report_directory
 
 
@@ -74,14 +74,21 @@ def test_legacy_report_without_overview_is_still_valid(tmp_path):
     assert metadata.look_count == 1
 
 
-def test_manifest_cover_image_missing_raises(tmp_path):
-    report_root = tmp_path / "broken-cover-report"
-    report_root.mkdir()
+def test_manifest_without_cover_image_uses_first_entry_image(tmp_path):
+    report_root = tmp_path / "auto-cover-report"
+    (report_root / "pages").mkdir(parents=True)
+    (report_root / "assets").mkdir()
+    (report_root / "pages" / "report.html").write_text(
+        '<html><head><title>Auto Cover</title></head><body><img src="../assets/look-001.jpg"><img src="../assets/look-002.jpg"></body></html>',
+        encoding="utf-8",
+    )
+    (report_root / "assets" / "look-001.jpg").write_bytes(b"img1")
+    (report_root / "assets" / "look-002.jpg").write_bytes(b"img2")
     (report_root / "manifest.json").write_text(
         json.dumps(
             {
-                "slug": "broken-cover-report",
-                "brand": "Broken",
+                "slug": "auto-cover-report",
+                "brand": "Auto",
                 "season": "AW",
                 "year": 2026,
                 "entryHtml": "pages/report.html",
@@ -89,13 +96,11 @@ def test_manifest_cover_image_missing_raises(tmp_path):
         ),
         encoding="utf-8",
     )
-    (report_root / "pages").mkdir()
-    (report_root / "pages" / "report.html").write_text("<html></html>", encoding="utf-8")
 
-    with pytest.raises(AppError) as exc:
-        validate_report_directory(report_root)
+    validate_report_directory(report_root)
+    metadata = extract_report_metadata(report_root)
 
-    assert "coverImage" in str(exc.value)
+    assert metadata.look_count == 2
 
 
 def test_manifest_entry_html_missing_raises(tmp_path):
@@ -117,10 +122,10 @@ def test_manifest_entry_html_missing_raises(tmp_path):
         encoding="utf-8",
     )
 
-    with pytest.raises(AppError) as exc:
+    with pytest.raises(ReportPackageError) as exc:
         validate_report_directory(report_root)
 
-    assert "entryHtml" in str(exc.value)
+    assert exc.value.code == "entry_html_not_found"
 
 
 def test_legacy_report_without_cover_raises(tmp_path):
@@ -131,7 +136,34 @@ def test_legacy_report_without_cover_raises(tmp_path):
         encoding="utf-8",
     )
 
-    with pytest.raises(AppError) as exc:
+    with pytest.raises(ReportPackageError) as exc:
         validate_report_directory(report_root)
 
-    assert "缺少封面图" in str(exc.value)
+    assert exc.value.code == "cover_image_not_found"
+
+
+def test_large_inline_image_is_rejected(tmp_path):
+    report_root = tmp_path / "inline-report"
+    (report_root / "pages").mkdir(parents=True)
+    inline_payload = "a" * (9 * 1024)
+    (report_root / "pages" / "report.html").write_text(
+        f'<html><head><title>Inline</title></head><body><img src="data:image/png;base64,{inline_payload}"></body></html>',
+        encoding="utf-8",
+    )
+    (report_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "inline-report",
+                "brand": "Inline",
+                "season": "AW",
+                "year": 2026,
+                "entryHtml": "pages/report.html",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReportPackageError) as exc:
+        validate_report_directory(report_root)
+
+    assert exc.value.code == "inline_image_too_large"

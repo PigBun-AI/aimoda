@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 
 from ..config import settings
-from ..constants import REPORT_SPEC
+from ..constants import OPENCLAW_REPORT_TEMPLATE, OPENCLAW_UPLOAD_CONTRACT, REPORT_SPEC
 from ..exceptions import AppError
 from ..models import ReportRecord
 from ..repositories.report_repo import (
@@ -28,6 +28,14 @@ from .oss_service import get_oss_service
 
 def get_report_spec() -> dict:
     return REPORT_SPEC
+
+
+def get_openclaw_upload_contract() -> dict:
+    return OPENCLAW_UPLOAD_CONTRACT
+
+
+def get_openclaw_report_template() -> dict:
+    return OPENCLAW_REPORT_TEMPLATE
 
 
 def get_report(report_id: int) -> ReportRecord | None:

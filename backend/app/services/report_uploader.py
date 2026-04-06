@@ -6,7 +6,7 @@ Core flow:
   2. Upload every file except the manifest itself to OSS with the same relative path
   3. Use manifest.entryHtml (or legacy index.html) as the iframe entry URL
   4. Treat overview.html as optional
-  5. Require and upload the explicit cover image
+  5. Resolve list cover from explicit cover image or the first local image in entry HTML
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from .oss_service import get_oss_service, OSSService
 from .report_scanner import (
     MANIFEST_FILENAMES,
     load_report_manifest,
+    resolve_report_cover_image,
     resolve_report_entry_html,
     resolve_report_overview_html,
     validate_report_directory,
@@ -122,25 +123,6 @@ def _upload_files(oss: OSSService, report_root: Path, slug: str, files: list[Pat
     return path_map
 
 
-def _select_cover_image(report_root: Path, manifest: dict | None, uploaded_files: list[Path]) -> Path | None:
-    if manifest:
-        cover = manifest.get("coverImage") or manifest.get("cover_image")
-        if isinstance(cover, str) and cover.strip():
-            candidate = report_root / cover
-            if candidate.exists():
-                return candidate
-
-    for name in ("cover.jpg", "cover.jpeg", "cover.png", "cover.webp"):
-        for parent in (report_root, report_root / "assets", report_root / "images"):
-            candidate = parent / name
-            if candidate.exists():
-                return candidate
-
-    # Do not fall back to an arbitrary image. Report list cards should only use
-    # an explicit cover screenshot / cover asset that represents the report home.
-    return None
-
-
 def upload_report_to_oss(report_root: Path, slug: str) -> ReportOSSResult:
     """Upload all report files to OSS and return URLs."""
 
@@ -166,9 +148,9 @@ def upload_report_to_oss(report_root: Path, slug: str) -> ReportOSSResult:
         overview_url = path_map.get(overview_rel)
 
     cover_url = None
-    cover_img = _select_cover_image(report_root, manifest, upload_files)
-    if cover_img is not None:
-        cover_rel = cover_img.relative_to(report_root).as_posix()
+    cover_image = resolve_report_cover_image(report_root, manifest)
+    if cover_image is not None:
+        cover_rel = cover_image.path.relative_to(report_root).as_posix()
         cover_url = path_map.get(cover_rel)
 
     logger.info(
