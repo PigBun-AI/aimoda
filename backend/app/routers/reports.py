@@ -27,6 +27,7 @@ from ..services.report_service import (
     get_report_spec,
     get_reports,
     delete_report_with_files,
+    resolve_report_lead_excerpt,
 )
 from ..services.auth_token import issue_report_preview_token, verify_report_preview_token
 from ..services.oss_service import get_oss_service
@@ -87,6 +88,13 @@ def _get_report_entry_path(report) -> str:
 def _build_report_preview_url(report) -> str:
     entry_path = _get_report_entry_path(report)
     return f"/api/reports/{report.id}/preview/{quote(entry_path, safe='/')}"
+
+
+def _serialize_report(report) -> dict:
+    payload = report.model_dump(by_alias=True)
+    payload["previewUrl"] = _build_report_preview_url(report)
+    payload["leadExcerpt"] = resolve_report_lead_excerpt(report)
+    return payload
 
 
 def _normalize_preview_asset_path(asset_path: str) -> str:
@@ -363,10 +371,7 @@ def list_reports(
     return {
         "success": True,
         "data": [
-            {
-                **r.model_dump(by_alias=True),
-                "previewUrl": _build_report_preview_url(r),
-            }
+            _serialize_report(r)
             for r in reports
         ],
         "meta": {
@@ -421,8 +426,7 @@ def get_single_report(
     view_stat = get_view_status(user.id, user.role)
     _set_report_preview_cookie(response, user)
 
-    report_data = report.model_dump(by_alias=True)
-    report_data["previewUrl"] = _build_report_preview_url(report)
+    report_data = _serialize_report(report)
 
     return {
         "success": True,
@@ -493,7 +497,7 @@ def preview_report_asset(
         user = verify_report_preview_token(preview_token)
     except ValueError as exc:
         raise AppError("预览凭证无效或已过期，请刷新页面重试", 401) from exc
-    if user.session_id is not None and not is_session_valid(user.session_id):
+    if user.session_id is not None and not is_session_valid(user.session_id, user.id):
         raise AppError("预览会话已失效，请重新登录", 401)
 
     report = get_report(report_id)

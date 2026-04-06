@@ -9,7 +9,7 @@ export interface ChatSession {
   pinned_at?: string | null
   title_source?: 'default' | 'heuristic' | 'ai' | 'manual' | string
   title_locked?: boolean
-  execution_status?: 'idle' | 'running' | 'completed' | 'error'
+  execution_status?: 'idle' | 'running' | 'stopping' | 'completed' | 'error'
   current_run_id?: string | null
   last_run_id?: string | null
   last_run_started_at?: string | null

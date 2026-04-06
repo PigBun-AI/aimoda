@@ -116,3 +116,20 @@ def create_report(
         ).fetchone()
         conn.commit()
     return _map_report(row)
+
+
+def update_report_metadata(report_id: int, metadata_json: dict | None) -> None:
+    with _get_pg_conn() as conn:
+        conn.execute(
+            """
+            UPDATE reports
+            SET metadata_json = %s,
+                updated_at = NOW()
+            WHERE id = %s
+            """,
+            (
+                psycopg.types.json.Json(metadata_json) if metadata_json else None,
+                report_id,
+            ),
+        )
+        conn.commit()

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -18,14 +18,6 @@ function formatReportDate(date: string, language: string) {
   })
 }
 
-function formatIssueNumber(page: number, limit: number, index: number) {
-  return String((page - 1) * limit + index + 1).padStart(2, '0')
-}
-
-function formatReportIssue(page: number, limit: number, index: number) {
-  return `#${formatIssueNumber(page, limit, index)}`
-}
-
 export function ReportsPage() {
   const { t } = useTranslation('reports')
   const { i18n } = useTranslation()
@@ -36,6 +28,14 @@ export function ReportsPage() {
   const totalPages = reportsQuery.data?.totalPages ?? 1
   const totalReports = reportsQuery.data?.total ?? reports.length
   const isLocked = reportsQuery.error instanceof ApiError && reportsQuery.error.status === 403
+  const reportFallbackCopy = useMemo(
+    () => (report: typeof reports[number]) => t('reportDeck', {
+      brand: report.brand,
+      season: report.season,
+      date: formatReportDate(report.updatedAt, i18n.language),
+    }),
+    [i18n.language, t],
+  )
 
   return (
     <section className="space-y-8 sm:space-y-10">
@@ -84,7 +84,7 @@ export function ReportsPage() {
               ? Array.from({ length: 6 }).map((_, index) => (
                   <Skeleton key={index} className="h-[22rem] w-full rounded-[var(--radius)]" />
                 ))
-              : reports.map((report, index) => {
+              : reports.map((report) => {
                   return (
                     <a
                       key={report.id}
@@ -97,15 +97,6 @@ export function ReportsPage() {
                         mediaClassName="bg-[#f1f1ed] dark:bg-[#141414]"
                         media={(
                           <>
-                            <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 py-4 sm:px-5">
-                              <span className="type-kicker text-muted-foreground">
-                                {report.season}
-                              </span>
-                              <span className="type-kicker text-muted-foreground">
-                                {formatReportIssue(page, limit, index)}
-                              </span>
-                            </div>
-
                             <img
                               src={report.coverImageUrl}
                               alt={report.title}
@@ -143,19 +134,12 @@ export function ReportsPage() {
                         )}
                         title={report.title}
                         titleClassName="line-clamp-3"
-                        description={t('reportDeck', {
-                          brand: report.brand,
-                          season: report.season,
-                          date: formatReportDate(report.updatedAt, i18n.language),
-                        })}
+                        description={report.leadExcerpt || reportFallbackCopy(report)}
                         descriptionClassName="line-clamp-4"
                         footerStart={(
-                          <div className="flex min-w-0 items-center gap-3 text-muted-foreground">
-                            <span className="type-kicker">{t('issueLabel')}</span>
-                            <span className="type-kicker text-foreground">{formatReportIssue(page, limit, index)}</span>
-                            <span className="type-kicker">/</span>
-                            <span className="type-kicker">{report.season}</span>
-                          </div>
+                          <span className="type-kicker text-muted-foreground">
+                            {report.season}
+                          </span>
                         )}
                         footerEnd={(
                           <div className="flex items-center gap-2 text-foreground">

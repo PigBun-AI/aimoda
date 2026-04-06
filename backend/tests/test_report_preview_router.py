@@ -66,9 +66,8 @@ def test_preview_report_asset_returns_content(monkeypatch):
 
     monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
     monkeypatch.setattr(reports_router, "verify_report_preview_token", lambda token: _user())
-    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id: True)
-    monkeypatch.setattr(reports_router, "has_viewed_report", lambda user_id, report_id: True)
-    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: None)
+    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id, user_id=None: True)
+    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: object())
     monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
 
     response = reports_router.preview_report_asset(
@@ -98,9 +97,8 @@ def test_preview_report_asset_injects_html_patch(monkeypatch):
 
     monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
     monkeypatch.setattr(reports_router, "verify_report_preview_token", lambda token: _user())
-    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id: True)
-    monkeypatch.setattr(reports_router, "has_viewed_report", lambda user_id, report_id: True)
-    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: None)
+    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id, user_id=None: True)
+    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: object())
     monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
 
     response = reports_router.preview_report_asset(
@@ -124,9 +122,8 @@ def test_preview_report_asset_uses_oss_resize_for_thumbnail(monkeypatch):
 
     monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
     monkeypatch.setattr(reports_router, "verify_report_preview_token", lambda token: _user())
-    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id: True)
-    monkeypatch.setattr(reports_router, "has_viewed_report", lambda user_id, report_id: True)
-    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: None)
+    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id, user_id=None: True)
+    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: object())
     monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
 
     response = reports_router.preview_report_asset(
@@ -157,9 +154,8 @@ def test_preview_report_asset_rewrites_css_image_urls(monkeypatch):
 
     monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
     monkeypatch.setattr(reports_router, "verify_report_preview_token", lambda token: _user())
-    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id: True)
-    monkeypatch.setattr(reports_router, "has_viewed_report", lambda user_id, report_id: True)
-    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: None)
+    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id, user_id=None: True)
+    monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: object())
     monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
 
     response = reports_router.preview_report_asset(
@@ -177,8 +173,7 @@ def test_preview_report_asset_rewrites_css_image_urls(monkeypatch):
 def test_preview_report_asset_rejects_viewer_without_report_access(monkeypatch):
     monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
     monkeypatch.setattr(reports_router, "verify_report_preview_token", lambda token: _user())
-    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id: True)
-    monkeypatch.setattr(reports_router, "has_viewed_report", lambda user_id, report_id: False)
+    monkeypatch.setattr(reports_router, "is_session_valid", lambda session_id, user_id=None: True)
     monkeypatch.setattr(reports_router, "find_active_subscription_by_user_id", lambda user_id: None)
 
     with pytest.raises(AppError) as exc:

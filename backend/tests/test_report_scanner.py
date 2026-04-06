@@ -51,6 +51,7 @@ def test_extract_report_metadata_from_manifest_package(tmp_path):
         "season": "AW",
         "year": 2026,
         "look_count": 2,
+        "lead_excerpt": None,
     }
 
 
@@ -101,6 +102,42 @@ def test_manifest_without_cover_image_uses_first_entry_image(tmp_path):
     metadata = extract_report_metadata(report_root)
 
     assert metadata.look_count == 2
+
+
+def test_extract_report_lead_excerpt_from_entry_html(tmp_path):
+    report_root = tmp_path / "lead-report"
+    (report_root / "pages").mkdir(parents=True)
+    (report_root / "assets").mkdir()
+    (report_root / "pages" / "report.html").write_text(
+        """
+        <html>
+          <head><title>Lead Report</title></head>
+          <body>
+            <div>目录</div>
+            <p>本季系列围绕极简剪裁与冷静结构展开，通过更克制的面料语言回应当代通勤与晚装之间的切换需求。</p>
+          </body>
+        </html>
+        """,
+        encoding="utf-8",
+    )
+    (report_root / "assets" / "cover.jpg").write_bytes(b"cover")
+    (report_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "slug": "lead-report",
+                "brand": "Lead",
+                "season": "AW",
+                "year": 2026,
+                "entryHtml": "pages/report.html",
+                "coverImage": "assets/cover.jpg",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    metadata = extract_report_metadata(report_root)
+
+    assert metadata.lead_excerpt == "本季系列围绕极简剪裁与冷静结构展开，通过更克制的面料语言回应当代通勤与晚装之间的切换需求。"
 
 
 def test_manifest_entry_html_missing_raises(tmp_path):

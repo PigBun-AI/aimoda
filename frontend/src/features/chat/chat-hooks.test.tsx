@@ -6,6 +6,8 @@ import { useChat } from './chat-hooks'
 
 vi.mock('./chat-api', () => ({
   sendChatSSE: vi.fn(),
+  stopChatRun: vi.fn(),
+  ChatStreamAbortedError: class ChatStreamAbortedError extends Error {},
   fetchSearchSessionById: vi.fn(),
   listSessions: vi.fn(),
   createSession: vi.fn(),
@@ -25,10 +27,11 @@ vi.mock('./session-store', () => ({
   useSessionStore: () => sessionStoreMock,
 }))
 
-import { getSessionMessages, sendChatSSE } from './chat-api'
+import { ChatStreamAbortedError, getSessionMessages, sendChatSSE, stopChatRun } from './chat-api'
 
 const mockedGetSessionMessages = vi.mocked(getSessionMessages)
 const mockedSendChatSSE = vi.mocked(sendChatSSE)
+const mockedStopChatRun = vi.mocked(stopChatRun)
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void
@@ -126,6 +129,59 @@ describe('useChat', () => {
 
     await waitFor(() => {
       expect(result.current.messages).toEqual([])
+    })
+  })
+
+  it('removes the empty optimistic assistant message when a run is explicitly stopped', async () => {
+    const deferred = createDeferred<void>()
+    mockedGetSessionMessages.mockResolvedValueOnce([])
+    mockedStopChatRun.mockResolvedValueOnce(true)
+    mockedSendChatSSE.mockImplementation(async (_content, _sessionId, _history, _onEvent, onOpen) => {
+      onOpen?.({ runId: 'run-1' })
+      await deferred.promise
+    })
+
+    let result!: ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+    await act(async () => {
+      ({ result } = renderHook(() => useChat('session-1')))
+    })
+
+    let sendPromise!: Promise<void>
+    await act(async () => {
+      sendPromise = result.current.sendMessage({
+        content: [{ type: 'text', text: '帮我找最新秀场外套' }],
+      })
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(2)
+    })
+
+    await act(async () => {
+      const stopPromise = result.current.stopMessage()
+      deferred.reject(new ChatStreamAbortedError())
+      await stopPromise
+    })
+
+    expect(sessionStoreMock.markSessionExecutionStatus).toHaveBeenCalledWith(
+      'session-1',
+      'stopping',
+      null,
+      'run-1',
+    )
+
+    await act(async () => {
+      await sendPromise
+    })
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1)
+    })
+
+    expect(result.current.messages[0]).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: '帮我找最新秀场外套' }],
     })
   })
 })

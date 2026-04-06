@@ -112,6 +112,10 @@ function buildNotification(session: ChatSession): SessionNotification | null {
   }
 }
 
+function isActiveExecutionStatus(status: ChatSession['execution_status']) {
+  return status === 'running' || status === 'stopping'
+}
+
 function collectCompletionNotifications(
   previousSessions: ChatSession[],
   nextSessions: ChatSession[],
@@ -120,7 +124,7 @@ function collectCompletionNotifications(
   return nextSessions
     .map(session => {
       const previous = previousMap.get(session.id)
-      if (!previous || previous.execution_status !== 'running') return null
+      if (!previous || !isActiveExecutionStatus(previous.execution_status)) return null
       return buildNotification(session)
     })
     .filter((item): item is SessionNotification => Boolean(item))
@@ -163,6 +167,11 @@ function reconcileFetchedSession(previous: ChatSession | undefined, incoming: Ch
     }
   }
 
+  const shouldPreserveStoppingState =
+    previous.execution_status === 'stopping' &&
+    next.execution_status !== 'completed' &&
+    next.execution_status !== 'error'
+
   const shouldPreserveOptimisticRun =
     previous.execution_status === 'running' &&
     next.execution_status === 'idle' &&
@@ -170,7 +179,7 @@ function reconcileFetchedSession(previous: ChatSession | undefined, incoming: Ch
     incomingRunId !== previousRunId &&
     incomingLastRunId !== previousRunId
 
-  if (shouldPreserveOptimisticRun) {
+  if (shouldPreserveStoppingState || shouldPreserveOptimisticRun) {
     return {
       ...next,
       execution_status: previous.execution_status,
@@ -303,11 +312,14 @@ export function markSessionExecutionStatus(
       ...session,
       execution_status: executionStatus,
       current_run_id:
-        executionStatus === 'running'
+        executionStatus === 'running' || executionStatus === 'stopping'
           ? resolvedRunId
           : null,
       last_run_id: resolvedRunId,
-      last_run_started_at: executionStatus === 'running' ? now : session.last_run_started_at,
+      last_run_started_at:
+        executionStatus === 'running' || executionStatus === 'stopping'
+          ? (session.last_run_started_at ?? now)
+          : session.last_run_started_at,
       last_run_completed_at:
         executionStatus === 'completed' || executionStatus === 'error'
           ? now
@@ -370,7 +382,10 @@ export function syncSessionRunId(id: string, runId: string) {
 
     return {
       ...session,
-      current_run_id: session.execution_status === 'running' ? runId : null,
+      current_run_id:
+        session.execution_status === 'running' || session.execution_status === 'stopping'
+          ? runId
+          : null,
       last_run_id: runId,
     }
   })

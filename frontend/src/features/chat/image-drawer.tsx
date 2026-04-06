@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { DrawerData } from './chat-types'
 import { FashionImage } from './fashion-image'
+import { CHAT_THUMBNAIL_MAX_EDGE } from './oss-image'
 
 const DRAWER_HEADER_META_CLASS = 'type-ui-label-sm text-muted-foreground'
 const DRAWER_HEADER_ICON_BUTTON_CLASS =
@@ -48,7 +49,7 @@ export function ImageDrawer({
 
   const safeImages = data.images || []
   const displayCount = data.total || safeImages.length
-  const thumbnailWidth = isFullscreen ? 1120 : 760
+  const thumbnailWidth = isFullscreen ? CHAT_THUMBNAIL_MAX_EDGE.drawerFocus : CHAT_THUMBNAIL_MAX_EDGE.drawer
 
   useEffect(() => {
     const gridEl = gridRef.current

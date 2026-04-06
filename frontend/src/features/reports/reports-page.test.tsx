@@ -17,6 +17,7 @@ const reports = [
     updatedAt: '2026-03-12T10:00:00.000Z',
     coverImageUrl: '/reports/test-brand-fall-2026/cover.jpg',
     previewUrl: '/api/reports/1/preview/index.html',
+    leadExcerpt: '报告首页的导语文案会直接出现在卡片简介区域。',
   },
 ]
 
@@ -50,8 +51,9 @@ describe('ReportsPage', () => {
     )
 
     expect(screen.getByText('测试报告')).toBeInTheDocument()
-    expect(screen.getByText('Archive issue')).toBeInTheDocument()
-    expect(screen.getAllByText('#01').length).toBeGreaterThan(0)
+    expect(screen.getByText('报告首页的导语文案会直接出现在卡片简介区域。')).toBeInTheDocument()
+    expect(screen.queryByText('Archive issue')).not.toBeInTheDocument()
+    expect(screen.queryByText('#01')).not.toBeInTheDocument()
     expect(screen.getByText('Open report')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /测试报告/i })).toHaveAttribute('href', '/api/reports/1/preview/index.html')
   })

@@ -48,7 +48,9 @@ from ..services.chat_service import (
 )
 from ..services.oss_service import get_oss_service
 from ..services.websocket_manager import ws_manager
+from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registry
 from ..services.auth_token import verify_access_token
+from ..repositories.session_repo import is_session_valid
 from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
 from ..agent.qdrant_utils import get_qdrant, format_result, get_collection, encode_image
@@ -77,7 +79,6 @@ from ..agent.query_context import (
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-ACTIVE_CHAT_STREAMS: set[asyncio.Task[Any]] = set()
 
 
 # ── Request/Response models ──
@@ -108,6 +109,10 @@ class SearchSessionRequest(BaseModel):
     search_request_id: str
     offset: int = 0
     limit: int = 20
+
+
+class StopSessionRunRequest(BaseModel):
+    run_id: str | None = None
 
 
 def _normalize_message_content(content: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -820,6 +825,7 @@ async def chat_endpoint(
                 message=agent_input,
                 history=req.history,
                 thread_id=thread_id,
+                run_id=run_id,
                 result=stream_result,
             ):
                 _enqueue_stream_chunk(chunk)
@@ -845,7 +851,7 @@ async def chat_endpoint(
                 execution_status="completed",
                 run_id=run_id,
             )
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, ChatRunCancelledError):
             await _sync_assistant_progress(force=True, stream_state="interrupted")
             if stream_result.content_blocks:
                 await asyncio.to_thread(
@@ -888,8 +894,12 @@ async def chat_endpoint(
             _enqueue_stream_chunk(None)
 
     stream_task = asyncio.create_task(_run_stream())
-    ACTIVE_CHAT_STREAMS.add(stream_task)
-    stream_task.add_done_callback(ACTIVE_CHAT_STREAMS.discard)
+    await chat_run_registry.register(
+        session_id=req.session_id,
+        user_id=user.id,
+        run_id=run_id,
+        task=stream_task,
+    )
 
     async def _generate() -> AsyncGenerator[str, None]:
         nonlocal client_connected
@@ -916,6 +926,44 @@ async def chat_endpoint(
             "X-Aimoda-Run-Id": run_id,
         },
     )
+
+
+@router.post("/sessions/{session_id}/stop")
+async def stop_session_run(
+    session_id: str,
+    body: StopSessionRunRequest,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+):
+    session = await asyncio.to_thread(get_session, session_id)
+    if not session or session.get("user_id") != user.id:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "会话不存在"},
+        )
+
+    stopped = await chat_run_registry.stop_session(
+        session_id=session_id,
+        user_id=user.id,
+        run_id=body.run_id,
+    )
+
+    if stopped:
+        await asyncio.to_thread(
+            set_session_execution_status,
+            session_id,
+            execution_status="stopping",
+            run_id=body.run_id,
+        )
+
+    return {
+        "success": True,
+        "data": {
+            "session_id": session_id,
+            "run_id": body.run_id,
+            "stopped": stopped,
+            "execution_status": "stopping" if stopped else session.get("execution_status", "idle"),
+        },
+    }
 
 
 @router.post("/search_session")
@@ -1350,6 +1398,10 @@ async def websocket_chat(websocket: WebSocket):
         await websocket.close(code=4001, reason="Invalid or expired token")
         return
 
+    if user.session_id is not None and not is_session_valid(user.session_id, user.id):
+        await websocket.close(code=4001, reason="Session revoked")
+        return
+
     session = await asyncio.to_thread(get_session, session_id)
     if not session or session.get("user_id") != user.id:
         await websocket.close(code=4004, reason="Session not found")
@@ -1358,13 +1410,28 @@ async def websocket_chat(websocket: WebSocket):
     await websocket.accept()
 
     # Register connection
-    await ws_manager.connect(user.id, websocket, session_id)
+    await ws_manager.connect(
+        user.id,
+        websocket,
+        session_id,
+        auth_session_id=user.session_id,
+    )
     thread_id = get_thread_id(user.id, session_id, 1)
     await asyncio.to_thread(touch_session, session_id)
 
     # Route incoming Redis broadcast messages to this websocket
     async def on_broadcast(data: dict):
         if data.get("event") == "presence":
+            return
+        if (
+            data.get("event") == "session_revoked"
+            and user.session_id is not None
+            and user.session_id in set(data.get("session_ids", []))
+        ):
+            try:
+                await websocket.close(code=4001, reason="Session revoked")
+            except Exception:
+                pass
             return
         try:
             await websocket.send_json(data)
@@ -1377,6 +1444,9 @@ async def websocket_chat(websocket: WebSocket):
         agent = await get_agent()
 
         async for raw in websocket.iter_text():
+            if user.session_id is not None and not is_session_valid(user.session_id, user.id):
+                await websocket.close(code=4001, reason="Session revoked")
+                break
             try:
                 msg = json.loads(raw) if isinstance(raw, str) else {}
             except json.JSONDecodeError:
@@ -1513,6 +1583,7 @@ async def websocket_chat(websocket: WebSocket):
                         message=agent_input,
                         history=history,
                         thread_id=thread_id,
+                        run_id=run_id,
                         result=stream_result,
                     ):
                         await websocket.send_text(event)
@@ -1537,7 +1608,7 @@ async def websocket_chat(websocket: WebSocket):
                         execution_status="completed",
                         run_id=run_id,
                     )
-                except (WebSocketDisconnect, asyncio.CancelledError):
+                except (WebSocketDisconnect, asyncio.CancelledError, ChatRunCancelledError):
                     await _sync_assistant_progress(force=True, stream_state="interrupted")
                     if stream_result.content_blocks:
                         await asyncio.to_thread(

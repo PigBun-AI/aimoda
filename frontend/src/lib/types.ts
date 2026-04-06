@@ -34,6 +34,7 @@ export interface ReportSummary {
   updatedAt: string
   coverImageUrl: string
   previewUrl?: string
+  leadExcerpt?: string | null
 }
 
 export interface ReportDetail extends ReportSummary {

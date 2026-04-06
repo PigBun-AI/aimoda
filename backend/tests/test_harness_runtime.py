@@ -1,5 +1,6 @@
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from backend.app.agent.tools import add_filter, analyze_trends, start_collection
@@ -190,7 +191,7 @@ class HarnessRuntimeTest(unittest.TestCase):
         with patch("backend.app.agent.tools.get_collection", return_value="fashion_items"), patch(
             "backend.app.agent.tools.get_qdrant", return_value=object()
         ), patch("backend.app.agent.tools.build_qdrant_filter", return_value=None), patch(
-            "backend.app.agent.tools.scroll_all", return_value=[]
+            "backend.app.agent.tools.iter_scroll", return_value=iter([])
         ):
             result = json.loads(
                 analyze_trends.invoke(
@@ -201,6 +202,58 @@ class HarnessRuntimeTest(unittest.TestCase):
 
         self.assertEqual(result.get("dimension"), "brand")
         self.assertEqual(result.get("total_items_analyzed"), 0)
+
+    def test_analyze_trends_uses_qdrant_facet_for_brand_dimension(self):
+        class _FakeClient:
+            def facet(self, **kwargs):
+                return SimpleNamespace(
+                    hits=[
+                        SimpleNamespace(value="dior", count=12),
+                        SimpleNamespace(value="gucci", count=8),
+                    ]
+                )
+
+            def count(self, **kwargs):
+                return SimpleNamespace(count=20)
+
+        with patch("backend.app.agent.tools.get_collection", return_value="fashion_items"), patch(
+            "backend.app.agent.tools.get_qdrant", return_value=_FakeClient()
+        ), patch("backend.app.agent.tools.build_qdrant_filter", return_value=None), patch(
+            "backend.app.agent.tools.iter_scroll"
+        ) as mock_iter_scroll:
+            result = json.loads(
+                analyze_trends.invoke(
+                    {"dimension": "brand", "top_n": 5},
+                    config=self.config,
+                )
+            )
+
+        mock_iter_scroll.assert_not_called()
+        self.assertEqual(result["total_items_analyzed"], 20)
+        self.assertEqual(result["ranking"][0]["name"], "dior")
+
+    def test_analyze_trends_uses_selective_scroll_for_non_facet_dimensions(self):
+        points = [
+            SimpleNamespace(payload={"season": ["fall-winter"]}),
+            SimpleNamespace(payload={"season": ["fall-winter", "resort"]}),
+        ]
+
+        with patch("backend.app.agent.tools.get_collection", return_value="fashion_items"), patch(
+            "backend.app.agent.tools.get_qdrant", return_value=object()
+        ), patch("backend.app.agent.tools.build_qdrant_filter", return_value=None), patch(
+            "backend.app.agent.tools.iter_scroll", return_value=iter(points)
+        ) as mock_iter_scroll:
+            result = json.loads(
+                analyze_trends.invoke(
+                    {"dimension": "season", "top_n": 5},
+                    config=self.config,
+                )
+            )
+
+        self.assertEqual(result["total_items_analyzed"], 2)
+        self.assertEqual(result["ranking"][0]["name"], "fall-winter")
+        self.assertEqual(result["ranking"][0]["count"], 2)
+        self.assertTrue(mock_iter_scroll.called)
 
     @patch("backend.app.agent.tools.set_session_agent_runtime")
     @patch("backend.app.agent.tools.count_session", return_value=120)

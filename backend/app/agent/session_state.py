@@ -6,6 +6,7 @@ isolated session state keyed by thread_id.
 """
 
 from collections import Counter
+from typing import Callable
 from langchain_core.runnables import RunnableConfig
 from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny, Range
 
@@ -24,6 +25,12 @@ _EMPTY_SESSION: dict = {
     "filters": [],
     "active": False,
 }
+CancelCheck = Callable[[], None] | None
+
+
+def _call_cancel_check(cancel_check: CancelCheck) -> None:
+    if cancel_check:
+        cancel_check()
 
 
 def get_thread_id(config: RunnableConfig) -> str:
@@ -102,15 +109,17 @@ def build_session_filter(session):
     return qdrant_filter
 
 
-def count_session(client, session) -> int:
+def count_session(client, session, *, cancel_check: CancelCheck = None) -> int:
     """Count matching images using Qdrant count() — fast, no payload transfer."""
     collection = get_collection()
     qdrant_filter = build_session_filter(session)
+    _call_cancel_check(cancel_check)
     result = client.count(collection_name=collection, count_filter=qdrant_filter, exact=True)
+    _call_cancel_check(cancel_check)
     return result.count
 
 
-def get_session_page(client, session, *, offset: int = 0, limit: int = 20):
+def get_session_page(client, session, *, offset: int = 0, limit: int = 20, cancel_check: CancelCheck = None):
     """Fetch one ranked page for the current session.
 
     For semantic sessions, we page directly in Qdrant vector search so the UI can
@@ -121,6 +130,7 @@ def get_session_page(client, session, *, offset: int = 0, limit: int = 20):
     qdrant_filter = build_session_filter(session)
 
     if session["q_emb"] is not None:
+        _call_cancel_check(cancel_check)
         results = client.query_points(
             collection_name=collection,
             query=session["q_emb"],
@@ -130,18 +140,20 @@ def get_session_page(client, session, *, offset: int = 0, limit: int = 20):
             offset=offset,
             with_payload=True,
         )
+        _call_cancel_check(cancel_check)
         return [p for p in results.points]
 
-    results = scroll_all(client, collection, scroll_filter=qdrant_filter)
+    results = scroll_all(client, collection, scroll_filter=qdrant_filter, cancel_check=cancel_check)
     return results[offset: offset + limit]
 
 
-def apply_session_filters(client, session):
+def apply_session_filters(client, session, *, cancel_check: CancelCheck = None):
     """Apply all current filters and return actual results."""
     collection = get_collection()
     qdrant_filter = build_session_filter(session)
 
     if session["q_emb"] is not None:
+        _call_cancel_check(cancel_check)
         results = client.query_points(
             collection_name=collection,
             query=session["q_emb"],
@@ -150,12 +162,13 @@ def apply_session_filters(client, session):
             limit=200,
             with_payload=True,
         )
+        _call_cancel_check(cancel_check)
         return [p for p in results.points]
     else:
-        return scroll_all(client, collection, scroll_filter=qdrant_filter)
+        return scroll_all(client, collection, scroll_filter=qdrant_filter, cancel_check=cancel_check)
 
 
-def available_values(client, dimension, category=None, current_filters=None):
+def available_values(client, dimension, category=None, current_filters=None, *, cancel_check: CancelCheck = None):
     """Find what values are available for a dimension given current filters."""
     collection = get_collection()
     must_conditions = []
@@ -185,7 +198,7 @@ def available_values(client, dimension, category=None, current_filters=None):
                     must_conditions.append(FieldCondition(key=key, match=MatchValue(value=val.lower())))
 
     scroll_filter = Filter(must=must_conditions) if must_conditions else None
-    pts = scroll_all(client, collection, scroll_filter=scroll_filter)
+    pts = scroll_all(client, collection, scroll_filter=scroll_filter, cancel_check=cancel_check)
 
     counter = Counter()
 
@@ -195,13 +208,17 @@ def available_values(client, dimension, category=None, current_filters=None):
 
     if dimension in GARMENT_TAG_DIMS:
         prefix = f"{category}:" if category else ""
-        for p in pts:
+        for index, p in enumerate(pts):
+            if index % 50 == 0:
+                _call_cancel_check(cancel_check)
             for tag in p.payload.get("garment_tags", []):
                 if prefix and tag.startswith(prefix):
                     counter[tag.split(":")[1]] += 1
     elif dimension in GARMENT_NESTED_DIMS:
         field = DIM_TO_FIELD[dimension]
-        for p in pts:
+        for index, p in enumerate(pts):
+            if index % 50 == 0:
+                _call_cancel_check(cancel_check)
             for g in p.payload.get("garments", []):
                 if category and g.get("category", "").lower() != category.lower():
                     continue
@@ -209,11 +226,15 @@ def available_values(client, dimension, category=None, current_filters=None):
                 if v:
                     counter[v] += 1
     elif dimension == "category":
-        for p in pts:
+        for index, p in enumerate(pts):
+            if index % 50 == 0:
+                _call_cancel_check(cancel_check)
             for cat in p.payload.get("categories", []):
                 counter[cat] += 1
     else:
-        for p in pts:
+        for index, p in enumerate(pts):
+            if index % 50 == 0:
+                _call_cancel_check(cancel_check)
             v = p.payload.get(dimension, "")
             if v:
                 counter[str(v)] += 1

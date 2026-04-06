@@ -25,7 +25,7 @@ def get_current_user(authorization: Annotated[str | None, Header()] = None) -> A
         raise AppError("认证令牌无效或已过期", 401)
 
     # Validate session is still active (SSO support)
-    if user.session_id is not None and not is_session_valid(user.session_id):
+    if user.session_id is not None and not is_session_valid(user.session_id, user.id):
         raise AppError("会话已失效，请重新登录", 401)
 
     return user

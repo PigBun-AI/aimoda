@@ -160,6 +160,19 @@ export function finishSessionStream(sessionId: string) {
   )
 }
 
+export function removeMessage(sessionId: string, messageId: string) {
+  updateSessionState(
+    sessionId,
+    current => ({
+      ...current,
+      hydrated: true,
+      localRevision: current.localRevision + 1,
+      messages: current.messages.filter(message => message.id !== messageId),
+    }),
+    { createIfMissing: false },
+  )
+}
+
 export function removeSessionMessages(sessionId: string) {
   if (!(sessionId in store.sessions)) return
 

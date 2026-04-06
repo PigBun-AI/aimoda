@@ -9,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from .config import settings
 from .database import initialize_database
 from .exceptions import AppError
+from .postgres import close_pg_pool
 from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries, report_mcp_internal
 from .services.report_upload_job_service import recover_report_upload_jobs
 
@@ -101,6 +102,46 @@ def _recover_report_upload_jobs():
         logging.getLogger(__name__).warning("Failed to recover report upload jobs: %s", e)
 
 
+def _init_pg_gallery_indexes():
+    """Ensure read-path indexes exist for inspiration gallery tables.
+
+    Gallery tables are owned by the gallery MCP, but the app depends on them for
+    public pagination and detail views. We enforce the indexes here so deploys
+    stay fast even if upstream schema creation omitted them.
+    """
+    import logging
+    import psycopg
+
+    try:
+        with psycopg.connect(settings.POSTGRES_DSN) as conn:
+            galleries_exists = conn.execute(
+                "SELECT to_regclass('public.galleries') IS NOT NULL"
+            ).fetchone()[0]
+            gallery_images_exists = conn.execute(
+                "SELECT to_regclass('public.gallery_images') IS NOT NULL"
+            ).fetchone()[0]
+
+            if galleries_exists:
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_galleries_status_created_id ON galleries(status, created_at DESC, id DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_galleries_status_category_created_id ON galleries(status, category, created_at DESC, id DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_galleries_tags_gin ON galleries USING GIN(tags)"
+                )
+
+            if gallery_images_exists:
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_gallery_images_gallery_sort_created ON gallery_images(gallery_id, sort_order, created_at)"
+                )
+
+            conn.commit()
+    except Exception as e:
+        logging.getLogger(__name__).warning("Failed to init PG gallery indexes: %s", e)
+
+
 def get_real_ip(request: Request) -> str:
     """Get real IP supporting Cloudflare proxy."""
     cf_ip = request.headers.get("cf-connecting-ip")
@@ -118,10 +159,16 @@ limiter = Limiter(key_func=get_real_ip)
 initialize_database()    # SQLite (users, sessions, subscriptions, etc.)
 _init_pg_report_schema() # PostgreSQL (reports, report_views)
 _init_pg_chat_schema()   # PostgreSQL (chat_sessions, messages, artifacts)
+_init_pg_gallery_indexes() # PostgreSQL gallery read-path indexes
 _recover_report_upload_jobs()
 
 app = FastAPI(title="Fashion Report API", version="1.0.0")
 app.state.limiter = limiter
+
+
+@app.on_event("shutdown")
+def _shutdown_resources():
+    close_pg_pool()
 
 
 # --- CORS ---

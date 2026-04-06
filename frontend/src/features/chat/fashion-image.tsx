@@ -1,5 +1,5 @@
 import { calculateBackgroundCropStyle } from './crop-utils'
-import { getOssThumbnailUrl } from './oss-image'
+import { CHAT_THUMBNAIL_MAX_EDGE, getOssThumbnailUrl } from './oss-image'
 import type { ImageResult } from './chat-types'
 
 interface FashionImageProps {
@@ -13,7 +13,7 @@ export function FashionImage({
   image,
   className,
   fallbackClassName,
-  thumbnailWidth = 400,
+  thumbnailWidth = CHAT_THUMBNAIL_MAX_EDGE.contentImage,
 }: FashionImageProps) {
   const thumbnailUrl = getOssThumbnailUrl(image.image_url, thumbnailWidth)
   const cropStyle = calculateBackgroundCropStyle(image.object_area, image.image_url, thumbnailWidth)

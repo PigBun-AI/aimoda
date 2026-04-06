@@ -4,23 +4,17 @@ Gallery Router — Read-only endpoints for the frontend to display galleries.
 Write operations are handled by the inspiration-gallery-mcp service.
 """
 
-import math
 from typing import Annotated, Optional
 
-import psycopg
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
-from ..config import settings
 from ..dependencies import require_role
 from ..models import AuthenticatedUser
+from ..postgres import pg_connection
 from ..services.oss_service import get_oss_service
 
 router = APIRouter(prefix="/galleries", tags=["galleries"])
-
-
-def _get_pg():
-    return psycopg.connect(settings.POSTGRES_DSN)
 
 
 def _serialize_gallery_public(row: dict) -> dict:
@@ -69,6 +63,32 @@ def _serialize_gallery_image_public(row: dict) -> dict:
     return payload
 
 
+def _build_gallery_where(
+    *,
+    category: Optional[str],
+    tag: Optional[str],
+    status: Optional[str],
+) -> tuple[str, list[object]]:
+    conditions: list[str] = []
+    params: list[object] = []
+
+    if status:
+        conditions.append("status = %s")
+        params.append(status)
+
+    if category:
+        conditions.append("category = %s")
+        params.append(category)
+
+    if tag:
+        # Use array containment so PostgreSQL can leverage a GIN index on tags.
+        conditions.append("tags @> %s")
+        params.append([tag])
+
+    where_sql = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    return where_sql, params
+
+
 @router.get("")
 async def list_galleries(
     category: Optional[str] = Query(None),
@@ -78,40 +98,44 @@ async def list_galleries(
     offset: int = Query(0, ge=0),
 ):
     """List galleries with optional filtering."""
-    conditions = []
-    params: list = []
+    where_sql, params = _build_gallery_where(category=category, tag=tag, status=status)
 
-    if status:
-        conditions.append(f"status = %s")
-        params.append(status)
-
-    if category:
-        conditions.append(f"category = %s")
-        params.append(category)
-
-    if tag:
-        conditions.append(f"%s = ANY(tags)")
-        params.append(tag)
-
-    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-
-    with _get_pg() as conn:
+    with pg_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"SELECT count(*)::int FROM galleries {where}", params
-            )
-            total = cur.fetchone()[0]
-
-            cur.execute(
-                f"""SELECT id, title, description, category, tags, cover_url,
-                           status, image_count, created_at, updated_at
-                    FROM galleries {where}
-                    ORDER BY created_at DESC
-                    LIMIT %s OFFSET %s""",
+                f"""
+                SELECT
+                    id,
+                    title,
+                    description,
+                    category,
+                    tags,
+                    cover_url,
+                    status,
+                    image_count,
+                    created_at,
+                    updated_at,
+                    COUNT(*) OVER()::int AS total_count
+                FROM galleries
+                {where_sql}
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s OFFSET %s
+                """,
                 params + [limit, offset],
             )
-            columns = [desc[0] for desc in cur.description]
-            rows = [_serialize_gallery_public(dict(zip(columns, row))) for row in cur.fetchall()]
+            raw_rows = list(cur.fetchall())
+
+            if raw_rows:
+                total = int(raw_rows[0]["total_count"] or 0)
+                rows = []
+                for row in raw_rows:
+                    payload = dict(row)
+                    payload.pop("total_count", None)
+                    rows.append(_serialize_gallery_public(payload))
+            else:
+                cur.execute(f"SELECT count(*)::int AS total FROM galleries {where_sql}", params)
+                total = int((cur.fetchone() or {}).get("total", 0))
+                rows = []
 
     return {
         "success": True,
@@ -126,7 +150,7 @@ async def list_galleries(
 @router.get("/{gallery_id}")
 async def get_gallery(gallery_id: str):
     """Get gallery details with images."""
-    with _get_pg() as conn:
+    with pg_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT id, title, description, category, tags, cover_url,
@@ -140,8 +164,7 @@ async def get_gallery(gallery_id: str):
                     status_code=404,
                     content={"success": False, "error": "图集不存在"},
                 )
-            columns = [desc[0] for desc in cur.description]
-            gallery = _serialize_gallery_public(dict(zip(columns, row)))
+            gallery = _serialize_gallery_public(dict(row))
 
             cur.execute(
                 """SELECT id, image_url, thumbnail_url, caption,
@@ -151,8 +174,7 @@ async def get_gallery(gallery_id: str):
                    ORDER BY sort_order, created_at""",
                 [gallery_id],
             )
-            img_columns = [desc[0] for desc in cur.description]
-            images = [_serialize_gallery_image_public(dict(zip(img_columns, r))) for r in cur.fetchall()]
+            images = [_serialize_gallery_image_public(dict(r)) for r in cur.fetchall()]
 
     gallery["images"] = []
     for img in images:
@@ -187,7 +209,7 @@ async def search_by_color(
     s_min, s_max = max(0, s - s_range), min(100, s + s_range)
     v_min, v_max = max(0, v - v_range), min(100, v + v_range)
     
-    with _get_pg() as conn:
+    with pg_connection() as conn:
         with conn.cursor() as cur:
             # We use a JSONB CTE or EXISTS to find rows.
             # However, for H, we need to handle wrapping around 0/360 if h_min < 0 or h_max > 360.
@@ -217,8 +239,7 @@ async def search_by_color(
             params = [*h_args, s_min, s_max, v_min, v_max, min_pct]
             
             cur.execute(sql, params)
-            columns = [desc[0] for desc in cur.description]
-            rows = [dict(zip(columns, r)) for r in cur.fetchall()]
+            rows = [dict(r) for r in cur.fetchall()]
             
     # Compute similarity and filter/sort in Python
     scored_results = []
@@ -270,7 +291,7 @@ async def delete_gallery(
 ):
     """Delete a gallery and all its images from DB and OSS."""
     # 1. Delete from DB (cascades to gallery_images)
-    with _get_pg() as conn:
+    with pg_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM galleries WHERE id = %s", [gallery_id])
             deleted_rows = cur.rowcount

@@ -78,14 +78,16 @@ def login_with_session(
 
     # SSO: non-admin users invalidate other sessions
     kicked = False
+    revoked_session_ids: list[int] = []
     if user.role != "admin":
-        invalidated_count = invalidate_other_sessions(user.id, session.id)
-        kicked = invalidated_count > 0
+        revoked_session_ids = invalidate_other_sessions(user.id, session.id)
+        kicked = len(revoked_session_ids) > 0
 
     return {
         "tokens": tokens,
         "session": session,
         "kicked_other_devices": kicked,
+        "revoked_session_ids": revoked_session_ids,
     }
 
 

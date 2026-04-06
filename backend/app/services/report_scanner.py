@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from html import unescape
 import json
 import re
 from pathlib import Path
@@ -41,6 +42,54 @@ def _infer_title(html: str) -> str | None:
         heading_match.group(1) if heading_match else None
     )
     return _strip_tags(candidate) if candidate else None
+
+
+def _normalize_excerpt_text(value: str) -> str:
+    normalized = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", value))
+    normalized = unescape(normalized).strip()
+    return normalized.strip(" \t\r\n-–|:;")
+
+
+def _truncate_excerpt(value: str, max_length: int = 220) -> str:
+    if len(value) <= max_length:
+        return value
+
+    clipped = value[:max_length].rsplit(" ", 1)[0].strip()
+    return f"{clipped or value[:max_length].strip()}…"
+
+
+def extract_report_lead_excerpt(html: str) -> str | None:
+    body_match = re.search(r"<body[^>]*>(.*?)</body>", html, re.IGNORECASE | re.DOTALL)
+    search_scope = body_match.group(1) if body_match else html
+    search_scope = re.sub(
+        r"<(script|style|noscript|template|svg)[^>]*>.*?</\1>",
+        " ",
+        search_scope,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+    candidate_patterns = (
+        r"<p\b[^>]*>(.*?)</p>",
+        r"<blockquote\b[^>]*>(.*?)</blockquote>",
+        r"<figcaption\b[^>]*>(.*?)</figcaption>",
+        r"<div\b[^>]*>(.*?)</div>",
+    )
+    ignored_prefixes = ("copyright", "all rights reserved", "look ", "page ")
+
+    for pattern in candidate_patterns:
+        for match in re.finditer(pattern, search_scope, re.IGNORECASE | re.DOTALL):
+            candidate = _normalize_excerpt_text(match.group(1))
+            if len(candidate) < 24:
+                continue
+            lowered = candidate.lower()
+            if lowered.startswith(ignored_prefixes):
+                continue
+            return _truncate_excerpt(candidate)
+
+    fallback = _normalize_excerpt_text(search_scope)
+    if len(fallback) < 24:
+        return None
+    return _truncate_excerpt(fallback)
 
 
 def _read_json(path: Path) -> Any:
@@ -386,9 +435,10 @@ def _extract_manifest_metadata(directory: Path, manifest: dict[str, Any]) -> Rep
         raise ReportPackageError("invalid_slug", "manifest.slug 无法转换为合法 slug")
 
     entry_path = resolve_report_entry_html(directory, manifest)
+    entry_html = entry_path.read_text(encoding="utf-8")
     title = str(manifest.get("title", "")).strip()
     if not title:
-        title = _infer_title(entry_path.read_text(encoding="utf-8")) or ""
+        title = _infer_title(entry_html) or ""
     if not title:
         raise ReportPackageError(
             "title_not_found",
@@ -424,6 +474,7 @@ def _extract_manifest_metadata(directory: Path, manifest: dict[str, Any]) -> Rep
         season=season,
         year=year,
         look_count=look_count,
+        lead_excerpt=extract_report_lead_excerpt(entry_html),
     )
 
 
@@ -454,4 +505,5 @@ def extract_report_metadata(directory: Path) -> ReportMetadata:
         season=meta["season"],
         year=meta["year"],
         look_count=look_count,
+        lead_excerpt=extract_report_lead_excerpt(html),
     )

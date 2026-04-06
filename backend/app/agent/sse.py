@@ -20,6 +20,8 @@ import re
 import uuid
 from typing import Any, AsyncGenerator
 
+from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registry
+
 _THINK_OPEN_TAG = "<think>"
 _THINK_CLOSE_TAG = "</think>"
 
@@ -216,6 +218,7 @@ async def stream_agent_response(
     message: str | list[dict[str, Any]],
     history: list,
     thread_id: str,
+    run_id: str | None = None,
     result: StreamResult | None = None,
 ) -> AsyncGenerator[str, None]:
     """Stream agent response as ContentBlock SSE events.
@@ -356,7 +359,10 @@ async def stream_agent_response(
 
     try:
         config = {
-            "configurable": {"thread_id": thread_id},
+            "configurable": {
+                "thread_id": thread_id,
+                "run_id": run_id,
+            },
             "recursion_limit": 100,
         }
 
@@ -378,6 +384,7 @@ async def stream_agent_response(
             config,
             version="v2",
         ):
+            chat_run_registry.raise_if_stop_requested(run_id=run_id, stage="agent_stream")
             kind = event.get("event", "")
             tags = event.get("tags") or []
 
@@ -647,6 +654,10 @@ async def stream_agent_response(
 
         yield sse_event({"type": "message_stop", "stop_reason": "end_turn"})
 
+    except ChatRunCancelledError:
+        if result is not None:
+            result.stop_reason = "cancelled_by_user"
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()

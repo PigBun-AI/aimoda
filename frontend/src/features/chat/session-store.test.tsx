@@ -213,6 +213,54 @@ describe('session store', () => {
     })
   })
 
+  it('preserves a local stopping state while polling still reports the run as running', async () => {
+    const { result } = renderHook(() => useSessionStore())
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'running',
+        current_run_id: 'run-1',
+        last_run_id: 'run-1',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    act(() => {
+      markSessionExecutionStatus('session-1', 'stopping', null, 'run-1')
+    })
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'running',
+        current_run_id: 'run-2',
+        last_run_id: 'run-0',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:02.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    expect(result.current.sessions[0]).toMatchObject({
+      execution_status: 'stopping',
+      current_run_id: 'run-1',
+      last_run_id: 'run-1',
+    })
+  })
+
   it('only promotes a provisional title on the first turn', async () => {
     const { result } = renderHook(() => useSessionStore())
 

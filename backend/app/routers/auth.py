@@ -14,18 +14,23 @@ from ..models import (
     SmsSendCodeRequest,
 )
 from ..services import auth_service
+from ..services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login")
-def login(body: LoginRequest, request: Request):
+async def login(body: LoginRequest, request: Request):
     ctx = extract_device_context(request)
     result = auth_service.login(
         email=body.email,
         password=body.password,
         user_agent=ctx["user_agent"],
         ip_address=ctx["ip_address"],
+    )
+    await ws_manager.revoke_auth_sessions(
+        result["user"].id,
+        result.get("revoked_session_ids", []),
     )
 
     response: dict = {
@@ -73,13 +78,17 @@ def send_sms_code(body: SmsSendCodeRequest, request: Request):
 
 
 @router.post("/sms/login")
-def sms_login(body: SmsLoginRequest, request: Request):
+async def sms_login(body: SmsLoginRequest, request: Request):
     ctx = extract_device_context(request)
     result = auth_service.login_or_register_by_phone(
         phone=body.phone,
         code=body.code,
         user_agent=ctx["user_agent"],
         ip_address=ctx["ip_address"],
+    )
+    await ws_manager.revoke_auth_sessions(
+        result["user"].id,
+        result.get("revoked_session_ids", []),
     )
 
     response: dict = {

@@ -150,8 +150,8 @@ export function InspirationPage() {
                             <Sparkles className="h-10 w-10 text-muted-foreground/40" />
                           </div>
                         )}
-                        <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-background/72 px-4 py-3 backdrop-blur">
-                          <span className="type-kicker text-muted-foreground">
+                        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-background via-background/82 to-transparent px-4 pb-3 pt-8">
+                          <span className="type-kicker text-foreground/82">
                             {getCategoryLabel(gallery.category, t)}
                           </span>
                           <Badge variant="default" className="text-[9px]">
