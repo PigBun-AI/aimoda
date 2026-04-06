@@ -126,10 +126,16 @@ def cleanup_expired_sessions() -> int:
     return cursor.rowcount
 
 
-def is_session_valid(session_id: int) -> bool:
+def is_session_valid(session_id: int, user_id: int | None = None) -> bool:
     db = get_db()
-    row = db.execute(
-        "SELECT id FROM sessions WHERE id = ? AND expires_at > datetime('now')",
-        (session_id,),
-    ).fetchone()
+    if user_id is None:
+        row = db.execute(
+            "SELECT id FROM sessions WHERE id = ? AND expires_at > datetime('now')",
+            (session_id,),
+        ).fetchone()
+    else:
+        row = db.execute(
+            "SELECT id FROM sessions WHERE id = ? AND user_id = ? AND expires_at > datetime('now')",
+            (session_id, user_id),
+        ).fetchone()
     return row is not None

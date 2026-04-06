@@ -49,6 +49,7 @@ from ..services.chat_service import (
 from ..services.oss_service import get_oss_service
 from ..services.websocket_manager import ws_manager
 from ..services.auth_token import verify_access_token
+from ..repositories.session_repo import is_session_valid
 from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
 from ..agent.qdrant_utils import get_qdrant, format_result, get_collection, encode_image
@@ -1350,6 +1351,10 @@ async def websocket_chat(websocket: WebSocket):
         await websocket.close(code=4001, reason="Invalid or expired token")
         return
 
+    if user.session_id is not None and not is_session_valid(user.session_id, user.id):
+        await websocket.close(code=4001, reason="Session revoked")
+        return
+
     session = await asyncio.to_thread(get_session, session_id)
     if not session or session.get("user_id") != user.id:
         await websocket.close(code=4004, reason="Session not found")
@@ -1377,6 +1382,9 @@ async def websocket_chat(websocket: WebSocket):
         agent = await get_agent()
 
         async for raw in websocket.iter_text():
+            if user.session_id is not None and not is_session_valid(user.session_id, user.id):
+                await websocket.close(code=4001, reason="Session revoked")
+                break
             try:
                 msg = json.loads(raw) if isinstance(raw, str) else {}
             except json.JSONDecodeError:

@@ -493,7 +493,7 @@ def preview_report_asset(
         user = verify_report_preview_token(preview_token)
     except ValueError as exc:
         raise AppError("预览凭证无效或已过期，请刷新页面重试", 401) from exc
-    if user.session_id is not None and not is_session_valid(user.session_id):
+    if user.session_id is not None and not is_session_valid(user.session_id, user.id):
         raise AppError("预览会话已失效，请重新登录", 401)
 
     report = get_report(report_id)

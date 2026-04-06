@@ -10,6 +10,7 @@ management are imported from:
 
 import asyncio
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Optional
@@ -27,6 +28,7 @@ from .qdrant_utils import (
     format_result,
     build_guidance,
     scroll_all,
+    iter_scroll,
 )
 from .session_state import (
     get_session,
@@ -242,6 +244,193 @@ def _normalize_vector(vector: list[float]) -> list[float]:
     if norm < 1e-9:
         return vector
     return [value / norm for value in vector]
+
+
+_TREND_FACET_KEYS = {
+    "brand": "brand",
+    "category": "categories",
+    "style": "style",
+    "gender": "gender",
+    "season": "season",
+    "year": "year",
+}
+
+_TREND_CACHE_TTL_SECONDS = 300
+_TREND_CACHE_MAX_SIZE = 256
+_trend_cache: dict[str, tuple[float, str]] = {}
+
+_TREND_PAYLOAD_SELECTORS = {
+    "style": ["style"],
+    "gender": ["gender"],
+    "season": ["season"],
+    "year": ["year"],
+    "color": ["garments"],
+    "fabric": ["garments"],
+    "pattern": ["garments"],
+    "silhouette": ["garments"],
+    "collar": ["garments"],
+    "sleeve_length": ["garments"],
+    "garment_length": ["garments"],
+}
+
+
+def _normalize_trend_value(value: object) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _build_trend_cache_key(
+    *,
+    dimension: str,
+    categories: Optional[list[str]],
+    fabric: Optional[str],
+    color: Optional[str],
+    pattern: Optional[str],
+    silhouette: Optional[str],
+    brand: Optional[str],
+    season: Optional[list[str]],
+    year_min: Optional[int],
+    top_n: int,
+    search: Optional[str],
+) -> str:
+    payload = {
+        "dimension": dimension,
+        "categories": sorted([c.lower() for c in (categories or [])]),
+        "fabric": (fabric or "").lower(),
+        "color": (color or "").lower(),
+        "pattern": (pattern or "").lower(),
+        "silhouette": (silhouette or "").lower(),
+        "brand": (brand or "").lower(),
+        "season": sorted([s.lower() for s in (season or [])]),
+        "year_min": year_min,
+        "top_n": top_n,
+        "search": (search or "").lower(),
+    }
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False)
+
+
+def _get_cached_trend_result(cache_key: str) -> str | None:
+    entry = _trend_cache.get(cache_key)
+    if entry is None:
+        return None
+    expires_at, payload = entry
+    if expires_at < time.monotonic():
+        _trend_cache.pop(cache_key, None)
+        return None
+    return payload
+
+
+def _store_cached_trend_result(cache_key: str, payload: str) -> None:
+    if len(_trend_cache) >= _TREND_CACHE_MAX_SIZE:
+        oldest_key = min(_trend_cache.items(), key=lambda item: item[1][0])[0]
+        _trend_cache.pop(oldest_key, None)
+    _trend_cache[cache_key] = (time.monotonic() + _TREND_CACHE_TTL_SECONDS, payload)
+
+
+def _count_trend_values_from_payload(
+    counter: dict[str, int],
+    *,
+    payload: dict,
+    dimension: str,
+) -> None:
+    image_dims = {"brand", "style", "gender"}
+    garment_simple_dims = {"fabric", "pattern", "silhouette", "collar"}
+    garment_nested_map = {"sleeve_length": "sleeve", "garment_length": "length"}
+
+    if dimension in image_dims:
+        value = _normalize_trend_value(payload.get(dimension))
+        if value:
+            counter[value] = counter.get(value, 0) + 1
+        return
+
+    if dimension == "category":
+        for category in payload.get("categories", []) or []:
+            value = _normalize_trend_value(category)
+            if value:
+                counter[value] = counter.get(value, 0) + 1
+        return
+
+    if dimension == "season":
+        seasons = payload.get("season", [])
+        if isinstance(seasons, list):
+            season_values = seasons
+        else:
+            season_values = [seasons]
+        for season_value in season_values:
+            value = _normalize_trend_value(season_value)
+            if value:
+                counter[value] = counter.get(value, 0) + 1
+        return
+
+    if dimension == "year":
+        value = payload.get("year")
+        if value:
+            normalized = _normalize_trend_value(value)
+            if normalized:
+                counter[normalized] = counter.get(normalized, 0) + 1
+        return
+
+    garments = payload.get("garments", []) or []
+    if dimension == "color":
+        for garment in garments:
+            for color_value in garment.get("colors", []) or []:
+                value = _normalize_trend_value(color_value.get("name"))
+                if value:
+                    counter[value] = counter.get(value, 0) + 1
+        return
+
+    if dimension in garment_simple_dims:
+        for garment in garments:
+            value = _normalize_trend_value(garment.get(dimension))
+            if value:
+                counter[value] = counter.get(value, 0) + 1
+        return
+
+    if dimension in garment_nested_map:
+        field = garment_nested_map[dimension]
+        for garment in garments:
+            value = _normalize_trend_value(garment.get(field))
+            if value:
+                counter[value] = counter.get(value, 0) + 1
+
+
+def _facet_trend_counts(
+    *,
+    client,
+    collection: str,
+    qdrant_filter,
+    dimension: str,
+    top_n: int,
+) -> tuple[dict[str, int], int] | None:
+    facet_key = _TREND_FACET_KEYS.get(dimension)
+    if not facet_key:
+        return None
+
+    try:
+        response = client.facet(
+            collection_name=collection,
+            key=facet_key,
+            facet_filter=qdrant_filter,
+            limit=max(100, top_n * 8),
+            exact=False,
+        )
+
+        counter: dict[str, int] = {}
+        for hit in response.hits:
+            value = _normalize_trend_value(hit.value)
+            if value:
+                counter[value] = int(hit.count)
+
+        total_items = client.count(
+            collection_name=collection,
+            count_filter=qdrant_filter,
+            exact=False,
+        ).count
+        return counter, int(total_items)
+    except Exception:
+        return None
 
 
 def _fuse_query_vectors(
@@ -1020,6 +1209,23 @@ def analyze_trends(
             reason="Trend analysis dimension must be a non-empty string.",
         )
 
+    cache_key = _build_trend_cache_key(
+        dimension=dimension,
+        categories=categories,
+        fabric=fabric,
+        color=color,
+        pattern=pattern,
+        silhouette=silhouette,
+        brand=brand,
+        season=season,
+        year_min=year_min,
+        top_n=top_n,
+        search=search,
+    )
+    cached_payload = _get_cached_trend_result(cache_key)
+    if cached_payload is not None:
+        return cached_payload
+
     collection = get_collection()
     client = get_qdrant()
 
@@ -1045,51 +1251,32 @@ def analyze_trends(
         else:
             qdrant_filter = Filter(must=[cond])
 
-    pts = scroll_all(client, collection, scroll_filter=qdrant_filter)
-
-    IMAGE_DIMS = {"brand", "style", "gender"}
-    GARMENT_SIMPLE_DIMS = {"fabric", "pattern", "silhouette", "collar"}
-    GARMENT_NESTED_MAP = {"sleeve_length": "sleeve", "garment_length": "length"}
-
     counter: dict[str, int] = {}
-    for p in pts:
-        if dimension in IMAGE_DIMS:
-            v = p.payload.get(dimension, "")
-            if v:
-                counter[v] = counter.get(v, 0) + 1
-        elif dimension == "category":
-            for cat in p.payload.get("categories", []):
-                counter[cat] = counter.get(cat, 0) + 1
-        elif dimension == "season":
-            seasons = p.payload.get("season", [])
-            if isinstance(seasons, list):
-                for s in seasons:
-                    if s:
-                        counter[s] = counter.get(s, 0) + 1
-            elif seasons:
-                counter[seasons] = counter.get(seasons, 0) + 1
-        elif dimension == "year":
-            yr = p.payload.get("year", 0)
-            if yr:
-                key = str(yr)
-                counter[key] = counter.get(key, 0) + 1
-        elif dimension == "color":
-            for g in p.payload.get("garments", []):
-                for c in g.get("colors", []):
-                    n = c.get("name", "")
-                    if n:
-                        counter[n] = counter.get(n, 0) + 1
-        elif dimension in GARMENT_SIMPLE_DIMS:
-            for g in p.payload.get("garments", []):
-                v = g.get(dimension, "")
-                if v:
-                    counter[v] = counter.get(v, 0) + 1
-        elif dimension in GARMENT_NESTED_MAP:
-            field = GARMENT_NESTED_MAP[dimension]
-            for g in p.payload.get("garments", []):
-                v = g.get(field, "")
-                if v:
-                    counter[v] = counter.get(v, 0) + 1
+    items_analyzed = 0
+    facet_result = None if search else _facet_trend_counts(
+        client=client,
+        collection=collection,
+        qdrant_filter=qdrant_filter,
+        dimension=dimension,
+        top_n=top_n,
+    )
+
+    if facet_result is not None:
+        counter, items_analyzed = facet_result
+    else:
+        payload_selector = _TREND_PAYLOAD_SELECTORS.get(dimension, True)
+        for point in iter_scroll(
+            client,
+            collection,
+            scroll_filter=qdrant_filter,
+            with_payload=payload_selector,
+        ):
+            items_analyzed += 1
+            _count_trend_values_from_payload(
+                counter,
+                payload=point.payload or {},
+                dimension=dimension,
+            )
 
     if search:
         search_lower = search.lower()
@@ -1097,13 +1284,15 @@ def analyze_trends(
 
     ranked = sorted(counter.items(), key=lambda x: -x[1])[:top_n]
     total = max(sum(counter.values()), 1)
-    return json.dumps({
+    payload = json.dumps({
         "dimension": dimension,
-        "total_items_analyzed": len(pts),
+        "total_items_analyzed": items_analyzed,
         "total_unique_values": len(counter),
         "search": search,
         "ranking": [{"name": n, "count": c, "percentage": f"{c/total*100:.1f}%"} for n, c in ranked],
     }, ensure_ascii=False)
+    _store_cached_trend_result(cache_key, payload)
+    return payload
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -10,7 +10,7 @@ import httpx
 import math
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
-    Filter, FieldCondition, MatchValue, MatchAny, Range,
+    Filter, FieldCondition, MatchValue, MatchAny, PayloadSchemaType, Range,
 )
 
 # ═══════════════════════════════════════════════════════════════
@@ -18,6 +18,39 @@ from qdrant_client.models import (
 # ═══════════════════════════════════════════════════════════════
 
 _qdrant: QdrantClient | None = None
+_qdrant_indexes_ensured = False
+
+
+_QDRANT_PAYLOAD_INDEXES: dict[str, PayloadSchemaType] = {
+    "brand": PayloadSchemaType.KEYWORD,
+    "style": PayloadSchemaType.KEYWORD,
+    "gender": PayloadSchemaType.KEYWORD,
+    "season": PayloadSchemaType.KEYWORD,
+    "year": PayloadSchemaType.INTEGER,
+    "categories": PayloadSchemaType.KEYWORD,
+    "garment_tags": PayloadSchemaType.KEYWORD,
+}
+
+
+def _ensure_qdrant_payload_indexes(client: QdrantClient) -> None:
+    global _qdrant_indexes_ensured
+    if _qdrant_indexes_ensured:
+        return
+
+    collection = get_collection()
+    for field_name, schema_type in _QDRANT_PAYLOAD_INDEXES.items():
+        try:
+            client.create_payload_index(
+                collection_name=collection,
+                field_name=field_name,
+                field_schema=schema_type,
+                wait=True,
+            )
+        except Exception:
+            # Index creation is a best-effort optimization layer.
+            continue
+
+    _qdrant_indexes_ensured = True
 
 
 def get_qdrant() -> QdrantClient:
@@ -29,6 +62,7 @@ def get_qdrant() -> QdrantClient:
             url=settings.QDRANT_URL,
             api_key=settings.QDRANT_API_KEY,
         )
+        _ensure_qdrant_payload_indexes(_qdrant)
     return _qdrant
 
 
@@ -346,24 +380,46 @@ MAX_SCROLL = 200_000  # safety cap
 SCROLL_PAGE = 500     # points per scroll page
 
 
-def scroll_all(client, collection: str, scroll_filter=None,
-               max_results: int = MAX_SCROLL) -> list:
-    """Paginated scroll that fetches up to *max_results* points."""
-    all_pts: list = []
+def iter_scroll(
+    client,
+    collection: str,
+    scroll_filter=None,
+    *,
+    max_results: int = MAX_SCROLL,
+    with_payload=True,
+):
+    """Yield scroll results page by page without materializing the full dataset."""
     next_offset = None
-    while len(all_pts) < max_results:
-        batch_size = min(SCROLL_PAGE, max_results - len(all_pts))
+    fetched = 0
+    while fetched < max_results:
+        batch_size = min(SCROLL_PAGE, max_results - fetched)
         pts, next_offset = client.scroll(
             collection,
             scroll_filter=scroll_filter,
             limit=batch_size,
             offset=next_offset,
-            with_payload=True,
+            with_payload=with_payload,
             with_vectors=False,
         )
-        all_pts.extend(pts)
+        for point in pts:
+            yield point
+        fetched += len(pts)
         if next_offset is None or len(pts) < batch_size:
             break
+
+
+def scroll_all(client, collection: str, scroll_filter=None,
+               max_results: int = MAX_SCROLL, with_payload=True) -> list:
+    """Paginated scroll that fetches up to *max_results* points."""
+    all_pts: list = []
+    for point in iter_scroll(
+        client,
+        collection,
+        scroll_filter=scroll_filter,
+        max_results=max_results,
+        with_payload=with_payload,
+    ):
+        all_pts.append(point)
     return all_pts
 
 
