@@ -45,14 +45,22 @@ def create_session(
     return _map_session(row)
 
 
-def invalidate_other_sessions(user_id: int, current_session_id: int) -> int:
+def invalidate_other_sessions(user_id: int, current_session_id: int) -> list[int]:
     db = get_db()
+    rows = db.execute(
+        "SELECT id FROM sessions WHERE user_id = ? AND id != ? AND expires_at > datetime('now')",
+        (user_id, current_session_id),
+    ).fetchall()
+    revoked_session_ids = [int(row["id"]) for row in rows]
+    if not revoked_session_ids:
+        return []
+
     cursor = db.execute(
         "DELETE FROM sessions WHERE user_id = ? AND id != ?",
         (user_id, current_session_id),
     )
     db.commit()
-    return cursor.rowcount
+    return revoked_session_ids if cursor.rowcount > 0 else []
 
 
 def find_session_by_refresh_token(refresh_token: str) -> SessionRecord | None:

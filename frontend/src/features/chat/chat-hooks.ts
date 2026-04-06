@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { ChatMessage, ContentBlock, ToolStep, DrawerData, ImageResult, ChatSession, ChatComposerInput } from './chat-types'
-import { sendChatSSE, fetchSearchSessionById, listSessions, createSession, deleteSessionApi, getSessionMessages } from './chat-api'
+import { ChatStreamAbortedError, sendChatSSE, fetchSearchSessionById, listSessions, createSession, deleteSessionApi, getSessionMessages, stopChatRun } from './chat-api'
 import { useSessionStore } from './session-store'
 import { deriveSessionTitleFromBlocks } from './session-title'
 import { normalizeContentBlocks } from './content-blocks'
@@ -10,6 +10,7 @@ import {
   appendOptimisticExchange,
   applyHydratedMessages,
   finishSessionStream,
+  removeMessage,
   replaceAssistantMessage,
   requestSessionHydration,
   useChatMessageStore,
@@ -34,8 +35,12 @@ export function useChat(sessionId: string | null) {
 
   const { sessions, markSessionExecutionStatus, primeSessionForImmediateRun, syncSessionRunId, loadSessions } = useSessionStore()
   const activeSession = sessionId ? sessions.find(session => session.id === sessionId) ?? null : null
-  const isRemoteRunning = activeSession?.execution_status === 'running'
+  const isRemoteRunning = activeSession?.execution_status === 'running' || activeSession?.execution_status === 'stopping'
   const wasRemoteRunningRef = useRef(false)
+  const activeAbortControllerRef = useRef<AbortController | null>(null)
+  const activeRunIdRef = useRef<string | null>(activeSession?.current_run_id ?? null)
+  const stopRequestedRef = useRef(false)
+  const [isStopping, setIsStopping] = useState(false)
 
   useEffect(() => {
     setDrawerOpen(false)
@@ -73,6 +78,10 @@ export function useChat(sessionId: string | null) {
 
     hydrateSessionMessages(sessionId)
   }, [hydrateSessionMessages, sessionId])
+
+  useEffect(() => {
+    activeRunIdRef.current = activeSession?.current_run_id ?? null
+  }, [activeSession?.current_run_id])
 
   // When a running session is reopened after refresh, poll persisted drafts until it finishes.
   useEffect(() => {
@@ -129,6 +138,11 @@ export function useChat(sessionId: string | null) {
     }
     appendOptimisticExchange(sid, userMsg, assistantMsg)
     let activeRunId = optimisticRunId
+    const abortController = new AbortController()
+    activeAbortControllerRef.current = abortController
+    activeRunIdRef.current = optimisticRunId
+    stopRequestedRef.current = false
+    setIsStopping(false)
 
     // SSE block streaming state
     const blockMap = new Map<number, ContentBlock>()
@@ -229,17 +243,50 @@ export function useChat(sessionId: string | null) {
       }, (meta) => {
         if (!meta.runId) return
         activeRunId = meta.runId
+        activeRunIdRef.current = meta.runId
         syncSessionRunId(sid, meta.runId)
-      })
+      }, { signal: abortController.signal })
       markSessionExecutionStatus(sid, streamFailedMessage ? 'error' : 'completed', streamFailedMessage, activeRunId)
     } catch (err) {
+      if (err instanceof ChatStreamAbortedError && stopRequestedRef.current) {
+        const hasPartialBlocks = getOrderedBlocks().length > 0
+        if (hasPartialBlocks) {
+          commitAssistantBlocks()
+        } else {
+          removeMessage(sid, assistantMsg.id)
+        }
+        markSessionExecutionStatus(sid, hasPartialBlocks ? 'completed' : 'idle', null, activeRunId)
+        return
+      }
       markSessionExecutionStatus(sid, 'error', err instanceof Error ? err.message : String(err), activeRunId)
       replaceAssistantMessage(sid, assistantMsg.id, [{ type: 'text', text: `Error: ${err instanceof Error ? err.message : String(err)}` }])
     } finally {
+      activeAbortControllerRef.current = null
+      activeRunIdRef.current = null
+      stopRequestedRef.current = false
+      setIsStopping(false)
       finishSessionStream(sid)
       void loadSessions()
     }
   }, [isLoading, loadSessions, markSessionExecutionStatus, messages, primeSessionForImmediateRun, sessionId, syncSessionRunId])
+
+  const stopMessage = useCallback(async () => {
+    if (!sessionId || !activeAbortControllerRef.current || isStopping) return
+
+    stopRequestedRef.current = true
+    setIsStopping(true)
+    markSessionExecutionStatus(sessionId, 'stopping', null, activeRunIdRef.current)
+    try {
+      await stopChatRun(sessionId, activeRunIdRef.current)
+    } catch (error) {
+      stopRequestedRef.current = false
+      setIsStopping(false)
+      markSessionExecutionStatus(sessionId, 'running', null, activeRunIdRef.current)
+      throw error
+    }
+
+    activeAbortControllerRef.current.abort()
+  }, [isStopping, markSessionExecutionStatus, sessionId])
 
   const openDrawer = useCallback(async (step: ToolStep) => {
     const searchRequestId = step.searchRequestId
@@ -330,6 +377,8 @@ export function useChat(sessionId: string | null) {
   return {
     messages,
     isLoading,
+    isStopping,
+    stopMessage,
     sendMessage,
     drawerOpen,
     setDrawerOpen,

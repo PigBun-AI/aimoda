@@ -47,6 +47,7 @@ import { getSessionUser } from '@/features/auth/protected-route'
 import { BREAKPOINT_PX } from '@/lib/constants'
 import { useThemeStore } from '@/lib/theme-store'
 import { cn } from '@/lib/utils'
+import { getCurrentUser } from '@/lib/api'
 
 const SIDEBAR_WIDTH = 250
 const SIDEBAR_ICON_BUTTON_CLASS =
@@ -126,7 +127,10 @@ export function AppShell() {
     location.pathname.startsWith('/reports/')
   const isChatImmersive = location.pathname === '/chat' && isDrawerFullscreen
 
-  const hasRunningSession = chatSessions.some(session => session.execution_status === 'running')
+  const hasRunningSession = chatSessions.some(
+    session => session.execution_status === 'running' || session.execution_status === 'stopping',
+  )
+  const hasStoppingSession = chatSessions.some(session => session.execution_status === 'stopping')
   const { planBadgeLabel } = useMembershipStatus()
 
   useEffect(() => {
@@ -189,6 +193,16 @@ export function AppShell() {
 
     return () => window.clearInterval(interval)
   }, [currentUserId, hasRunningSession, loadChatSessions])
+
+  useEffect(() => {
+    if (!currentUserId) return
+
+    const interval = window.setInterval(() => {
+      void getCurrentUser().catch(() => undefined)
+    }, 5000)
+
+    return () => window.clearInterval(interval)
+  }, [currentUserId])
 
   const toggleLanguage = useCallback(() => {
     const next = i18n.language === 'zh-CN' ? 'en' : 'zh-CN'
@@ -355,7 +369,7 @@ export function AppShell() {
           {hasRunningSession && (
             <Badge variant="warning" size="sm" className="ml-auto">
               <LoaderCircle className="h-3 w-3 animate-spin" />
-              {t('common:running')}
+              {hasStoppingSession ? t('common:stopping') : t('common:running')}
             </Badge>
           )}
         </button>
@@ -401,10 +415,10 @@ export function AppShell() {
                             </div>
 
                             <div className="type-ui-meta mt-1 flex min-w-0 items-center gap-2 whitespace-nowrap text-muted-foreground/88">
-                              {session.execution_status === 'running' && (
+                              {(session.execution_status === 'running' || session.execution_status === 'stopping') && (
                                 <span className="inline-flex items-center gap-1 text-foreground/78">
                                   <LoaderCircle className="h-3 w-3 animate-spin" />
-                                  <span>{t('common:running')}</span>
+                                  <span>{session.execution_status === 'stopping' ? t('common:stopping') : t('common:running')}</span>
                                 </span>
                               )}
                               {session.execution_status === 'error' && (

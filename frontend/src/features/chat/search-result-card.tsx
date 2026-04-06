@@ -5,6 +5,7 @@ import { Images, Filter, ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SearchResultData, ImageResult } from './chat-types'
 import { FashionImage } from './fashion-image'
+import { CHAT_THUMBNAIL_MAX_EDGE } from './oss-image'
 
 interface SearchResultCardProps {
   data: SearchResultData
@@ -113,7 +114,7 @@ function PreviewThumbnail({ img }: { img: ImageResult }) {
         className="group relative overflow-hidden border border-border/70 bg-muted/30"
         style={{ aspectRatio: '1 / 2' }}
       >
-        <FashionImage image={img} className="w-full h-full" />
+        <FashionImage image={img} className="w-full h-full" thumbnailWidth={CHAT_THUMBNAIL_MAX_EDGE.resultPreview} />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
       </div>
       {img.brand && (

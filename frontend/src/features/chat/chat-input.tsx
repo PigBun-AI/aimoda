@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useRef, useState } from "react"
-import { ArrowUp, ImagePlus, X } from "lucide-react"
+import { ArrowUp, ImagePlus, Square, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -8,8 +8,11 @@ import type { ChatComposerInput, ContentBlock, ImageSourceBase64 } from "./chat-
 
 interface ChatInputProps {
   onSend?: (input: ChatComposerInput) => void
+  onStop?: () => void
   placeholder?: string
   disabled?: boolean
+  isRunning?: boolean
+  isStopping?: boolean
   infoMessage?: string
   statusBar?: ReactNode
 }
@@ -34,8 +37,11 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export function ChatInput({
   onSend,
+  onStop,
   placeholder,
   disabled = false,
+  isRunning = false,
+  isStopping = false,
   infoMessage,
   statusBar,
 }: ChatInputProps) {
@@ -191,16 +197,31 @@ export function ChatInput({
                   </button>
                 </div>
 
-                <Button
-                  className={[
-                    "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center p-0",
-                    canSend ? "bg-foreground text-background hover:bg-foreground/88" : "bg-border text-muted-foreground",
-                  ].join(" ")}
-                  disabled={!canSend}
-                  onClick={handleSend}
-                >
-                  <ArrowUp size={16} />
-                </Button>
+                {isRunning ? (
+                  <Button
+                    type="button"
+                    className={[
+                      "flex h-11 min-w-[92px] shrink-0 cursor-pointer items-center justify-center gap-2 rounded-none border border-foreground bg-background px-4 text-foreground",
+                      "hover:bg-accent disabled:cursor-not-allowed disabled:opacity-55",
+                    ].join(" ")}
+                    disabled={isStopping}
+                    onClick={onStop}
+                  >
+                    <Square size={14} fill="currentColor" />
+                    <span className="type-ui-label-sm">{isStopping ? t("stoppingAgent") : t("stopAgent")}</span>
+                  </Button>
+                ) : (
+                  <Button
+                    className={[
+                      "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-none p-0",
+                      canSend ? "bg-foreground text-background hover:bg-foreground/88" : "bg-border text-muted-foreground",
+                    ].join(" ")}
+                    disabled={!canSend}
+                    onClick={handleSend}
+                  >
+                    <ArrowUp size={16} />
+                  </Button>
+                )}
               </div>
             </div>
           </div>

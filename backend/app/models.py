@@ -95,6 +95,7 @@ class ReportMetadata(BaseModel):
     season: str
     year: int
     look_count: int
+    lead_excerpt: str | None = None
 
 
 class ReportUploadJobRecord(CamelModel):

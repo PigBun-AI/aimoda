@@ -5,10 +5,12 @@ Handles upload (zip → extract → OSS → PostgreSQL), listing, and deletion.
 """
 
 import json
+import logging
 import shutil
 import tempfile
 import zipfile
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from ..config import settings
 from ..constants import OPENCLAW_REPORT_TEMPLATE, OPENCLAW_UPLOAD_CONTRACT, REPORT_SPEC
@@ -20,10 +22,13 @@ from ..repositories.report_repo import (
     find_report_by_id,
     find_report_by_slug,
     list_reports,
+    update_report_metadata,
 )
-from .report_scanner import extract_report_metadata
+from .report_scanner import extract_report_metadata, extract_report_lead_excerpt
 from .report_uploader import upload_report_to_oss
 from .oss_service import get_oss_service
+
+logger = logging.getLogger(__name__)
 
 
 def get_report_spec() -> dict:
@@ -44,6 +49,66 @@ def get_report(report_id: int) -> ReportRecord | None:
 
 def get_reports(page: int = 1, limit: int = 12) -> tuple[list[ReportRecord], int]:
     return list_reports(page, limit)
+
+
+def _parse_report_metadata_json(metadata_json: str | None) -> dict:
+    if not metadata_json:
+        return {}
+    try:
+        payload = json.loads(metadata_json)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _resolve_report_entry_path(report: ReportRecord, metadata: dict | None = None) -> str:
+    payload = metadata or _parse_report_metadata_json(report.metadata_json)
+    entry_html = payload.get("entryHtml") or payload.get("entry_html")
+    if isinstance(entry_html, str) and entry_html.strip():
+        return entry_html.strip().lstrip("/")
+
+    parsed = urlsplit(report.index_url or "")
+    candidate_path = unquote(parsed.path)
+    marker = f"/reports/{report.slug}/"
+    if marker in candidate_path:
+        return candidate_path.split(marker, 1)[1].lstrip("/")
+
+    return "index.html"
+
+
+def resolve_report_lead_excerpt(report: ReportRecord) -> str | None:
+    metadata = _parse_report_metadata_json(report.metadata_json)
+    existing = metadata.get("lead_excerpt") or metadata.get("leadExcerpt")
+    if isinstance(existing, str) and existing.strip():
+        return existing.strip()
+
+    if not report.oss_prefix:
+        return None
+
+    entry_path = _resolve_report_entry_path(report, metadata)
+    oss_path = f"{report.oss_prefix.rstrip('/')}/{entry_path.lstrip('/')}"
+
+    try:
+        content, content_type = get_oss_service().download_file_with_meta_processed(oss_path)
+    except Exception as exc:
+        logger.warning("Failed to backfill report lead excerpt for report %s: %s", report.slug, exc)
+        return None
+
+    if content_type and "html" not in content_type.lower() and not entry_path.lower().endswith((".html", ".htm")):
+        return None
+
+    html = content.decode("utf-8", errors="ignore")
+    excerpt = extract_report_lead_excerpt(html)
+    if not excerpt:
+        return None
+
+    next_metadata = {**metadata, "lead_excerpt": excerpt}
+    try:
+        update_report_metadata(report.id, next_metadata)
+    except Exception as exc:
+        logger.warning("Failed to persist report lead excerpt for report %s: %s", report.slug, exc)
+
+    return excerpt
 
 
 def delete_report_with_files(report_id: int) -> bool:

@@ -96,6 +96,8 @@ export function ChatPage() {
   const {
     messages,
     isLoading,
+    isStopping,
+    stopMessage,
     sendMessage,
     drawerOpen,
     setDrawerOpen,
@@ -104,6 +106,8 @@ export function ChatPage() {
     loadMoreDrawerImages,
   } = useChat(activeSessionId)
   const isSessionRunning = activeSession?.execution_status === 'running'
+  const isSessionStopping = activeSession?.execution_status === 'stopping'
+  const isSessionActive = isSessionRunning || isSessionStopping
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const initDone = useRef(false)
@@ -315,7 +319,10 @@ export function ChatPage() {
 
           <ChatInput
             onSend={handleSend}
-            disabled={isLoading || isSessionRunning || chatInputDisabled}
+            onStop={() => void stopMessage()}
+            disabled={isLoading || isSessionActive || chatInputDisabled}
+            isRunning={isSessionActive}
+            isStopping={isStopping}
             infoMessage={chatInfoMessage}
             statusBar={composerStatusBar}
           />

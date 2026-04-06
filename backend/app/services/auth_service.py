@@ -125,6 +125,7 @@ def login(email: str, password: str, user_agent: str | None = None, ip_address: 
         "user": safe_user,
         "tokens": result["tokens"],
         "kicked_other_devices": user.role != "admin" and result["kicked_other_devices"],
+        "revoked_session_ids": result.get("revoked_session_ids", []),
     }
 
 
@@ -144,6 +145,7 @@ def register(email: str, password: str, user_agent: str | None = None, ip_addres
         "user": safe_user,
         "tokens": result["tokens"],
         "kicked_other_devices": False,
+        "revoked_session_ids": result.get("revoked_session_ids", []),
     }
 
 
@@ -230,6 +232,7 @@ def login_or_register_by_phone(phone: str, code: str, user_agent: str | None = N
         "user": safe_user,
         "tokens": result["tokens"],
         "kicked_other_devices": user.role != "admin" and result["kicked_other_devices"],
+        "revoked_session_ids": result.get("revoked_session_ids", []),
     }
 
 
@@ -248,4 +251,5 @@ def register_by_phone(phone: str, code: str, user_agent: str | None = None, ip_a
         "user": safe_user,
         "tokens": result["tokens"],
         "kicked_other_devices": False,
+        "revoked_session_ids": result.get("revoked_session_ids", []),
     }

@@ -5,7 +5,7 @@ import { Search, Filter, Eye, Image, ChevronDown, ArrowRight, X, Palette, BarCha
 import { useTranslation } from 'react-i18next'
 import type { ToolStep as ToolStepType, ImageResult } from './chat-types'
 import { calculateBackgroundCropStyle } from './crop-utils'
-import { getOssThumbnailUrl } from './oss-image'
+import { CHAT_THUMBNAIL_MAX_EDGE, getOssThumbnailUrl } from './oss-image'
 
 const toolIcons: Record<string, typeof Search> = {
   search: Search,
@@ -159,8 +159,12 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
 
 /** Inline thumbnail card with bbox crop — 1:2 ratio */
 function ThumbnailCard({ img }: { img: ImageResult }) {
-  const thumbnailUrl = getOssThumbnailUrl(img.image_url, 200)
-  const cropStyle = calculateBackgroundCropStyle(img.object_area, img.image_url, 200)
+  const thumbnailUrl = getOssThumbnailUrl(img.image_url, CHAT_THUMBNAIL_MAX_EDGE.inlineToolPreview)
+  const cropStyle = calculateBackgroundCropStyle(
+    img.object_area,
+    img.image_url,
+    CHAT_THUMBNAIL_MAX_EDGE.inlineToolPreview,
+  )
   const bgStyle: React.CSSProperties = cropStyle.backgroundSize
     ? { ...cropStyle, backgroundRepeat: 'no-repeat' }
     : {

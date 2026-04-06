@@ -24,3 +24,11 @@ export function getOssThumbnailUrl(url: string, maxEdge: number): string {
   const separator = url.includes('?') ? '&' : '?'
   return `${url}${separator}x-oss-process=image/resize,w_${maxEdge},h_${maxEdge},m_lfit/format,webp`
 }
+
+export const CHAT_THUMBNAIL_MAX_EDGE = {
+  inlineToolPreview: 1280,
+  resultPreview: 1280,
+  contentImage: 1280,
+  drawer: 760,
+  drawerFocus: 1120,
+} as const

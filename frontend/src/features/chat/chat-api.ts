@@ -1,6 +1,6 @@
 // Chat API client — SSE streaming + session CRUD
 
-import { ApiError } from '@/lib/api'
+import { ApiError, handleUnauthorizedSession } from '@/lib/api'
 import type { ChatSession, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
 
 const authTokenStorageKey = 'fashion-report-access-token'
@@ -21,12 +21,16 @@ function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return headers
 }
 
-/** Clear stale session and reload page to trigger login dialog */
 function handle401(resp: Response) {
   if (resp.status === 401) {
-    window.localStorage.removeItem(authTokenStorageKey)
-    window.localStorage.removeItem('fashion-report-session')
-    window.location.reload()
+    handleUnauthorizedSession()
+  }
+}
+
+export class ChatStreamAbortedError extends Error {
+  constructor() {
+    super('Chat stream aborted')
+    this.name = 'ChatStreamAbortedError'
   }
 }
 
@@ -39,52 +43,77 @@ export async function sendChatSSE(
   history: Array<{ role: string; content: ContentBlock[] }>,
   onEvent: (event: SSEEvent) => void,
   onOpen?: (meta: { runId: string | null }) => void,
+  options?: { signal?: AbortSignal },
 ): Promise<void> {
-  const resp = await fetch('/api/chat', {
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ content, session_id: sessionId, history }),
+      signal: options?.signal,
+    })
+
+    if (!resp.ok) {
+      handle401(resp)
+      let payload: { error?: string; data?: unknown } | null = null
+      try {
+        payload = await resp.json() as { error?: string; data?: unknown }
+      } catch {
+        payload = null
+      }
+      throw new ApiError(
+        payload?.error ?? `HTTP ${resp.status}: ${resp.statusText}`,
+        resp.status,
+        payload?.data,
+      )
+    }
+
+    onOpen?.({
+      runId: resp.headers.get('X-Aimoda-Run-Id'),
+    })
+
+    const reader = resp.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            onEvent(JSON.parse(line.slice(6)))
+          } catch {
+            // skip malformed JSON
+          }
+        }
+      }
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ChatStreamAbortedError()
+    }
+    throw error
+  }
+}
+
+export async function stopChatRun(sessionId: string, runId?: string | null): Promise<boolean> {
+  const resp = await fetch(`/api/chat/sessions/${sessionId}/stop`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ content, session_id: sessionId, history }),
+    body: JSON.stringify({ run_id: runId ?? null }),
   })
 
   if (!resp.ok) {
     handle401(resp)
-    let payload: { error?: string; data?: unknown } | null = null
-    try {
-      payload = await resp.json() as { error?: string; data?: unknown }
-    } catch {
-      payload = null
-    }
-    throw new ApiError(
-      payload?.error ?? `HTTP ${resp.status}: ${resp.statusText}`,
-      resp.status,
-      payload?.data,
-    )
+    throw new Error(`HTTP ${resp.status}`)
   }
 
-  onOpen?.({
-    runId: resp.headers.get('X-Aimoda-Run-Id'),
-  })
-
-  const reader = resp.body!.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          onEvent(JSON.parse(line.slice(6)))
-        } catch {
-          // skip malformed JSON
-        }
-      }
-    }
-  }
+  const payload = await resp.json() as { data?: { stopped?: boolean } }
+  return Boolean(payload.data?.stopped)
 }
 
 /**

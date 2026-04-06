@@ -49,6 +49,7 @@ interface ApiResponse<T> {
 const devDemoMode = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_MOCKS === 'true'
 
 const authTokenStorageKey = 'fashion-report-access-token'
+const authSessionStorageKey = 'fashion-report-session'
 
 const rolePermissions: Record<AuthUser['role'], string[]> = {
   admin: ['reports:read', 'reports:write', 'users:manage'],
@@ -109,6 +110,16 @@ export function setAccessToken(token: string) {
 
 export function clearAccessToken() {
   window.localStorage.removeItem(authTokenStorageKey)
+}
+
+export function clearClientAuthState() {
+  clearAccessToken()
+  window.localStorage.removeItem(authSessionStorageKey)
+}
+
+export function handleUnauthorizedSession() {
+  clearClientAuthState()
+  window.location.reload()
 }
 
 function createHeaders(initHeaders?: HeadersInit) {
@@ -172,9 +183,7 @@ async function request<T>(path: string, options?: RequestInit, demoFallback?: T)
         || path === '/api/auth/sms/send-code'
 
       if (response.status === 401 && !shouldSuppressAutoLogout) {
-        clearAccessToken()
-        window.localStorage.removeItem('fashion-report-session')
-        window.location.reload()
+        handleUnauthorizedSession()
       }
       let payload: ApiResponse<unknown> | null = null
       try {
@@ -316,7 +325,7 @@ export async function getReports(page = 1, limit = 12): Promise<PaginatedReports
 
   // Transform backend data to include coverImageUrl from OSS
   return {
-    reports: payload.data.map((report: ReportSummary & { coverUrl?: string; previewUrl?: string }) => ({
+    reports: payload.data.map((report: ReportSummary & { coverUrl?: string; previewUrl?: string; leadExcerpt?: string | null }) => ({
       ...report,
       coverImageUrl: report.coverUrl || `/report-files/${report.slug}/cover.jpg`,
     })),
