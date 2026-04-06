@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ImageResult } from './chat-types'
@@ -70,30 +70,104 @@ function buildLabels(image: ImageResult): LabelData[] {
 
 interface ImageLabelsProps {
   image: ImageResult
+  anchorBox: { left: number; top: number; width: number; height: number }
   onLabelSearch?: (label: { name: string; category: string; topCategory: string }) => void | Promise<void>
   activeLabelKey?: string | null
 }
 
-export function ImageLabels({ image, onLabelSearch, activeLabelKey = null }: ImageLabelsProps) {
+interface LabelPlacement {
+  left: number
+  top: number
+  lineEndX: number
+  lineEndY: number
+}
+
+const LABEL_MARGIN = 14
+const LABEL_GAP = 8
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
+function getLabelKey(label: LabelData) {
+  return `${label.category}:${label.topCategory}:${label.name}`.toLowerCase()
+}
+
+export function ImageLabels({ image, anchorBox, onLabelSearch, activeLabelKey = null }: ImageLabelsProps) {
   const { t } = useTranslation('common')
   const containerRef = useRef<HTMLDivElement>(null)
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
-  useEffect(() => {
-    const updateSize = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        setContainerSize({ width: rect.width, height: rect.height })
-      }
+  const labelRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const [placements, setPlacements] = useState<Record<string, LabelPlacement>>({})
+  const labels = useMemo(() => buildLabels(image), [image])
+
+  useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container || labels.length === 0) return
+
+    const computePlacements = () => {
+      const containerRect = container.getBoundingClientRect()
+      const lineLength = Math.max(46, Math.min(94, anchorBox.width * 0.16))
+      const nextPlacements: Record<string, LabelPlacement> = {}
+
+      labels.forEach((label) => {
+        const key = getLabelKey(label)
+        const element = labelRefs.current[key]
+        if (!element) return
+
+        const labelRect = element.getBoundingClientRect()
+        const labelWidth = labelRect.width
+        const labelHeight = labelRect.height
+        const anchorX = anchorBox.left + (label.xPercent / 100) * anchorBox.width
+        const anchorY = anchorBox.top + (label.yPercent / 100) * anchorBox.height
+
+        const preferredLeft =
+          label.topCategory === 'bottoms' ||
+          label.topCategory === 'footwear' ||
+          (label.topCategory === 'outerwear' && label.xPercent > 56)
+
+        const freeRight = containerRect.width - LABEL_MARGIN - anchorX
+        const freeLeft = anchorX - LABEL_MARGIN
+        const requiredWidth = lineLength + LABEL_GAP + labelWidth
+
+        const canPlaceRight = freeRight >= requiredWidth
+        const canPlaceLeft = freeLeft >= requiredWidth
+
+        let placeLeft = preferredLeft
+        if (placeLeft && !canPlaceLeft && canPlaceRight) placeLeft = false
+        if (!placeLeft && !canPlaceRight && canPlaceLeft) placeLeft = true
+        if (!canPlaceLeft && !canPlaceRight) placeLeft = freeLeft > freeRight
+
+        const intendedLeft = placeLeft
+          ? anchorX - lineLength - LABEL_GAP - labelWidth
+          : anchorX + lineLength + LABEL_GAP
+
+        const clampedLeft = clamp(intendedLeft, LABEL_MARGIN, containerRect.width - labelWidth - LABEL_MARGIN)
+        const clampedTop = clamp(anchorY - labelHeight / 2, LABEL_MARGIN, containerRect.height - labelHeight - LABEL_MARGIN)
+
+        nextPlacements[key] = {
+          left: clampedLeft,
+          top: clampedTop,
+          lineEndX: placeLeft ? clampedLeft + labelWidth : clampedLeft,
+          lineEndY: clampedTop + labelHeight / 2,
+        }
+      })
+
+      setPlacements(nextPlacements)
     }
-    updateSize()
-    window.addEventListener('resize', updateSize)
-    return () => window.removeEventListener('resize', updateSize)
-  }, [])
 
-  const labels = buildLabels(image)
+    computePlacements()
+
+    const resizeObserver = new ResizeObserver(() => computePlacements())
+    resizeObserver.observe(container)
+
+    Object.values(labelRefs.current).forEach((element) => {
+      if (element) resizeObserver.observe(element)
+    })
+
+    return () => resizeObserver.disconnect()
+  }, [anchorBox.height, anchorBox.left, anchorBox.top, anchorBox.width, labels])
+
   if (labels.length === 0) return null
-
-  const LINE_LENGTH = 80
 
   const handleLabelClick = async (label: LabelData) => {
     await onLabelSearch?.({
@@ -106,92 +180,77 @@ export function ImageLabels({ image, onLabelSearch, activeLabelKey = null }: Ima
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 pointer-events-none z-10"
-      style={{ overflow: 'visible' }}
+      className="pointer-events-none absolute inset-0 z-10 overflow-visible"
     >
-      {labels.map((label, index) => {
-        const preferLeft =
-          label.topCategory === 'bottoms' ||
-          (label.topCategory === 'footwear' && label.xPercent < 50)
+      <svg className="absolute inset-0 h-full w-full" style={{ pointerEvents: 'none', overflow: 'visible' }}>
+        {labels.map((label) => {
+          const key = getLabelKey(label)
+          const placement = placements[key]
+          if (!placement) return null
 
-        const containerWidth = containerSize.width || 600
-        const labelAnchorX = (label.xPercent / 100) * containerWidth
-        const availableRightPx = Math.max(0, containerWidth - labelAnchorX - 16)
-        const availableLeftPx = Math.max(0, labelAnchorX - 16)
-        const estimatedLabelWidth = Math.min(240, Math.max(96, label.name.length * 8 + 28))
-        const shouldFlipToLeft = !preferLeft && availableRightPx < estimatedLabelWidth && availableLeftPx > availableRightPx
-        const shouldFlipToRight = preferLeft && availableLeftPx < estimatedLabelWidth && availableRightPx > availableLeftPx
-        const isLeft = shouldFlipToLeft ? true : shouldFlipToRight ? false : preferLeft
-        const availableLabelWidth = isLeft ? availableLeftPx : availableRightPx
-        const safeLabelWidth = Math.max(92, Math.min(220, availableLabelWidth - 10))
-        const lineLengthPercent =
-          containerWidth > 0 ? (LINE_LENGTH / containerWidth) * 100 : 15
-        const lineEndX = isLeft
-          ? Math.max(0, label.xPercent - lineLengthPercent)
-          : Math.min(100, label.xPercent + lineLengthPercent)
+          const labelAnchorX = anchorBox.left + (label.xPercent / 100) * anchorBox.width
+          const labelAnchorY = anchorBox.top + (label.yPercent / 100) * anchorBox.height
 
-        const displayName = label.name
-        const isSearching = activeLabelKey === `${label.category}:${label.topCategory}:${label.name}`.toLowerCase()
-
-        return (
-          <div key={index} className="absolute inset-0">
-            {/* Dashed line + dot */}
-            <svg
-              className="absolute inset-0 w-full h-full"
-              style={{ pointerEvents: 'none', overflow: 'visible' }}
-            >
-              <line
-                x1={`${label.xPercent}%`}
-                y1={`${label.yPercent}%`}
-                x2={`${lineEndX}%`}
-                y2={`${label.yPercent}%`}
-                stroke="#fff"
+          return (
+            <g key={`${key}-line`}>
+              <polyline
+                points={`${labelAnchorX},${labelAnchorY} ${placement.lineEndX},${labelAnchorY} ${placement.lineEndX},${placement.lineEndY}`}
+                fill="none"
+                stroke="currentColor"
                 strokeWidth="1"
                 strokeDasharray="4 4"
-                opacity="0.9"
+                className="text-white/90"
               />
               <circle
-                cx={`${label.xPercent}%`}
-                cy={`${label.yPercent}%`}
+                cx={labelAnchorX}
+                cy={labelAnchorY}
                 r="4"
                 fill="white"
-                stroke="#000"
+                stroke="rgba(0,0,0,0.85)"
                 strokeWidth="1"
-                opacity="0.9"
               />
-            </svg>
+            </g>
+          )
+        })}
+      </svg>
 
-            {/* Label text — clickable, triggers inline search */}
-            <div
-              className={`absolute border border-border bg-white/95 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-black shadow-sm pointer-events-auto cursor-pointer hover:bg-white hover:shadow-md transition-all ${isSearching ? 'opacity-70' : ''}`}
-              style={{
-                left: isLeft ? 'auto' : `${lineEndX}%`,
-                right: isLeft ? `${100 - lineEndX}%` : 'auto',
-                marginLeft: isLeft ? 'auto' : '2px',
-                marginRight: isLeft ? '2px' : 'auto',
-                top: `${label.yPercent}%`,
-                transform: 'translateY(-50%)',
-                width: `${safeLabelWidth}px`,
-                maxWidth: `${safeLabelWidth}px`,
-                minWidth: '92px',
-                whiteSpace: 'normal',
-                overflowWrap: 'anywhere',
-                lineHeight: 1.25,
-              }}
-              title={t('searchSimilarGarment', { name: displayName })}
-              onClick={(e) => {
-                e.stopPropagation()
-                void handleLabelClick(label)
-              }}
+      {labels.map((label) => {
+        const key = getLabelKey(label)
+        const placement = placements[key]
+        const labelAnchorX = anchorBox.left + (label.xPercent / 100) * anchorBox.width
+        const labelAnchorY = anchorBox.top + (label.yPercent / 100) * anchorBox.height
+        const displayName = label.name
+        const isSearching = activeLabelKey === key
+
+        return (
+          <button
+            key={key}
+            ref={(element) => {
+              labelRefs.current[key] = element
+            }}
+            type="button"
+            className={`pointer-events-auto absolute inline-flex max-w-[min(220px,28vw)] cursor-pointer items-center gap-1.5 border border-border bg-background/96 px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground shadow-[0_8px_22px_rgba(0,0,0,0.12)] backdrop-blur-sm transition-all hover:border-foreground/25 hover:bg-background ${isSearching ? 'opacity-70' : ''}`}
+            style={{
+              left: `${placement?.left ?? labelAnchorX}px`,
+              top: `${placement?.top ?? labelAnchorY}px`,
+              visibility: placement ? 'visible' : 'hidden',
+            }}
+            title={t('searchSimilarGarment', { name: displayName })}
+            onClick={(event) => {
+              event.stopPropagation()
+              void handleLabelClick(label)
+            }}
+          >
+            <span
+              className="block break-words leading-[1.24]"
+              style={{ hyphens: 'auto' }}
             >
-              <span className="flex items-center gap-1.5">
-                <span className="block flex-1 break-words text-left">{displayName}</span>
-                {isSearching && (
-                  <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
-                )}
-              </span>
-            </div>
-          </div>
+              {displayName}
+            </span>
+            {isSearching && (
+              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+            )}
+          </button>
         )
       })}
     </div>
