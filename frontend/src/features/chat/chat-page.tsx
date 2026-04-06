@@ -96,7 +96,7 @@ export function ChatPage() {
   const {
     messages,
     isLoading,
-    isStopping,
+    isStopping: isStoppingLocal,
     stopMessage,
     sendMessage,
     drawerOpen,
@@ -108,6 +108,7 @@ export function ChatPage() {
   const isSessionRunning = activeSession?.execution_status === 'running'
   const isSessionStopping = activeSession?.execution_status === 'stopping'
   const isSessionActive = isSessionRunning || isSessionStopping
+  const isStopping = isStoppingLocal || isSessionStopping
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const initDone = useRef(false)

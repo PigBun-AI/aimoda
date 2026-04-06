@@ -947,12 +947,21 @@ async def stop_session_run(
         run_id=body.run_id,
     )
 
+    if stopped:
+        await asyncio.to_thread(
+            set_session_execution_status,
+            session_id,
+            execution_status="stopping",
+            run_id=body.run_id,
+        )
+
     return {
         "success": True,
         "data": {
             "session_id": session_id,
             "run_id": body.run_id,
             "stopped": stopped,
+            "execution_status": "stopping" if stopped else session.get("execution_status", "idle"),
         },
     }
 

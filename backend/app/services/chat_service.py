@@ -203,6 +203,7 @@ def _normalize_session_config(model_config: dict | None) -> dict:
     runtime.setdefault("last_run_started_at", None)
     runtime.setdefault("last_run_completed_at", None)
     runtime.setdefault("last_run_error", None)
+    runtime.setdefault("stop_requested_at", None)
     runtime.setdefault("agent_state", {})
 
     compaction["thread_version"] = max(1, int(compaction.get("thread_version", 1) or 1))
@@ -284,15 +285,26 @@ def _merge_session_state(
             runtime["current_run_id"] = active_run_id
             runtime["last_run_id"] = active_run_id
             runtime["last_run_started_at"] = _iso_now()
+            runtime["last_run_completed_at"] = None
             runtime["last_run_error"] = None
+            runtime["stop_requested_at"] = None
+        elif execution_status == "stopping":
+            runtime["current_run_id"] = active_run_id
+            runtime["last_run_id"] = active_run_id
+            runtime["last_run_error"] = None
+            runtime["stop_requested_at"] = _iso_now()
         elif execution_status in {"completed", "error"}:
             runtime["current_run_id"] = None
             runtime["last_run_id"] = active_run_id
             runtime["last_run_completed_at"] = _iso_now()
             runtime["last_run_error"] = error_message if execution_status == "error" else None
+            runtime["stop_requested_at"] = None
         elif execution_status == "idle":
             runtime["current_run_id"] = None
             runtime["last_run_id"] = active_run_id
+            runtime["last_run_completed_at"] = _iso_now()
+            runtime["last_run_error"] = None
+            runtime["stop_requested_at"] = None
 
     config["ui"] = ui
     config["runtime"] = runtime
