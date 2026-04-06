@@ -10,7 +10,14 @@ from pydantic import BaseModel, Field
 from ..config import settings
 from ..dependencies import require_report_mcp_internal_service
 from ..repositories.report_repo import find_report_by_slug
-from ..services.report_service import get_report_spec, get_reports, upload_report_archive
+from ..services.report_package_errors import build_report_error, parse_report_error
+from ..services.report_service import (
+    get_openclaw_report_template,
+    get_openclaw_upload_contract,
+    get_report_spec,
+    get_reports,
+    upload_report_archive,
+)
 from ..services.report_upload_job_service import (
     prepare_direct_upload_job,
     complete_direct_upload_job,
@@ -47,6 +54,26 @@ def _serialize_upload_job(job) -> dict:
     return job.model_dump(by_alias=True)
 
 
+def _next_action(action_type: str, **payload) -> dict:
+    return {"type": action_type, **payload}
+
+
+def _job_next_action(job) -> dict:
+    if job.status == "pending":
+        return _next_action("complete_report_upload", job_id=job.id)
+    if job.status == "processing":
+        return _next_action("poll_report_upload_status", job_id=job.id, delay_seconds=2)
+    if job.status == "completed":
+        return _next_action("done", job_id=job.id, report_slug=job.report_slug)
+    return _next_action("fix_report_package_and_retry", job_id=job.id)
+
+
+def _serialize_job_error(job) -> dict | None:
+    if job.status != "failed":
+        return None
+    return parse_report_error(job.error_message) or build_report_error("report_upload_failed", "报告处理失败")
+
+
 class PrepareReportUploadRequest(BaseModel):
     filename: str = Field(min_length=1)
     file_size_bytes: int = Field(ge=1)
@@ -64,6 +91,30 @@ def report_spec(
 ):
     logger.info("report-mcp internal spec requested by %s", service_name)
     return {"success": True, "spec": get_report_spec()}
+
+
+@router.get("/openclaw/upload-contract")
+def openclaw_upload_contract(
+    service_name: Annotated[str, Depends(require_report_mcp_internal_service)],
+):
+    logger.info("report-mcp openclaw contract requested by %s", service_name)
+    return {
+        "success": True,
+        "contract": get_openclaw_upload_contract(),
+        "next_action": _next_action("prepare_report_upload"),
+    }
+
+
+@router.get("/openclaw/report-template")
+def openclaw_report_template(
+    service_name: Annotated[str, Depends(require_report_mcp_internal_service)],
+):
+    logger.info("report-mcp openclaw template requested by %s", service_name)
+    return {
+        "success": True,
+        "template": get_openclaw_report_template(),
+        "next_action": _next_action("prepare_report_upload"),
+    }
 
 
 @router.get("/reports")
@@ -192,6 +243,14 @@ def prepare_report_upload_for_mcp(
             "contentType": upload["content_type"],
             "expiresAt": upload["expires_at"],
         },
+        "next_action": _next_action(
+            "upload_zip_to_oss",
+            method=upload["method"],
+            url=upload["url"],
+            headers=upload["headers"],
+            object_key=upload["object_key"],
+            job_id=job.id,
+        ),
     }
 
 
@@ -203,9 +262,17 @@ def complete_report_upload_for_mcp(
     start = perf_counter()
     job = get_report_upload_job(body.job_id)
     if not job:
-        return {"success": False, "error": "未找到对应上传任务"}
+        return {
+            "success": False,
+            "error": build_report_error("upload_job_not_found", "未找到对应上传任务"),
+            "next_action": _next_action("prepare_report_upload"),
+        }
     if body.object_key and job.source_object_key and body.object_key != job.source_object_key:
-        return {"success": False, "error": "上传对象 key 与任务不匹配"}
+        return {
+            "success": False,
+            "error": build_report_error("upload_object_key_mismatch", "上传对象 key 与任务不匹配"),
+            "next_action": _next_action("prepare_report_upload"),
+        }
 
     try:
         refreshed = complete_direct_upload_job(
@@ -213,9 +280,17 @@ def complete_report_upload_for_mcp(
             uploaded_by=settings.REPORT_MCP_SERVICE_USER_ID,
         )
     except FileNotFoundError:
-        return {"success": False, "error": "OSS 中尚未找到已上传的 ZIP，请先完成直传再调用 complete。"}
+        return {
+            "success": False,
+            "error": build_report_error("upload_object_not_found", "OSS 中尚未找到已上传的 ZIP，请先完成直传再调用 complete。"),
+            "next_action": _next_action("upload_zip_to_oss", job_id=body.job_id),
+        }
     except (ValueError, PermissionError) as exc:
-        return {"success": False, "error": str(exc)}
+        return {
+            "success": False,
+            "error": build_report_error("complete_upload_failed", str(exc)),
+            "next_action": _next_action("prepare_report_upload"),
+        }
     logger.info(
         "report-mcp complete upload by %s job=%s status=%s duration_ms=%.1f",
         service_name,
@@ -227,6 +302,7 @@ def complete_report_upload_for_mcp(
         "success": True,
         "message": "报告处理任务已启动",
         "job": _serialize_upload_job(refreshed),
+        "next_action": _job_next_action(refreshed),
     }
 
 
@@ -238,7 +314,11 @@ def get_report_upload_job_for_mcp(
     start = perf_counter()
     job = get_report_upload_job(job_id)
     if not job:
-        return {"success": False, "error": "未找到对应上传任务"}
+        return {
+            "success": False,
+            "error": build_report_error("upload_job_not_found", "未找到对应上传任务"),
+            "next_action": _next_action("prepare_report_upload"),
+        }
     logger.info(
         "report-mcp get upload job by %s job=%s status=%s duration_ms=%.1f",
         service_name,
@@ -246,4 +326,9 @@ def get_report_upload_job_for_mcp(
         job.status,
         (perf_counter() - start) * 1000,
     )
-    return {"success": True, "job": _serialize_upload_job(job)}
+    return {
+        "success": True,
+        "job": _serialize_upload_job(job),
+        "error": _serialize_job_error(job),
+        "next_action": _job_next_action(job),
+    }

@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { ArchiveSplitCard } from '@/components/cards/archive-split-card'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RedeemDialog } from '@/features/redemption/redeem-dialog'
 import { useReports } from '@/features/reports/use-reports'
@@ -82,7 +82,7 @@ export function ReportsPage() {
           <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
             {reportsQuery.isLoading
               ? Array.from({ length: 6 }).map((_, index) => (
-                  <Skeleton key={index} className="h-[26rem] w-full rounded-[var(--radius)]" />
+                  <Skeleton key={index} className="h-[22rem] w-full rounded-[var(--radius)]" />
                 ))
               : reports.map((report, index) => {
                   return (
@@ -93,10 +93,11 @@ export function ReportsPage() {
                       rel="noopener noreferrer"
                       className="group block h-full text-left"
                     >
-                      <Card className="h-full overflow-hidden bg-card">
-                        <div className="flex h-full flex-col">
-                          <div className="relative aspect-video border-b border-border bg-[#f1f1ed] dark:bg-[#141414]">
-                            <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 py-4 sm:px-6">
+                      <ArchiveSplitCard
+                        mediaClassName="bg-[#f1f1ed] dark:bg-[#141414]"
+                        media={(
+                          <>
+                            <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-4 py-4 sm:px-5">
                               <span className="type-kicker text-muted-foreground">
                                 {report.season}
                               </span>
@@ -118,7 +119,7 @@ export function ReportsPage() {
                               }}
                             />
 
-                            <div className="hidden h-full w-full items-center justify-center px-8 py-12 text-center sm:px-10 sm:py-14">
+                            <div className="hidden h-full w-full items-center justify-center px-8 py-12 text-center">
                               <div className="space-y-3 border border-border px-6 py-5">
                                 <p className="type-kicker text-muted-foreground">
                                   {report.brand}
@@ -128,48 +129,41 @@ export function ReportsPage() {
                                 </p>
                               </div>
                             </div>
+                          </>
+                        )}
+                        eyebrow={(
+                          <div className="space-y-2">
+                            <p className="type-kicker-wide text-muted-foreground">
+                              {report.brand}
+                            </p>
+                            <p className="type-kicker text-muted-foreground">
+                              {formatReportDate(report.updatedAt, i18n.language)}
+                            </p>
                           </div>
-
-                          <div className="border-t border-border px-5 py-5 sm:px-6 sm:py-6">
-                            <div className="space-y-4">
-                              <div className="flex items-center justify-between gap-4">
-                                <p className="type-kicker-wide text-muted-foreground">
-                                  {report.brand}
-                                </p>
-                                <span className="type-kicker text-muted-foreground">
-                                  {formatReportDate(report.updatedAt, i18n.language)}
-                                </span>
-                              </div>
-
-                              <div className="space-y-3 border-t border-border pt-4">
-                                <h2 className="font-role-editorial text-[clamp(2rem,1.65rem+1vw,2.8rem)] leading-[0.94] tracking-[0.006em] text-foreground transition-opacity duration-fast group-hover:opacity-75">
-                                  {report.title}
-                                </h2>
-                                <p className="max-w-[42ch] type-body-muted text-foreground/72">
-                                  {t('reportDeck', {
-                                    brand: report.brand,
-                                    season: report.season,
-                                    date: formatReportDate(report.updatedAt, i18n.language),
-                                  })}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center justify-between border-t border-border pt-4">
-                                <div className="flex items-center gap-3 text-muted-foreground">
-                                  <span className="type-kicker">{t('issueLabel')}</span>
-                                  <span className="type-kicker text-foreground">{formatReportIssue(page, limit, index)}</span>
-                                  <span className="type-kicker">/</span>
-                                  <span className="type-kicker">{report.season}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-foreground">
-                                  <span className="type-ui-label-sm">{t('openReport')}</span>
-                                  <ArrowUpRight className="h-4 w-4 transition-transform duration-fast group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={1.6} />
-                                </div>
-                              </div>
-                            </div>
+                        )}
+                        title={report.title}
+                        titleClassName="line-clamp-3"
+                        description={t('reportDeck', {
+                          brand: report.brand,
+                          season: report.season,
+                          date: formatReportDate(report.updatedAt, i18n.language),
+                        })}
+                        descriptionClassName="line-clamp-4"
+                        footerStart={(
+                          <div className="flex min-w-0 items-center gap-3 text-muted-foreground">
+                            <span className="type-kicker">{t('issueLabel')}</span>
+                            <span className="type-kicker text-foreground">{formatReportIssue(page, limit, index)}</span>
+                            <span className="type-kicker">/</span>
+                            <span className="type-kicker">{report.season}</span>
                           </div>
-                        </div>
-                      </Card>
+                        )}
+                        footerEnd={(
+                          <div className="flex items-center gap-2 text-foreground">
+                            <span className="type-ui-label-sm">{t('openReport')}</span>
+                            <ArrowUpRight className="h-4 w-4 transition-transform duration-fast group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={1.6} />
+                          </div>
+                        )}
+                      />
                     </a>
                   )
                 })}

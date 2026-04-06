@@ -1,6 +1,6 @@
-# AiModa Fashion Report Zip Spec v2（正式版）
+# AiModa Fashion Report Zip Spec v2.1（正式版）
 
-这是 AiModa Fashion Report 的正式上传规范。平台未来以 **manifest + entryHtml + coverImage + 相对路径资源** 为唯一推荐标准。
+这是 AiModa Fashion Report 的正式上传规范。平台未来以 **manifest + entryHtml + 相对路径资源** 为唯一推荐标准。
 
 ## 1. 设计目标
 
@@ -22,7 +22,6 @@
 
 - `manifest.json`
 - `manifest.json.entryHtml` 指向的 HTML 文件
-- `manifest.json.coverImage` 指向的封面图文件
 
 平台不再强制要求：
 
@@ -30,6 +29,7 @@
 - 固定名 `index.html`
 - 固定 `images/` 目录
 - 固定只有 1 个或 2 个 HTML 页面
+- 显式 `coverImage`
 
 ### 2.2 平台推荐要求
 
@@ -42,7 +42,7 @@
 │   ├── report.html
 │   └── *.html
 ├── assets/
-│   ├── cover.jpg
+│   ├── cover.jpg               # 可选：兼容旧封面图
 │   ├── *.jpg
 │   ├── *.png
 │   ├── *.webp
@@ -71,8 +71,7 @@
   "brand": "Murmur",
   "season": "AW",
   "year": 2026,
-  "entryHtml": "pages/report.html",
-  "coverImage": "assets/cover.jpg"
+  "entryHtml": "pages/report.html"
 }
 ```
 
@@ -87,7 +86,7 @@
     "pages/appendix.html"
   ],
   "overviewHtml": null,
-  "coverImage": "assets/cover.jpg",
+  "coverImage": null,
   "featuresFile": "image-features.json",
   "lookCount": 38,
   "version": "v5.2"
@@ -103,7 +102,7 @@
 - `season`: 季节标识，如 `AW`、`SS`、`Fall`、`Spring`
 - `year`: 报告主年份，整数
 - `entryHtml`: 主入口 HTML，相对路径
-- `coverImage`: 必填，封面图相对路径；推荐 `assets/cover.jpg`
+- `coverImage`: 可选，封面图相对路径；不填时平台会自动取 `entryHtml` 第一张本地图片
 - `reportType`: 可选，如 `fashion_week_brief`、`standard_report`
 - `pages`: 可选，其他 HTML 页面列表
 - `overviewHtml`: 可选，仅用于兼容旧交互概念，不再强制存在
@@ -177,12 +176,10 @@
 
 ### 5.3 封面图
 
-- `coverImage` 必填
-- 调用方必须自行准备封面图并随 zip 一起上传
-- 推荐放在 `assets/cover.jpg`
-- `coverImage` 必须是报告第一页/首屏截图，不是任意独立海报图
-- 建议输出为 `16:9`，例如 `1280x720`
-- 平台不再自动截图/自动生成封面
+- `coverImage` 现在可选
+- 如果提供，平台优先使用显式 `coverImage`
+- 如果不提供，平台会自动使用 `entryHtml` 第一张本地图片作为封面
+- 如果主页面没有可用的本地图片，上传会以 `cover_image_not_found` 失败
 - 平台不会再因为没有 `overview.html` 阻止上传
 
 ---
@@ -211,7 +208,7 @@
 6. 保留 zip 内相对目录结构上传到正式 OSS 路径
 7. 以 `entryHtml` 对应文件作为主入口 URL
 8. 如果存在其他 HTML 页面，一并上传
-9. 返回 `coverImage` 对应的封面 URL
+9. 返回解析后的封面 URL（优先 `coverImage`，否则 `entryHtml` 第一张本地图片）
 10. `overviewHtml` 缺失不视为错误
 
 ### 7.1 为什么改成两段式
@@ -231,7 +228,7 @@ OpenClaw 不是定义上传协议的一方，它的职责是：
 2. 把报告整理为符合本 spec 的 zip
 3. 生成 `manifest.json`
 4. 把图片从 HTML base64 内嵌改为 zip 内文件引用（推荐）
-5. 准备显式 `coverImage` 文件，并确保它就是报告第一页/首屏截图
+5. 如有必要可准备显式 `coverImage`；否则确保 `entryHtml` 首屏包含至少一张本地图片
 6. 保证所有页面和资源都用相对路径互相引用
 7. 调用 `prepare_report_upload` → 直传 OSS → `complete_report_upload` → 轮询 `get_report_upload_status`
 
@@ -240,10 +237,10 @@ OpenClaw 不是定义上传协议的一方，它的职责是：
 ## 9. 上传前最终检查清单
 
 - [ ] 有 `manifest.json`
-- [ ] `slug/title/brand/season/year/entryHtml/coverImage` 已填写
+- [ ] `slug/brand/season/year/entryHtml` 已填写
 - [ ] `entryHtml` 指向真实文件
-- [ ] `coverImage` 指向真实文件
-- [ ] `coverImage` 与报告第一页/首屏内容一致
+- [ ] 如填写 `coverImage`，它指向真实文件
+- [ ] 如未填写 `coverImage`，`entryHtml` 首屏存在本地图片
 - [ ] 如有 `pages`，每个页面都真实存在
 - [ ] 如有 `featuresFile`，路径真实存在
 - [ ] 所有 HTML/CSS/JS 资源引用都为 zip 内相对路径

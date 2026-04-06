@@ -23,6 +23,52 @@ def _get_pg():
     return psycopg.connect(settings.POSTGRES_DSN)
 
 
+def _serialize_gallery_public(row: dict) -> dict:
+    """Return only public gallery fields for the inspiration UI.
+
+    Keep source provenance internal so upstream data URLs are never exposed to
+    the client by accident.
+    """
+    payload = {
+        "id": row.get("id"),
+        "title": row.get("title"),
+        "description": row.get("description"),
+        "category": row.get("category"),
+        "tags": row.get("tags") or [],
+        "cover_url": row.get("cover_url") or "",
+        "status": row.get("status"),
+        "image_count": row.get("image_count") or 0,
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+    if payload["created_at"]:
+        payload["created_at"] = payload["created_at"].isoformat()
+    if payload["updated_at"]:
+        payload["updated_at"] = payload["updated_at"].isoformat()
+
+    return payload
+
+
+def _serialize_gallery_image_public(row: dict) -> dict:
+    payload = {
+        "id": row.get("id"),
+        "image_url": row.get("image_url"),
+        "thumbnail_url": row.get("thumbnail_url") or "",
+        "caption": row.get("caption") or "",
+        "sort_order": row.get("sort_order") or 0,
+        "width": row.get("width"),
+        "height": row.get("height"),
+        "created_at": row.get("created_at"),
+        "colors": row.get("colors"),
+    }
+
+    if payload["created_at"]:
+        payload["created_at"] = payload["created_at"].isoformat()
+
+    return payload
+
+
 @router.get("")
 async def list_galleries(
     category: Optional[str] = Query(None),
@@ -58,20 +104,14 @@ async def list_galleries(
 
             cur.execute(
                 f"""SELECT id, title, description, category, tags, cover_url,
-                           source, status, image_count, created_at, updated_at
+                           status, image_count, created_at, updated_at
                     FROM galleries {where}
                     ORDER BY created_at DESC
                     LIMIT %s OFFSET %s""",
                 params + [limit, offset],
             )
             columns = [desc[0] for desc in cur.description]
-            rows = [dict(zip(columns, row)) for row in cur.fetchall()]
-
-    for g in rows:
-        if g.get("created_at"):
-            g["created_at"] = g["created_at"].isoformat()
-        if g.get("updated_at"):
-            g["updated_at"] = g["updated_at"].isoformat()
+            rows = [_serialize_gallery_public(dict(zip(columns, row))) for row in cur.fetchall()]
 
     return {
         "success": True,
@@ -90,7 +130,7 @@ async def get_gallery(gallery_id: str):
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT id, title, description, category, tags, cover_url,
-                          source, status, image_count, created_at, updated_at
+                          status, image_count, created_at, updated_at
                    FROM galleries WHERE id = %s""",
                 [gallery_id],
             )
@@ -101,7 +141,7 @@ async def get_gallery(gallery_id: str):
                     content={"success": False, "error": "图集不存在"},
                 )
             columns = [desc[0] for desc in cur.description]
-            gallery = dict(zip(columns, row))
+            gallery = _serialize_gallery_public(dict(zip(columns, row)))
 
             cur.execute(
                 """SELECT id, image_url, thumbnail_url, caption,
@@ -112,17 +152,10 @@ async def get_gallery(gallery_id: str):
                 [gallery_id],
             )
             img_columns = [desc[0] for desc in cur.description]
-            images = [dict(zip(img_columns, r)) for r in cur.fetchall()]
-
-    if gallery.get("created_at"):
-        gallery["created_at"] = gallery["created_at"].isoformat()
-    if gallery.get("updated_at"):
-        gallery["updated_at"] = gallery["updated_at"].isoformat()
+            images = [_serialize_gallery_image_public(dict(zip(img_columns, r))) for r in cur.fetchall()]
 
     gallery["images"] = []
     for img in images:
-        if img.get("created_at"):
-            img["created_at"] = img["created_at"].isoformat()
         gallery["images"].append(img)
 
     return {"success": True, "data": gallery}
@@ -254,4 +287,3 @@ async def delete_gallery(
     oss.delete_prefix(f"gallery/{gallery_id}/")
 
     return {"success": True, "message": "图集已删除"}
-

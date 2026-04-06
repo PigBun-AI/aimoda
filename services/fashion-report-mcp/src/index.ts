@@ -3,6 +3,8 @@
  * aimoda-fashion-report-mcp — 报告管理 MCP 服务
  *
  * 工具:
+ *   get_openclaw_upload_contract — 返回 OpenClaw 机器可执行上传合同
+ *   get_openclaw_report_template — 返回 OpenClaw 报告包模板
  *   get_report_spec  — 返回报告打包规范
  *   prepare_report_upload  — 创建直传 OSS 上传任务
  *   complete_report_upload — 通知后端开始异步处理
@@ -94,6 +96,22 @@ async function proxyGetReportSpec() {
   return payload.spec;
 }
 
+async function proxyGetOpenclawUploadContract() {
+  return callInternalApi<JsonObject>(
+    "/api/internal/report-mcp/openclaw/upload-contract",
+    { method: "GET" },
+    { operation: "get_openclaw_upload_contract" },
+  );
+}
+
+async function proxyGetOpenclawReportTemplate() {
+  return callInternalApi<JsonObject>(
+    "/api/internal/report-mcp/openclaw/report-template",
+    { method: "GET" },
+    { operation: "get_openclaw_report_template" },
+  );
+}
+
 async function proxyListReports(slug?: string, page = 1, limit = 20) {
   const query = slug
     ? `slug=${encodeURIComponent(slug)}`
@@ -174,10 +192,65 @@ function createServer(): McpServer {
   });
 
   server.tool(
+    "get_openclaw_upload_contract",
+    `获取 OpenClaw 专用的机器可执行上传合同。
+返回: 必填字段、硬失败错误码、服务端自动兜底能力、推荐工作流、next_action。
+适用场景: OpenClaw 在打包/上传前必须先调用。`,
+    {},
+    async () => {
+      try {
+        const result = await proxyGetOpenclawUploadContract();
+        logEvent("tool_result", { tool: "get_openclaw_upload_contract", ok: true });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        logEvent("tool_result", { tool: "get_openclaw_upload_contract", ok: false, error: (err as Error).message });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({ success: false, error: (err as Error).message }),
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "get_openclaw_report_template",
+    `获取 OpenClaw 专用报告 ZIP 模板。
+返回: 推荐目录结构、manifest 模板、打包注意事项、next_action。`,
+    {},
+    async () => {
+      try {
+        const result = await proxyGetOpenclawReportTemplate();
+        logEvent("tool_result", { tool: "get_openclaw_report_template", ok: true });
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (err) {
+        logEvent("tool_result", { tool: "get_openclaw_report_template", ok: false, error: (err as Error).message });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({ success: false, error: (err as Error).message }),
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
     "get_report_spec",
     `获取 WWWD 报告打包规范。
 返回: 文件夹结构、命名规范、必需文件说明、上传流程、检查清单。
-适用场景: Agent 生成报告前应先查阅此规范。`,
+适用场景: 人类或调试场景查看完整规范；OpenClaw 正式执行时优先调用 get_openclaw_upload_contract。`,
     {},
     async () => {
       try {

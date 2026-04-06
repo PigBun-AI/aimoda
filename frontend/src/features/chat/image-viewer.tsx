@@ -22,17 +22,49 @@ export function ImageViewer({ image, activeLabelKey = null, onLabelSearch }: Ima
   const [isDragging, setIsDragging] = useState(false)
   const [loading, setLoading] = useState(true)
   const [aspectRatio, setAspectRatio] = useState<number | null>(null)
+  const [frameBox, setFrameBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
   const dragStart = useRef<{ x: number; y: number; px: number; py: number } | null>(null)
   const lastTap = useRef<number>(0)
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const frameRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setScale(1)
     setPosition({ x: 0, y: 0 })
     setLoading(true)
     setAspectRatio(null)
+    setFrameBox(null)
   }, [image.image_id])
+
+  useEffect(() => {
+    const container = containerRef.current
+    const frame = frameRef.current
+    if (!container || !frame) return
+
+    const updateFrameBox = () => {
+      const containerRect = container.getBoundingClientRect()
+      const frameRect = frame.getBoundingClientRect()
+      setFrameBox({
+        left: frameRect.left - containerRect.left,
+        top: frameRect.top - containerRect.top,
+        width: frameRect.width,
+        height: frameRect.height,
+      })
+    }
+
+    updateFrameBox()
+
+    const resizeObserver = new ResizeObserver(() => updateFrameBox())
+    resizeObserver.observe(container)
+    resizeObserver.observe(frame)
+    window.addEventListener('resize', updateFrameBox)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateFrameBox)
+    }
+  }, [aspectRatio, image.image_id])
 
   useEffect(() => {
     const el = containerRef.current
@@ -130,6 +162,7 @@ export function ImageViewer({ image, activeLabelKey = null, onLabelSearch }: Ima
       )}
 
       <div
+        ref={frameRef}
         className="relative flex items-center justify-center border border-border bg-card/40"
         style={{
           overflow: 'hidden',
@@ -155,10 +188,16 @@ export function ImageViewer({ image, activeLabelKey = null, onLabelSearch }: Ima
           onError={() => setLoading(false)}
           draggable={false}
         />
-        {showHint && !loading && (
-          <ImageLabels image={image} activeLabelKey={activeLabelKey} onLabelSearch={onLabelSearch} />
-        )}
       </div>
+
+      {showHint && !loading && frameBox && (
+        <ImageLabels
+          image={image}
+          anchorBox={frameBox}
+          activeLabelKey={activeLabelKey}
+          onLabelSearch={onLabelSearch}
+        />
+      )}
     </div>
   )
 }

@@ -4,7 +4,7 @@ import pytest
 
 from backend.app.services import report_uploader
 from backend.app.services import oss_service
-from backend.app.exceptions import AppError
+from backend.app.services.report_package_errors import ReportPackageError
 
 
 class FakeOSS:
@@ -144,18 +144,21 @@ def test_upload_report_rewrites_root_level_assets_for_nested_html(tmp_path, monk
     assert 'src="../assets/image_0000.jpg"' in uploaded_html
 
 
-def test_upload_report_requires_explicit_cover_instead_of_random_image(tmp_path, monkeypatch):
+def test_upload_report_uses_first_entry_image_as_cover_when_cover_not_provided(tmp_path, monkeypatch):
     report_root = tmp_path / "report"
     (report_root / "pages").mkdir(parents=True)
     (report_root / "assets").mkdir()
-    (report_root / "pages" / "report.html").write_text("<html><body>ok</body></html>", encoding="utf-8")
+    (report_root / "pages" / "report.html").write_text(
+        '<html><body><img src="../assets/look-001.jpg"></body></html>',
+        encoding="utf-8",
+    )
     (report_root / "assets" / "look-001.jpg").write_bytes(b"image")
     (report_root / "manifest.json").write_text(
         json.dumps(
             {
                 "specVersion": "2.0",
-                "slug": "no-cover-report",
-                "title": "No Cover Report",
+                "slug": "auto-cover-report",
+                "title": "Auto Cover Report",
                 "brand": "Aimoda",
                 "season": "AW",
                 "year": 2026,
@@ -169,7 +172,38 @@ def test_upload_report_requires_explicit_cover_instead_of_random_image(tmp_path,
     monkeypatch.setattr(report_uploader, "get_oss_service", lambda: fake_oss)
     monkeypatch.setattr(oss_service.settings, "OSS_PUBLIC_BASE", None)
 
-    with pytest.raises(AppError) as exc:
-        report_uploader.upload_report_to_oss(report_root, "no-cover-report")
+    result = report_uploader.upload_report_to_oss(report_root, "auto-cover-report")
 
-    assert "coverImage" in str(exc.value) or "缺少封面图" in str(exc.value)
+    assert result.cover_url == "https://oss.example.com/reports/auto-cover-report/assets/look-001.jpg"
+
+
+def test_upload_report_rejects_large_inline_images(tmp_path, monkeypatch):
+    report_root = tmp_path / "report"
+    (report_root / "pages").mkdir(parents=True)
+    inline_payload = "a" * (9 * 1024)
+    (report_root / "pages" / "report.html").write_text(
+        f'<html><body><img src="data:image/png;base64,{inline_payload}"></body></html>',
+        encoding="utf-8",
+    )
+    (report_root / "manifest.json").write_text(
+        json.dumps(
+            {
+                "specVersion": "2.1",
+                "slug": "inline-report",
+                "title": "Inline Report",
+                "brand": "Aimoda",
+                "season": "AW",
+                "year": 2026,
+                "entryHtml": "pages/report.html",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    fake_oss = FakeOSS()
+    monkeypatch.setattr(report_uploader, "get_oss_service", lambda: fake_oss)
+
+    with pytest.raises(ReportPackageError) as exc:
+        report_uploader.upload_report_to_oss(report_root, "inline-report")
+
+    assert exc.value.code == "inline_image_too_large"
