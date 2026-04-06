@@ -48,7 +48,7 @@ from ..services.chat_service import (
 )
 from ..services.oss_service import get_oss_service
 from ..services.websocket_manager import ws_manager
-from ..services.chat_run_registry import chat_run_registry
+from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registry
 from ..services.auth_token import verify_access_token
 from ..repositories.session_repo import is_session_valid
 from ..agent.graph import get_agent
@@ -825,6 +825,7 @@ async def chat_endpoint(
                 message=agent_input,
                 history=req.history,
                 thread_id=thread_id,
+                run_id=run_id,
                 result=stream_result,
             ):
                 _enqueue_stream_chunk(chunk)
@@ -850,7 +851,7 @@ async def chat_endpoint(
                 execution_status="completed",
                 run_id=run_id,
             )
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, ChatRunCancelledError):
             await _sync_assistant_progress(force=True, stream_state="interrupted")
             if stream_result.content_blocks:
                 await asyncio.to_thread(
@@ -1573,6 +1574,7 @@ async def websocket_chat(websocket: WebSocket):
                         message=agent_input,
                         history=history,
                         thread_id=thread_id,
+                        run_id=run_id,
                         result=stream_result,
                     ):
                         await websocket.send_text(event)
@@ -1597,7 +1599,7 @@ async def websocket_chat(websocket: WebSocket):
                         execution_status="completed",
                         run_id=run_id,
                     )
-                except (WebSocketDisconnect, asyncio.CancelledError):
+                except (WebSocketDisconnect, asyncio.CancelledError, ChatRunCancelledError):
                     await _sync_assistant_progress(force=True, stream_state="interrupted")
                     if stream_result.content_blocks:
                         await asyncio.to_thread(

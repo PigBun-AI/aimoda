@@ -1,6 +1,8 @@
 import asyncio
 
-from backend.app.services.chat_run_registry import ChatRunRegistry
+import pytest
+
+from backend.app.services.chat_run_registry import ChatRunCancelledError, ChatRunRegistry
 
 
 def test_stop_session_cancels_matching_run():
@@ -63,6 +65,41 @@ def test_stop_session_rejects_other_users():
 
         assert stopped is False
         task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(_scenario())
+
+
+def test_stop_session_marks_run_as_stop_requested():
+    async def _scenario():
+        registry = ChatRunRegistry()
+
+        async def _worker():
+            await asyncio.sleep(60)
+
+        task = asyncio.create_task(_worker())
+        await registry.register(
+            session_id="session-1",
+            user_id=7,
+            run_id="run-1",
+            task=task,
+        )
+
+        stopped = await registry.stop_session(
+            session_id="session-1",
+            user_id=7,
+            run_id="run-1",
+        )
+
+        assert stopped is True
+        assert registry.is_stop_requested(run_id="run-1") is True
+
+        with pytest.raises(ChatRunCancelledError):
+            registry.raise_if_stop_requested(run_id="run-1", stage="tool")
+
         try:
             await task
         except asyncio.CancelledError:

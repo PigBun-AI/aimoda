@@ -8,6 +8,7 @@ LangGraph tool definitions only.
 import base64
 import httpx
 import math
+from typing import Callable
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Filter, FieldCondition, MatchValue, MatchAny, PayloadSchemaType, Range,
@@ -77,6 +78,12 @@ def get_collection() -> str:
 # ═══════════════════════════════════════════════════════════════
 
 _embedding_client: httpx.Client | None = None
+CancelCheck = Callable[[], None] | None
+
+
+def _call_cancel_check(cancel_check: CancelCheck) -> None:
+    if cancel_check:
+        cancel_check()
 
 
 def _get_embedding_client() -> httpx.Client:
@@ -91,14 +98,17 @@ def _post_embeddings(
     *,
     url: str,
     payload: dict,
+    cancel_check: CancelCheck = None,
 ) -> dict:
+    _call_cancel_check(cancel_check)
     client = _get_embedding_client()
     resp = client.post(url, json=payload)
     resp.raise_for_status()
+    _call_cancel_check(cancel_check)
     return resp.json()
 
 
-def encode_text(text: str) -> list[float]:
+def encode_text(text: str, *, cancel_check: CancelCheck = None) -> list[float]:
     """Encode text to embedding vector via OpenAI-compatible endpoint.
 
     Uses Marqo/marqo-fashionSigLIP model (768-dim) at the configured
@@ -108,6 +118,7 @@ def encode_text(text: str) -> list[float]:
     data = _post_embeddings(
         url=f"{settings.EMBEDDING_URL}/v1/embeddings",
         payload={"model": settings.EMBEDDING_MODEL, "input": text},
+        cancel_check=cancel_check,
     )
     return data["data"][0]["embedding"]
 
@@ -117,16 +128,18 @@ def encode_text_with_model(
     *,
     model: str,
     base_url: str,
+    cancel_check: CancelCheck = None,
 ) -> list[float]:
     """Encode text with an explicit model/base_url pair."""
     data = _post_embeddings(
         url=f"{base_url.rstrip('/')}/v1/embeddings",
         payload={"model": model, "input": text, "input_type": "text"},
+        cancel_check=cancel_check,
     )
     return data["data"][0]["embedding"]
 
 
-def encode_style_text(text: str) -> list[float]:
+def encode_style_text(text: str, *, cancel_check: CancelCheck = None) -> list[float]:
     """Encode style-knowledge text with the dedicated text-retrieval model."""
     from ..config import settings
 
@@ -134,6 +147,7 @@ def encode_style_text(text: str) -> list[float]:
         text,
         model=settings.STYLE_KNOWLEDGE_EMBEDDING_MODEL,
         base_url=settings.STYLE_KNOWLEDGE_EMBEDDING_URL,
+        cancel_check=cancel_check,
     )
 
 
@@ -142,6 +156,7 @@ def encode_image(
     image_base64: str | None = None,
     image_url: str | None = None,
     media_type: str = "image/jpeg",
+    cancel_check: CancelCheck = None,
 ) -> list[float]:
     """Encode an image into the shared FashionCLIP embedding space."""
     from ..config import settings
@@ -153,8 +168,10 @@ def encode_image(
             else f"data:{media_type};base64,{image_base64}"
         )
     elif image_url:
+        _call_cancel_check(cancel_check)
         image_resp = httpx.get(image_url, timeout=30.0)
         image_resp.raise_for_status()
+        _call_cancel_check(cancel_check)
         content_type = image_resp.headers.get("content-type", media_type)
         encoded = base64.b64encode(image_resp.content).decode("utf-8")
         payload_input = f"data:{content_type};base64,{encoded}"
@@ -168,6 +185,7 @@ def encode_image(
             "input": payload_input,
             "input_type": "image",
         },
+        cancel_check=cancel_check,
     )
     return data["data"][0]["embedding"]
 
@@ -387,11 +405,13 @@ def iter_scroll(
     *,
     max_results: int = MAX_SCROLL,
     with_payload=True,
+    cancel_check: CancelCheck = None,
 ):
     """Yield scroll results page by page without materializing the full dataset."""
     next_offset = None
     fetched = 0
     while fetched < max_results:
+        _call_cancel_check(cancel_check)
         batch_size = min(SCROLL_PAGE, max_results - fetched)
         pts, next_offset = client.scroll(
             collection,
@@ -401,7 +421,9 @@ def iter_scroll(
             with_payload=with_payload,
             with_vectors=False,
         )
-        for point in pts:
+        for index, point in enumerate(pts):
+            if index % 50 == 0:
+                _call_cancel_check(cancel_check)
             yield point
         fetched += len(pts)
         if next_offset is None or len(pts) < batch_size:
@@ -409,7 +431,7 @@ def iter_scroll(
 
 
 def scroll_all(client, collection: str, scroll_filter=None,
-               max_results: int = MAX_SCROLL, with_payload=True) -> list:
+               max_results: int = MAX_SCROLL, with_payload=True, cancel_check: CancelCheck = None) -> list:
     """Paginated scroll that fetches up to *max_results* points."""
     all_pts: list = []
     for point in iter_scroll(
@@ -418,6 +440,7 @@ def scroll_all(client, collection: str, scroll_filter=None,
         scroll_filter=scroll_filter,
         max_results=max_results,
         with_payload=with_payload,
+        cancel_check=cancel_check,
     ):
         all_pts.append(point)
     return all_pts

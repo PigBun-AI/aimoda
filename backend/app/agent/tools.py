@@ -49,6 +49,7 @@ from .harness import (
 )
 from .color_utils import COLOR_KEYWORDS, color_matches
 from ..services.chat_service import create_artifact, set_session_agent_runtime
+from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registry
 from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
 from ..services.style_knowledge_service import search_style_knowledge
 from ..services.style_feedback_service import record_style_gap_feedback
@@ -168,6 +169,26 @@ def _session_id_from_config(config: RunnableConfig | None) -> str | None:
     if len(parts) < 2:
         return None
     return parts[1]
+
+
+def _run_id_from_config(config: RunnableConfig | None) -> str | None:
+    if not config:
+        return None
+    configurable = config.get("configurable", {})
+    run_id = configurable.get("run_id")
+    return str(run_id) if run_id else None
+
+
+def _ensure_run_active(config: RunnableConfig | None, *, stage: str) -> None:
+    chat_run_registry.raise_if_stop_requested(
+        run_id=_run_id_from_config(config),
+        session_id=_session_id_from_config(config),
+        stage=stage,
+    )
+
+
+def _cancel_check_from_config(config: RunnableConfig | None, *, stage: str):
+    return lambda: _ensure_run_active(config, stage=stage)
 
 
 def _serialize_search_session(session: dict) -> dict:
@@ -403,12 +424,15 @@ def _facet_trend_counts(
     qdrant_filter,
     dimension: str,
     top_n: int,
+    cancel_check=None,
 ) -> tuple[dict[str, int], int] | None:
     facet_key = _TREND_FACET_KEYS.get(dimension)
     if not facet_key:
         return None
 
     try:
+        if cancel_check:
+            cancel_check()
         response = client.facet(
             collection_name=collection,
             key=facet_key,
@@ -423,11 +447,15 @@ def _facet_trend_counts(
             if value:
                 counter[value] = int(hit.count)
 
+        if cancel_check:
+            cancel_check()
         total_items = client.count(
             collection_name=collection,
             count_filter=qdrant_filter,
             exact=False,
         ).count
+        if cancel_check:
+            cancel_check()
         return counter, int(total_items)
     except Exception:
         return None
@@ -510,6 +538,7 @@ def fashion_vision(
     Use this whenever the user's request depends on understanding uploaded images.
     The tool returns compact structured JSON optimized for retrieval planning.
     """
+    _ensure_run_active(config, stage="fashion_vision:start")
     thread_id = get_thread_id(config)
     image_blocks = get_session_image_blocks(thread_id)
     if not image_blocks:
@@ -519,7 +548,11 @@ def fashion_vision(
         }, ensure_ascii=False)
 
     try:
+        _ensure_run_active(config, stage="fashion_vision:before_analysis")
         analysis = _run_coro_sync(analyze_fashion_images(image_blocks, user_request=user_request))
+        _ensure_run_active(config, stage="fashion_vision:after_analysis")
+    except ChatRunCancelledError:
+        raise
     except FashionVisionError as exc:
         return json.dumps({
             "ok": False,
@@ -582,8 +615,12 @@ def search_style(
     2. use retrieval_plan.retrieval_query_en to call start_collection(...)
     3. only then add high-confidence concrete filters if needed
     """
+    _ensure_run_active(config, stage="search_style:start")
     try:
         payload = search_style_knowledge(query, limit=max(1, min(limit, 5)))
+        _ensure_run_active(config, stage="search_style:after_lookup")
+    except ChatRunCancelledError:
+        raise
     except Exception as exc:
         return json.dumps({
             "status": "error",
@@ -673,7 +710,9 @@ def start_collection(
 
     Returns: Total number of images in the initial collection.
     """
+    _ensure_run_active(config, stage="start_collection:start")
     client = get_qdrant()
+    cancel_check = _cancel_check_from_config(config, stage="start_collection:compute")
 
     thread_id = get_thread_id(config)
     query_context = get_query_context(thread_id) or {}
@@ -682,9 +721,9 @@ def start_collection(
     style_retrieval_query = str(query_context.get("style_retrieval_query", "")).strip()
     style_rich_text = str(query_context.get("style_rich_text", "")).strip()
 
-    text_vector = encode_text(query) if query else None
+    text_vector = encode_text(query, cancel_check=cancel_check) if query else None
     style_semantic_text = style_rich_text or style_retrieval_query
-    style_vector = encode_text(style_semantic_text) if style_semantic_text else None
+    style_vector = encode_text(style_semantic_text, cancel_check=cancel_check) if style_semantic_text else None
     fused_vector = _fuse_query_vectors(
         text_vector=text_vector,
         style_vector=style_vector,
@@ -705,7 +744,7 @@ def start_collection(
 
     set_session(config, session)
     _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
-    count = count_session(client, session)
+    count = count_session(client, session, cancel_check=cancel_check)
     return json.dumps({
         "status": "collection_started",
         "total": count,
@@ -754,12 +793,14 @@ def add_filter(
 
     Returns: remaining count. If 0, suggests available values — DO NOT add this filter.
     """
+    _ensure_run_active(config, stage="add_filter:start")
     session = get_session(config)
     if not session.get("active"):
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
     thread_id = get_thread_id(config)
+    cancel_check = _cancel_check_from_config(config, stage="add_filter:compute")
 
     dimension = (_normalize_optional_tool_string(dimension) or "").lower()
     value = _normalize_optional_tool_string(value)
@@ -901,7 +942,7 @@ def add_filter(
     test_filters = session["filters"] + [entry]
     test_session = dict(session)
     test_session["filters"] = test_filters
-    count = count_session(client, test_session)
+    count = count_session(client, test_session, cancel_check=cancel_check)
 
     if count > 0:
         clear_invalid_filter_attempt(
@@ -931,7 +972,7 @@ def add_filter(
             "resolved_category": inferred_category,
         })
     else:
-        available = available_values(client, dimension, category, session["filters"])
+        available = available_values(client, dimension, category, session["filters"], cancel_check=cancel_check)
         return json.dumps({
             "action": "filter_rejected",
             "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
@@ -953,11 +994,13 @@ def remove_filter(
     config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
     """Remove a previously added filter. Undoes the narrowing for that dimension."""
+    _ensure_run_active(config, stage="remove_filter:start")
     session = get_session(config)
     if not session.get("active"):
         return json.dumps({"error": "No active collection."})
 
     client = get_qdrant()
+    cancel_check = _cancel_check_from_config(config, stage="remove_filter:compute")
 
     removed = []
     new_filters = []
@@ -978,7 +1021,7 @@ def remove_filter(
     session["filters"] = new_filters
     set_session(config, session)
     _persist_agent_runtime_state(config=config, thread_id=get_thread_id(config), session=session)
-    count = count_session(client, session)
+    count = count_session(client, session, cancel_check=cancel_check)
 
     return json.dumps({
         "action": "filter_removed",
@@ -1000,16 +1043,20 @@ def peek_collection(
     """Secretly preview the current filtered collection to self-check.
     This does NOT display images to the user. Only returns text metadata for you to review.
     """
+    _ensure_run_active(config, stage="peek_collection:start")
     session = get_session(config)
     if not session.get("active"):
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
-    total = count_session(client, session)
-    results = get_session_page(client, session, offset=0, limit=limit)
+    cancel_check = _cancel_check_from_config(config, stage="peek_collection:compute")
+    total = count_session(client, session, cancel_check=cancel_check)
+    results = get_session_page(client, session, offset=0, limit=limit, cancel_check=cancel_check)
 
     peek_results = []
-    for p in results:
+    for index, p in enumerate(results):
+        if index % 4 == 0:
+            cancel_check()
         garment_details = []
         for g in p.payload.get("garments", []):
             detail = g.get("name", "")
@@ -1050,12 +1097,14 @@ def show_collection(
     """Get the final collection and send it to the frontend for display.
     Call this ONLY when you are completely finished filtering.
     """
+    _ensure_run_active(config, stage="show_collection:start")
     session = get_session(config)
     if not session.get("active"):
         return json.dumps({"error": "No active collection. Call start_collection first."})
 
     client = get_qdrant()
-    count = count_session(client, session)
+    cancel_check = _cancel_check_from_config(config, stage="show_collection:compute")
+    count = count_session(client, session, cancel_check=cancel_check)
 
     filter_summary = []
     for f in session["filters"]:
@@ -1069,7 +1118,9 @@ def show_collection(
     serializable_session = _serialize_search_session(session)
 
     sample_images = []
-    for point in get_session_page(client, session, offset=0, limit=8):
+    for index, point in enumerate(get_session_page(client, session, offset=0, limit=8, cancel_check=cancel_check)):
+        if index % 4 == 0:
+            cancel_check()
         item = format_result(point.payload, getattr(point, "score", 0))
         sample_images.append(item)
 
@@ -1108,6 +1159,7 @@ def explore_colors(
     color: str,
     categories: Optional[list[str]] = None,
     brand: Optional[str] = None,
+    config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
     """Explore images by COLOR FAMILY. Reports companion colors and shade distribution.
 
@@ -1116,10 +1168,12 @@ def explore_colors(
         categories: Optional garment type filter
         brand: Optional brand filter
     """
+    _ensure_run_active(config, stage="explore_colors:start")
     collection = get_collection()
     client = get_qdrant()
+    cancel_check = _cancel_check_from_config(config, stage="explore_colors:compute")
     qdrant_filter = build_qdrant_filter(categories=categories, brand=brand)
-    pts = scroll_all(client, collection, scroll_filter=qdrant_filter)
+    pts = scroll_all(client, collection, scroll_filter=qdrant_filter, cancel_check=cancel_check)
 
     refs = COLOR_KEYWORDS.get(color.lower())
     if not refs:
@@ -1129,7 +1183,9 @@ def explore_colors(
     shades: dict[str, int] = {}
     companions: dict[str, int] = {}
 
-    for p in pts:
+    for index, p in enumerate(pts):
+        if index % 50 == 0:
+            cancel_check()
         found = False
         item_companions = []
         for g in p.payload.get("garments", []):
@@ -1194,7 +1250,9 @@ def analyze_trends(
         search: Optional fuzzy search term — only show values containing this text.
             Example: search="hound" will match "houndstooth", "hound's tooth", etc.
     """
+    _ensure_run_active(config, stage="analyze_trends:start")
     thread_id = get_thread_id(config) if config else ""
+    cancel_check = _cancel_check_from_config(config, stage="analyze_trends:compute")
     dimension = (_normalize_optional_tool_string(dimension) or "").lower()
     brand = _normalize_optional_tool_string(brand)
     search = _normalize_optional_tool_string(search)
@@ -1259,6 +1317,7 @@ def analyze_trends(
         qdrant_filter=qdrant_filter,
         dimension=dimension,
         top_n=top_n,
+        cancel_check=cancel_check,
     )
 
     if facet_result is not None:
@@ -1270,6 +1329,7 @@ def analyze_trends(
             collection,
             scroll_filter=qdrant_filter,
             with_payload=payload_selector,
+            cancel_check=cancel_check,
         ):
             items_analyzed += 1
             _count_trend_values_from_payload(
@@ -1300,8 +1360,12 @@ def analyze_trends(
 # ═══════════════════════════════════════════════════════════════
 
 @tool
-def get_image_details(image_id: str) -> str:
+def get_image_details(
+    image_id: str,
+    config: Annotated[RunnableConfig, InjectedToolArg] = None,
+) -> str:
     """Get full details of a specific image by its ID."""
+    _ensure_run_active(config, stage="get_image_details:start")
     collection = get_collection()
     client = get_qdrant()
     results = client.scroll(
