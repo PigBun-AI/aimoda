@@ -138,7 +138,7 @@ export function ImageViewer({ image, activeLabelKey = null, onLabelSearch }: Ima
   return (
     <div
       ref={containerRef}
-      className={`group/viewer relative flex h-full w-full items-center justify-center p-5 sm:p-8 ${cursorStyle}`}
+      className={`group/viewer relative flex h-full min-h-[min(62svh,720px)] w-full items-center justify-center p-4 sm:min-h-[min(68svh,820px)] sm:p-6 lg:min-h-0 lg:p-8 ${cursorStyle}`}
       style={{ overflow: 'hidden' }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}

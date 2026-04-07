@@ -138,8 +138,8 @@ type RenderSegment =
 export function MessageBubble({ msg, onOpenDrawer }: MessageBubbleProps) {
   if (msg.role === 'user') {
     return (
-      <div className="mb-6 flex justify-end animate-in fade-in slide-in-from-bottom-1 duration-normal">
-        <div className="max-w-[78%] space-y-2 sm:max-w-[75%]">
+      <div className="mb-8 flex justify-end animate-in fade-in slide-in-from-bottom-1 duration-normal">
+        <div className="max-w-[78%] space-y-2.5 sm:max-w-[75%]">
           {msg.content.map((block, index) => (
             <UserBlockRenderer key={`user-block-${index}`} block={block} />
           ))}
@@ -151,8 +151,8 @@ export function MessageBubble({ msg, onOpenDrawer }: MessageBubbleProps) {
   const segments = buildRenderSegments(msg.content)
 
   return (
-    <div className="mb-6 flex justify-start animate-in fade-in slide-in-from-bottom-1 duration-normal">
-      <div className="w-full max-w-[90%] space-y-2 sm:max-w-[88%]">
+    <div className="mb-8 flex justify-start animate-in fade-in slide-in-from-bottom-1 duration-normal">
+      <div className="w-full max-w-[90%] space-y-2.5 sm:max-w-[88%]">
         {segments.map((segment) => (
           <Fragment key={segment.key}>
             {segment.kind === 'block' ? (
@@ -172,7 +172,7 @@ function UserBlockRenderer({ block }: { block: ContentBlock }) {
 
   if (block.type === 'text') {
     return block.text ? (
-      <div className="border border-primary bg-primary px-4 py-3 text-sm whitespace-pre-wrap text-primary-foreground">
+      <div className="type-chat-body border border-foreground bg-foreground px-4 py-3 whitespace-pre-wrap text-background">
         {block.text}
       </div>
     ) : null
@@ -298,20 +298,20 @@ function ShowCollectionPendingCard() {
   const { t } = useTranslation('common')
 
   return (
-    <div className="overflow-hidden border border-border bg-card animate-in fade-in slide-in-from-bottom-1 duration-normal">
-      <div className="flex items-start justify-between gap-3 px-4 py-4">
+    <div className="overflow-hidden border border-border/80 bg-background animate-in fade-in slide-in-from-bottom-1 duration-normal">
+      <div className="flex items-start justify-between gap-3 px-4 py-4 sm:px-5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-accent">
-            <Images size={15} className="text-primary" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-border/70 bg-background">
+            <Images size={13} className="text-muted-foreground" />
           </div>
           <div className="space-y-2">
             <div className="h-4 w-24 rounded bg-muted animate-pulse" />
             <div className="h-3 w-44 rounded bg-muted/80 animate-pulse" />
           </div>
         </div>
-        <div className="inline-flex items-center gap-2 border border-border bg-background px-3 py-1.5">
+        <div className="inline-flex items-center gap-2 border border-border/80 bg-background px-3 py-1.5">
           <Loader2 size={12} className="animate-spin text-muted-foreground" />
-          <span className="type-ui-label-sm text-muted-foreground">{t('generatingResults')}</span>
+          <span className="type-chat-meta text-muted-foreground">{t('generatingResults')}</span>
         </div>
       </div>
     </div>
@@ -338,27 +338,28 @@ function ToolTraceGroup({
   const [collapsed, setCollapsed] = useState(true)
 
   return (
-    <div className="overflow-hidden border border-border bg-muted/20">
+    <div className="overflow-hidden border border-border/80 bg-background">
       <button
         type="button"
         onClick={() => setCollapsed((prev) => !prev)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/40"
+        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/[0.14] sm:px-5"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-          <span className="type-ui-label-sm text-foreground/84">{t('toolTraceTitle')}</span>
-          <span className="type-ui-label-xs text-muted-foreground">{t('toolCallsCount', { count: stats.toolCount })}</span>
-          {stats.runningCount > 0 && <span className="type-ui-label-xs text-foreground">{t('toolRunningCount', { count: stats.runningCount })}</span>}
-          {stats.errorCount > 0 && <span className="type-ui-label-xs text-foreground">{t('toolErrorCount', { count: stats.errorCount })}</span>}
+          {/* Keep tool/process typography visually secondary to the assistant reply. */}
+          <span className="type-chat-label min-w-0 truncate text-foreground/78">{t('toolTraceTitle')}</span>
+          <span className="type-chat-meta shrink-0 text-muted-foreground">{t('toolCallsCount', { count: stats.toolCount })}</span>
+          {stats.runningCount > 0 && <span className="type-chat-meta shrink-0 text-foreground/82">{t('toolRunningCount', { count: stats.runningCount })}</span>}
+          {stats.errorCount > 0 && <span className="type-chat-meta shrink-0 text-foreground/82">{t('toolErrorCount', { count: stats.errorCount })}</span>}
           {stats.toolCount > 0 && stats.runningCount === 0 && stats.errorCount === 0 && (
-            <span className="type-ui-label-xs text-foreground">{t('toolDoneCount', { count: stats.doneCount })}</span>
+            <span className="type-chat-meta shrink-0 text-foreground/82">{t('toolDoneCount', { count: stats.doneCount })}</span>
           )}
         </div>
-        <span className="type-ui-label-xs text-muted-foreground">{collapsed ? t('expand') : t('collapse')}</span>
+        <span className="type-chat-meta shrink-0 text-muted-foreground">{collapsed ? t('expand') : t('collapse')}</span>
       </button>
 
       {!collapsed && (
-        <div className="space-y-2 border-t border-border bg-background/60 px-3 pb-3 pt-3">
+        <div className="space-y-2 border-t border-border/80 bg-muted/[0.05] px-3 pb-3 pt-3 sm:px-4">
           {blocks.map((block, index) => (
             <BlockRenderer
               key={index}
@@ -379,7 +380,7 @@ function ToolTraceGroup({
 function TextBlockView({ block }: { block: { type: 'text'; text: string } }) {
   if (!block.text) return null
   return (
-    <div className="border border-border bg-secondary px-4 py-3 sm:px-5 sm:py-4">
+    <div className="border border-border/80 bg-background px-4 py-3 sm:px-5 sm:py-4">
       <ChatMarkdown content={block.text} />
     </div>
   )
@@ -392,26 +393,26 @@ function ReasoningBlockView({ block }: { block: { type: 'reasoning'; text: strin
   if (!block.text.trim()) return null
 
   return (
-    <div className="overflow-hidden border border-border bg-muted/20">
+    <div className="overflow-hidden border border-border/80 bg-background">
       <button
         type="button"
         onClick={() => setCollapsed((prev) => !prev)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/40"
+        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/[0.18] sm:px-5"
       >
         <div className="flex items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
-          <span className="type-ui-label-sm text-foreground/84">
+          <span className="type-chat-label text-foreground/84">
             {t('reasoningTraceTitle')}
           </span>
         </div>
-        <span className="type-ui-label-xs text-muted-foreground">
+        <span className="type-chat-meta text-muted-foreground">
           {collapsed ? t('expand') : t('collapse')}
         </span>
       </button>
 
       {!collapsed && (
-        <div className="border-t border-border bg-background/60 px-4 py-3">
-          <div className="type-ui-body-md border-l border-border pl-3 text-muted-foreground">
+        <div className="border-t border-border/80 bg-muted/[0.08] px-4 py-3 sm:px-5">
+          <div className="type-chat-body border-l border-border pl-3 text-muted-foreground">
             <ChatMarkdown content={block.text} />
           </div>
         </div>
@@ -428,15 +429,15 @@ function ToolCallCard({ block }: { block: { type: 'tool_use'; id: string; name: 
   const isDone = block.status === 'done'
 
   return (
-    <div className="flex items-center gap-2.5 border border-border bg-muted/35 px-3 py-2">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center border border-border bg-background">
-        <IconComp size={13} className="text-primary" />
+    <div className="flex items-center gap-2.5 border border-border/70 bg-background px-3 py-2.5 sm:px-4">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center border border-border/70 bg-background">
+        <IconComp size={12.5} className="text-muted-foreground" />
       </div>
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        <span className="type-ui-label-sm text-foreground/84">{label}</span>
-        {summary && <span className="type-ui-meta truncate text-muted-foreground">{summary}</span>}
+      <div className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className="type-chat-label shrink-0 text-foreground/80">{label}</span>
+        {summary && <span className="type-chat-meta truncate text-muted-foreground">{summary}</span>}
       </div>
-      {isDone ? <CheckCircle2 size={12} className="shrink-0 text-foreground" /> : <Loader2 size={12} className="animate-spin shrink-0 opacity-50 text-muted-foreground" />}
+      {isDone ? <CheckCircle2 size={12} className="shrink-0 text-foreground/82" /> : <Loader2 size={12} className="animate-spin shrink-0 opacity-50 text-muted-foreground" />}
     </div>
   )
 }
@@ -493,15 +494,15 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
   ]
 
   return (
-    <div className="space-y-3 border border-border bg-card px-4 py-4">
+    <div className="space-y-3 border border-border/80 bg-background px-4 py-4 sm:px-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-accent">
-            <Sparkles size={16} className="text-primary" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border/80 bg-muted/[0.14]">
+            <Sparkles size={15} className="text-foreground" />
           </div>
           <div>
-            <div className="type-ui-title-sm text-foreground">{t('toolFashionVision')}</div>
-            <div className="type-ui-meta text-muted-foreground">
+            <div className="type-chat-title text-foreground">{t('toolFashionVision')}</div>
+            <div className="type-chat-meta text-muted-foreground">
               {data.image_count ? t('imageCardCount', { count: data.image_count }) : t('imageAnalysis')}
               {data.model ? ` · ${data.model}` : ''}
             </div>
@@ -509,19 +510,19 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
         </div>
       </div>
 
-      {analysis.summary_zh && <div className="type-ui-body-md text-foreground">{analysis.summary_zh}</div>}
+      {analysis.summary_zh && <div className="type-chat-body text-foreground">{analysis.summary_zh}</div>}
 
       {analysis.retrieval_query_en && (
-        <div className="border border-border bg-muted/60 px-3 py-2">
-          <div className="type-kicker mb-1 text-muted-foreground">Retrieval Query</div>
-          <div className="type-ui-body-sm break-words text-foreground">{analysis.retrieval_query_en}</div>
+        <div className="border border-border/80 bg-muted/[0.12] px-3 py-2">
+          <div className="type-chat-kicker mb-1 text-muted-foreground">Retrieval Query</div>
+          <div className="type-chat-body break-words text-foreground">{analysis.retrieval_query_en}</div>
         </div>
       )}
 
       {analysis.style_keywords.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {analysis.style_keywords.map((keyword) => (
-            <span key={keyword} className="type-kicker inline-flex items-center border border-border bg-background px-2.5 py-1 text-foreground">
+            <span key={keyword} className="type-chat-kicker inline-flex items-center border border-border/80 bg-background px-2.5 py-1 text-foreground">
               {keyword}
             </span>
           ))}
@@ -530,10 +531,10 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
 
       {filterEntries.length > 0 && (
         <div className="space-y-2">
-          <div className="type-ui-meta text-muted-foreground">{t('suggestedHardFilters')}</div>
+          <div className="type-chat-meta text-muted-foreground">{t('suggestedHardFilters')}</div>
           <div className="flex flex-wrap gap-2">
             {filterEntries.map((item, index) => (
-              <span key={`${item.label}-${item.value}-${index}`} className="type-ui-label-sm inline-flex items-center gap-1 border border-border bg-secondary px-2.5 py-1 text-secondary-foreground">
+              <span key={`${item.label}-${item.value}-${index}`} className="type-chat-label inline-flex items-center gap-1 border border-border/80 bg-muted/[0.1] px-2.5 py-1 text-foreground">
                   <span className="type-caption text-muted-foreground">{item.label}</span>
                   <span>{item.value}</span>
                 </span>
@@ -544,10 +545,10 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
 
       {analysis.follow_up_questions_zh.length > 0 && (
         <div className="border border-dashed border-border px-3 py-2">
-          <div className="type-kicker mb-1 text-muted-foreground">{t('followUpQuestions')}</div>
+          <div className="type-chat-kicker mb-1 text-muted-foreground">{t('followUpQuestions')}</div>
           <div className="space-y-1">
             {analysis.follow_up_questions_zh.map((question) => (
-              <div key={question} className="type-ui-body-sm text-foreground/82">{question}</div>
+              <div key={question} className="type-chat-body text-foreground/82">{question}</div>
             ))}
           </div>
         </div>
@@ -572,15 +573,15 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
   ].filter((group) => group.values.length > 0)
 
   return (
-    <div className="space-y-3 border border-border bg-card px-4 py-4">
+    <div className="space-y-3 border border-border/80 bg-background px-4 py-4 sm:px-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-accent">
-            <Sparkles size={16} className="text-primary" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border/80 bg-muted/[0.14]">
+            <Sparkles size={15} className="text-foreground" />
           </div>
           <div>
-            <div className="type-ui-title-sm text-foreground">{t('toolSearchStyle')}</div>
-            <div className="type-ui-meta text-muted-foreground">
+            <div className="type-chat-title text-foreground">{t('toolSearchStyle')}</div>
+            <div className="type-chat-meta text-muted-foreground">
               {data.query ? t('styleSearchQuery', { query: data.query }) : t('abstractStyleSearch')}
               {data.search_stage ? ` · ${data.search_stage}` : ''}
             </div>
@@ -588,46 +589,46 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
         </div>
       </div>
 
-      {data.message && <div className="type-ui-body-md text-foreground">{data.message}</div>}
+      {data.message && <div className="type-chat-body text-foreground">{data.message}</div>}
 
       {richTextSummary && (
-        <div className="type-ui-body-md whitespace-pre-wrap border border-border bg-muted/30 px-3 py-2 text-foreground/90">
+        <div className="type-chat-body whitespace-pre-wrap border border-border/80 bg-muted/[0.12] px-3 py-2 text-foreground/90">
           {richTextSummary}
         </div>
       )}
 
       {primaryStyle?.style_name && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="type-kicker inline-flex items-center border border-foreground bg-foreground px-2.5 py-1 text-background">
+          <span className="type-chat-kicker inline-flex items-center border border-foreground bg-foreground px-2.5 py-1 text-background">
             {primaryStyle.style_name}
           </span>
           {primaryStyle.category && (
-            <span className="type-kicker inline-flex items-center border border-border bg-secondary px-2.5 py-1 text-secondary-foreground">
+            <span className="type-chat-kicker inline-flex items-center border border-border/80 bg-muted/[0.1] px-2.5 py-1 text-foreground">
               {primaryStyle.category}
             </span>
           )}
           {primaryStyle.match_type && (
-            <span className="type-ui-meta text-muted-foreground">{t('matchType', { value: primaryStyle.match_type })}</span>
+            <span className="type-chat-meta text-muted-foreground">{t('matchType', { value: primaryStyle.match_type })}</span>
           )}
         </div>
       )}
 
       {retrievalPlan?.retrieval_query_en && (
-        <div className="border border-border bg-muted/60 px-3 py-2">
-          <div className="type-kicker mb-1 text-muted-foreground">Retrieval Query</div>
-          <div className="type-ui-body-sm break-words text-foreground">{retrievalPlan.retrieval_query_en}</div>
+        <div className="border border-border/80 bg-muted/[0.12] px-3 py-2">
+          <div className="type-chat-kicker mb-1 text-muted-foreground">Retrieval Query</div>
+          <div className="type-chat-body break-words text-foreground">{retrievalPlan.retrieval_query_en}</div>
         </div>
       )}
 
       {featureGroups.length > 0 && (
         <div className="space-y-2">
-          <div className="type-ui-meta text-muted-foreground">{t('styleFeatures')}</div>
+          <div className="type-chat-meta text-muted-foreground">{t('styleFeatures')}</div>
           <div className="flex flex-wrap gap-2">
             {featureGroups.flatMap((group) =>
               group.values.map((value) => (
                 <span
                   key={`${group.label}-${value}`}
-                  className="type-kicker inline-flex items-center gap-1 border border-border bg-secondary px-2.5 py-1 text-secondary-foreground"
+                  className="type-chat-kicker inline-flex items-center gap-1 border border-border/80 bg-muted/[0.1] px-2.5 py-1 text-foreground"
                 >
                   <span className="type-caption text-muted-foreground">{group.label}</span>
                   <span>{value}</span>
@@ -640,14 +641,14 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
 
       {suggestedFilters.length > 0 && (
         <div className="space-y-2">
-          <div className="type-ui-meta text-muted-foreground">{t('suggestedFilters')}</div>
+          <div className="type-chat-meta text-muted-foreground">{t('suggestedFilters')}</div>
           <div className="flex flex-wrap gap-2">
             {suggestedFilters.flatMap(([key, rawValue]) => {
               const values = Array.isArray(rawValue) ? rawValue : [rawValue]
               return values.map((value) => (
                 <span
                   key={`${key}-${String(value)}`}
-                  className="type-kicker inline-flex items-center gap-1 border border-border bg-background px-2.5 py-1 text-foreground"
+                  className="type-chat-kicker inline-flex items-center gap-1 border border-border/80 bg-background px-2.5 py-1 text-foreground"
                 >
                   <span className="type-caption text-muted-foreground">{key}</span>
                   <span>{String(value)}</span>
@@ -660,10 +661,10 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
 
       {alternatives.length > 0 && (
         <div className="border border-dashed border-border px-3 py-2">
-          <div className="type-kicker mb-1 text-muted-foreground">{t('relatedStyles')}</div>
+          <div className="type-chat-kicker mb-1 text-muted-foreground">{t('relatedStyles')}</div>
           <div className="flex flex-wrap gap-2">
             {alternatives.map((item) => (
-              <span key={`${item.style_name}-${item.match_type ?? 'alt'}`} className="type-ui-body-sm text-foreground/82">
+              <span key={`${item.style_name}-${item.match_type ?? 'alt'}`} className="type-chat-body text-foreground/82">
                 {item.style_name}
               </span>
             ))}
@@ -672,7 +673,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
       )}
 
       {data.fallback_suggestion && (
-        <div className="type-ui-body-sm border border-dashed border-border px-3 py-2 text-muted-foreground">
+        <div className="type-chat-body border border-dashed border-border px-3 py-2 text-muted-foreground">
           {data.fallback_suggestion}
         </div>
       )}

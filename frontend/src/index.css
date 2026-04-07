@@ -278,7 +278,7 @@ html:lang(zh-CN) {
 }
 
 .chat-markdown p {
-  margin: 0.4rem 0;
+  margin: 0.48rem 0;
 }
 
 .chat-markdown strong {
@@ -303,7 +303,7 @@ html:lang(zh-CN) {
 
 .chat-markdown ul,
 .chat-markdown ol {
-  margin: 0.55rem 0;
+  margin: 0.65rem 0;
   padding-left: 1.25rem;
 }
 
@@ -312,7 +312,7 @@ html:lang(zh-CN) {
 }
 
 .chat-markdown blockquote {
-  margin: 0.75rem 0;
+  margin: 0.85rem 0;
   padding: 0.125rem 0 0.125rem 0.875rem;
   border-left: 3px solid color-mix(in oklab, var(--primary) 22%, var(--border));
   color: color-mix(in oklab, var(--foreground) 75%, var(--muted-foreground));
@@ -547,10 +547,10 @@ html:lang(zh-CN) {
   .type-ed-title-sm,
   .type-section-title {
     font-family: var(--font-role-editorial-current);
-    font-size: clamp(1.45rem, 1.12rem + 1vw, 2.1rem);
-    line-height: 1.02;
+    font-size: clamp(1.34rem, 1.1rem + 0.78vw, 1.86rem);
+    line-height: 1.04;
     font-weight: 400;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.008em;
   }
   .type-ed-title-md,
   .type-editorial-inline {
@@ -564,10 +564,10 @@ html:lang(zh-CN) {
   .type-ed-title-lg,
   .type-page-title {
     font-family: var(--font-role-editorial-current);
-    font-size: clamp(2.4rem, 1.65rem + 2vw, 3.5rem);
-    line-height: 0.9;
+    font-size: clamp(2.18rem, 1.62rem + 1.7vw, 3.05rem);
+    line-height: 0.92;
     font-weight: 400;
-    letter-spacing: 0.008em;
+    letter-spacing: 0.006em;
   }
   .type-body-muted {
     font-family: var(--font-role-body-current);
@@ -610,6 +610,47 @@ html:lang(zh-CN) {
     font-weight: 600;
     letter-spacing: 0.085em;
     text-transform: uppercase;
+  }
+  .type-chat-kicker {
+    font-family: var(--font-role-label-current);
+    font-size: 0.6875rem;
+    line-height: 1.38;
+    font-weight: 500;
+    letter-spacing: 0.068em;
+  }
+  .type-chat-label {
+    font-family: var(--font-role-label-current);
+    font-size: 0.71875rem;
+    line-height: 1.42;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }
+  .type-chat-meta {
+    font-family: var(--font-role-label-current);
+    font-size: 0.71875rem;
+    line-height: 1.52;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+  .type-chat-title {
+    font-family: var(--font-role-label-current);
+    font-size: clamp(0.9rem, 0.87rem + 0.16vw, 0.98rem);
+    line-height: 1.28;
+    font-weight: 500;
+    letter-spacing: 0.016em;
+  }
+  .type-chat-action {
+    font-family: var(--font-role-label-current);
+    font-size: 0.6875rem;
+    line-height: 1.38;
+    font-weight: 500;
+    letter-spacing: 0.045em;
+  }
+  .type-chat-body {
+    font-family: var(--font-role-body-current);
+    font-size: 0.84375rem;
+    line-height: 1.7;
+    letter-spacing: 0.006em;
   }
   .control-icon-sm {
     min-height: var(--control-height-sm);

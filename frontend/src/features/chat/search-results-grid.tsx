@@ -32,19 +32,19 @@ export function SearchResultsGrid({
   if (images.length === 0 && !isLoading) {
     return (
       <div className="mb-6 mt-6 w-full border border-border px-4 py-12 text-center sm:px-6">
-        <p className="type-ui-label-sm text-muted-foreground">{t('noRelatedImages')}</p>
+        <p className="type-chat-label text-muted-foreground">{t('noRelatedImages')}</p>
       </div>
     )
   }
 
   return (
-    <div ref={gridRef} className="mb-6 mt-6 w-full border border-border">
+    <div ref={gridRef} className="mb-6 mt-6 w-full border border-border/80 bg-background">
       <div className="grid gap-4 border-b border-border px-4 py-4 sm:px-6 sm:py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <h3 className="type-ui-title-lg truncate text-foreground">
+          <h3 className="type-ed-title-sm truncate text-foreground">
             {labelName}
           </h3>
-          <p className="type-kicker text-muted-foreground">
+          <p className="type-chat-kicker text-muted-foreground">
             {t('imageCountSummary', { count: total })}
           </p>
         </div>
@@ -58,7 +58,7 @@ export function SearchResultsGrid({
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="type-kicker min-w-[72px] text-center text-muted-foreground">
+            <span className="type-chat-kicker min-w-[72px] text-center text-muted-foreground">
               {page} / {totalPages}
             </span>
             <button
@@ -75,7 +75,7 @@ export function SearchResultsGrid({
       {isLoading && (
         <div className="flex items-center justify-center gap-2 px-4 py-16 sm:px-6">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          <span className="type-kicker text-muted-foreground">{t('searching')}</span>
+          <span className="type-chat-kicker text-muted-foreground">{t('searching')}</span>
         </div>
       )}
 
@@ -89,17 +89,17 @@ export function SearchResultsGrid({
               onClick={() => handleImageClick(image)}
             >
               <FashionImage image={image} className="h-full w-full" thumbnailWidth={1280} />
-              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
+              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
               {(image.brand || image.year) && (
                 <div className="absolute inset-x-0 bottom-0 border-t border-white/15 bg-gradient-to-t from-black/72 to-transparent p-3 opacity-0 transition-opacity group-hover:opacity-100">
                   <div className="space-y-1 text-white">
                     {image.brand && (
-                      <div className="type-kicker truncate">
+                      <div className="type-chat-kicker truncate">
                         {image.brand}
                       </div>
                     )}
                     {image.year && (
-                      <div className="type-meta text-white/75">{image.year}</div>
+                      <div className="type-chat-meta text-white/75">{image.year}</div>
                     )}
                   </div>
                 </div>
@@ -114,18 +114,18 @@ export function SearchResultsGrid({
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
-            className="type-action-label control-pill-sm flex items-center gap-1 border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+            className="type-chat-action control-pill-sm flex items-center gap-1 border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
           >
             <ChevronLeft size={14} />
             {t('previous')}
           </button>
-          <span className="type-kicker min-w-[72px] text-center text-muted-foreground">
+          <span className="type-chat-kicker min-w-[72px] text-center text-muted-foreground">
             {page} / {totalPages}
           </span>
           <button
             onClick={() => onPageChange(page + 1)}
             disabled={page >= totalPages || isLoading}
-            className="type-action-label control-pill-sm flex items-center gap-1 border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+            className="type-chat-action control-pill-sm flex items-center gap-1 border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
           >
             {t('next')}
             <ChevronRight size={14} />

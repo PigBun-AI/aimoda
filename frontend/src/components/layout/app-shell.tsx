@@ -53,7 +53,7 @@ const SIDEBAR_WIDTH = 250
 const SIDEBAR_ICON_BUTTON_CLASS =
   'control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors cursor-pointer hover:border-border hover:text-foreground'
 const SIDEBAR_UTILITY_BUTTON_CLASS =
-  'type-action-label control-pill-md flex items-center justify-between gap-3 border border-border text-muted-foreground transition-colors cursor-pointer hover:border-foreground/35 hover:bg-accent hover:text-foreground'
+  'type-chat-action control-pill-md flex items-center justify-between gap-3 border border-border/80 bg-background text-muted-foreground transition-colors cursor-pointer hover:border-foreground/35 hover:bg-accent hover:text-foreground'
 
 function formatSidebarSessionTimestamp(value: string, language: string) {
   const locale = language === 'zh-CN' ? 'zh-CN' : 'en-US'
@@ -315,13 +315,13 @@ export function AppShell() {
       </div>
 
       <div className="mt-4 space-y-3 px-4">
-        <Button className="h-11 w-full cursor-pointer justify-between px-4" onClick={handleCreateSession}>
+        <Button className="type-chat-action h-11 w-full cursor-pointer justify-between rounded-none px-4" onClick={handleCreateSession}>
           <span>{t('common:fashionSearch')}</span>
           <MessageCircle className="h-4 w-4" />
         </Button>
       </div>
 
-      <nav className="mt-6 space-y-2 px-4">
+      <nav className="mt-6 space-y-1 px-4">
         {navigation.map(item => {
           const Icon = item.icon
           return (
@@ -330,11 +330,11 @@ export function AppShell() {
               to={item.to}
               className={({ isActive }) =>
                 [
-                  'type-ui-label-sm group flex items-center justify-between gap-3 border px-4 py-3',
+                  'type-chat-label group flex items-center justify-between gap-3 border-b border-border/70 px-0 py-3',
                   'transition-colors duration-fast cursor-pointer',
                   isActive
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-transparent text-muted-foreground hover:border-border hover:bg-accent hover:text-foreground',
+                    ? 'border-foreground text-foreground'
+                    : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
                 ].join(' ')
               }
               onClick={event => {
@@ -360,7 +360,7 @@ export function AppShell() {
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
         <button
-          className="type-ui-label-xs flex w-full items-center gap-2 text-muted-foreground cursor-pointer"
+          className="type-chat-kicker flex w-full items-center gap-2 text-muted-foreground cursor-pointer"
           onClick={() => setHistoryExpanded(value => !value)}
         >
           {historyExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -377,9 +377,9 @@ export function AppShell() {
         {historyExpanded && (
           <div className="mt-4 space-y-2">
             {sessionsLoading ? (
-              <div className="type-ui-label-xs border border-border px-4 py-4 text-center text-muted-foreground">{t('common:loading')}</div>
+              <div className="type-chat-meta border-b border-border/70 px-0 py-4 text-center text-muted-foreground">{t('common:loading')}</div>
             ) : chatSessions.length === 0 ? (
-              <div className="type-ui-label-xs border border-border px-4 py-4 text-center text-muted-foreground">
+              <div className="type-chat-meta border-b border-border/70 px-0 py-4 text-center text-muted-foreground">
                 {t('common:noChatHistory')}
               </div>
             ) : (
@@ -392,21 +392,21 @@ export function AppShell() {
                   <div
                     key={session.id}
                     className={cn(
-                      'group border px-3 py-3 transition-colors cursor-pointer',
+                      'group border-b border-border/70 py-3 pl-3 pr-0 transition-colors cursor-pointer',
                       isActive
-                        ? 'border-foreground bg-accent text-foreground'
-                        : 'border-border/70 text-muted-foreground hover:border-border hover:bg-accent/55',
+                        ? 'border-l-2 border-l-foreground text-foreground'
+                        : 'border-l-2 border-l-transparent text-muted-foreground hover:border-border hover:text-foreground',
                     )}
                     onClick={() => handleProtectedNavigate(`/chat?session=${session.id}`)}
                   >
                     <div className="flex items-start gap-2.5">
-                      <MessageCircle className="mt-[2px] h-3.5 w-3.5 shrink-0 opacity-45" />
+                      <MessageCircle className="mt-[3px] h-3.5 w-3.5 shrink-0 opacity-40" />
 
                       <div className="min-w-0 flex-1">
                         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-1.5">
-                              <span className="type-ui-body-sm truncate text-foreground">
+                              <span className="type-chat-label truncate text-foreground/92">
                                 {session.title}
                               </span>
                               {session.is_pinned && (
@@ -414,7 +414,7 @@ export function AppShell() {
                               )}
                             </div>
 
-                            <div className="type-ui-meta mt-1 flex min-w-0 items-center gap-2 whitespace-nowrap text-muted-foreground/88">
+                            <div className="type-chat-meta mt-1 flex min-w-0 items-center gap-2 whitespace-nowrap text-muted-foreground/88">
                               {(session.execution_status === 'running' || session.execution_status === 'stopping') && (
                                 <span className="inline-flex items-center gap-1 text-foreground/78">
                                   <LoaderCircle className="h-3 w-3 animate-spin" />
@@ -433,14 +433,14 @@ export function AppShell() {
 
                           <div
                             className={cn(
-                              'flex items-center justify-end gap-0.5 overflow-hidden transition-[width,opacity] duration-fast w-[84px] opacity-100',
+                              'flex items-center justify-end gap-0.5 overflow-hidden transition-[width,opacity] duration-fast w-[78px] opacity-100',
                               isActive
-                                ? 'md:w-[84px] md:opacity-100'
-                                : 'md:w-0 md:opacity-0 md:group-hover:w-[84px] md:group-hover:opacity-100 md:group-focus-within:w-[84px] md:group-focus-within:opacity-100',
+                                ? 'md:w-[78px] md:opacity-100'
+                                : 'md:w-0 md:opacity-0 md:group-hover:w-[78px] md:group-hover:opacity-100 md:group-focus-within:w-[78px] md:group-focus-within:opacity-100',
                             )}
                           >
                             <button
-                              className="flex h-7 w-7 items-center justify-center border border-transparent transition-colors hover:border-border hover:bg-background/80"
+                              className="flex h-[26px] w-[26px] items-center justify-center border border-transparent transition-colors hover:border-border"
                               onClick={async event => {
                                 event.stopPropagation()
                                 await toggleSessionPinned(session.id, !session.is_pinned)
@@ -450,7 +450,7 @@ export function AppShell() {
                               {session.is_pinned ? <PinOff size={13} /> : <Pin size={13} />}
                             </button>
                             <button
-                              className="flex h-7 w-7 items-center justify-center border border-transparent transition-colors hover:border-border hover:bg-background/80"
+                              className="flex h-[26px] w-[26px] items-center justify-center border border-transparent transition-colors hover:border-border"
                               onClick={event => {
                                 event.stopPropagation()
                                 setRenameDialog({ sessionId: session.id, title: session.title })
@@ -461,7 +461,7 @@ export function AppShell() {
                               <PencilLine size={13} />
                             </button>
                             <button
-                              className="flex h-7 w-7 items-center justify-center border border-transparent transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
+                              className="flex h-[26px] w-[26px] items-center justify-center border border-transparent transition-colors hover:border-foreground hover:bg-foreground hover:text-background"
                               onClick={event => {
                                 event.stopPropagation()
                                 setDeleteDialog({ sessionId: session.id, title: session.title })
@@ -515,8 +515,8 @@ export function AppShell() {
               to="/profile"
               className={({ isActive }) =>
                 [
-                  'mt-3 flex items-center gap-3 border px-4 py-3 transition-colors cursor-pointer',
-                  isActive ? 'border-foreground bg-accent' : 'border-border hover:border-foreground/50',
+                  'mt-3 flex items-center gap-3 border border-border/80 px-4 py-3 transition-colors cursor-pointer',
+                  isActive ? 'border-foreground bg-background' : 'hover:border-foreground/50',
                 ].join(' ')
               }
               onClick={() => {
@@ -527,14 +527,14 @@ export function AppShell() {
               <CircleUserRound className="w-5 h-5 shrink-0 text-muted-foreground" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="type-ui-body-sm truncate text-foreground">
+                  <p className="type-chat-label truncate text-foreground">
                     {currentUser.name ?? t('common:user')}
                   </p>
-                  <span className="type-ui-label-xs shrink-0 border border-border px-1.5 py-0.5 text-muted-foreground">
+                  <span className="type-chat-kicker shrink-0 border border-border px-1.5 py-0.5 text-muted-foreground">
                     {planBadgeLabel}
                   </span>
                 </div>
-                <p className="type-ui-label-sm text-muted-foreground">
+                <p className="type-chat-meta text-muted-foreground">
                   {currentUser.role ?? 'guest'}
                 </p>
               </div>
@@ -542,7 +542,7 @@ export function AppShell() {
           ) : (
             <Button
               onClick={openLogin}
-              className="flex h-12 w-full cursor-pointer items-center justify-between px-4"
+              className="type-chat-action flex h-12 w-full cursor-pointer items-center justify-between rounded-none px-4"
             >
               <div className="flex items-center gap-1.5">
                 <CircleUserRound className="w-4 h-4" />
@@ -684,7 +684,7 @@ export function AppShell() {
 
       {!isFloating && !isChatImmersive && (
         <aside
-          className="fixed left-0 top-0 z-50 flex h-dvh flex-col border-r border-border bg-secondary transition-transform duration-normal ease-out"
+          className="fixed left-0 top-0 z-50 flex h-dvh flex-col border-r border-border bg-background transition-transform duration-normal ease-out"
           style={{
             width: `${SIDEBAR_WIDTH}px`,
             transform: isSidebarOpen ? 'translateX(0)' : `translateX(-${SIDEBAR_WIDTH}px)`,

@@ -4,12 +4,12 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'type-action-label inline-flex items-center justify-center gap-2 border rounded-[var(--radius-sm)] transition-all duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 cursor-pointer select-none',
+  'type-action-label inline-flex items-center justify-center gap-2 border rounded-none transition-all duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 cursor-pointer select-none',
   {
     variants: {
       variant: {
-        default: 'border-primary bg-primary text-primary-foreground hover:bg-transparent hover:text-primary',
-        secondary: 'border-border bg-secondary text-secondary-foreground hover:border-foreground hover:bg-background',
+        default: 'border-primary bg-primary text-primary-foreground hover:bg-primary/88',
+        secondary: 'border-border bg-secondary text-secondary-foreground hover:border-foreground/55 hover:bg-background',
         outline: 'border-border bg-transparent text-foreground hover:border-foreground hover:bg-accent',
         ghost: 'border-transparent bg-transparent text-muted-foreground hover:text-foreground hover:border-border',
         destructive: 'border-foreground bg-transparent text-foreground hover:bg-foreground hover:text-background',

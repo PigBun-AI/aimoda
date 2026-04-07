@@ -30,10 +30,29 @@ export interface ReportSummary {
   title: string
   brand: string
   season: string
+  year?: number
   status: 'draft' | 'published' | 'archived'
   updatedAt: string
   coverImageUrl: string
   previewUrl?: string
+  leadExcerpt?: string | null
+}
+
+export interface AdminReportsPage {
+  items: ReportSummary[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  q: string
+}
+
+export interface UpdateAdminReportPayload {
+  title?: string
+  brand?: string
+  season?: string
+  year?: number
+  coverUrl?: string
   leadExcerpt?: string | null
 }
 
@@ -160,6 +179,38 @@ export interface Subscription {
   startsAt: string
   endsAt: string
   status: 'active' | 'expired'
+}
+
+export interface AdminGallerySummary {
+  id: string
+  title: string
+  description: string
+  category: string
+  tags: string[]
+  coverUrl: string
+  status: string
+  imageCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AdminGalleriesPage {
+  items: AdminGallerySummary[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  q: string
+  status: string
+}
+
+export interface UpdateAdminGalleryPayload {
+  title?: string
+  description?: string
+  category?: string
+  tags?: string[]
+  coverUrl?: string
+  status?: string
 }
 
 export type FeatureCode = 'ai_chat' | 'fashion_reports' | 'inspiration' | 'image_generation' | 'video_generation'

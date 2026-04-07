@@ -79,9 +79,6 @@ export function GalleryDetailPage() {
     )
   }
 
-  // Split remaining images into pairs for 2-column editorial layout
-  const remainingImages = images.slice(1)
-
   return (
     <section className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8 md:px-8">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
@@ -121,37 +118,31 @@ export function GalleryDetailPage() {
         </div>
       </header>
 
-      {images.length > 0 && (
-        <div
-          className="group mb-3 cursor-pointer sm:mb-4"
-          onClick={() => setLightboxIndex(0)}
-        >
-          <div className="overflow-hidden border border-border bg-muted">
-            <img
-              src={images[0].image_url}
-              alt={gallery.title}
-              className="w-full h-auto transition-transform duration-700 group-hover:scale-[1.02]"
-            />
-          </div>
-        </div>
-      )}
-
-      <div className="columns-1 gap-2 [column-fill:_balance] md:columns-2 md:gap-4">
-        {remainingImages.map((img, idx) => (
-          <div
+      <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {images.map((img, idx) => (
+          <button
             key={img.id}
-            className="break-inside-avoid mb-2 sm:mb-4 cursor-pointer group"
-            onClick={() => setLightboxIndex(idx + 1)}
+            type="button"
+            className={`group overflow-hidden border border-border bg-background text-left ${idx === 0 ? 'md:col-span-2 xl:col-span-2' : ''}`}
+            onClick={() => setLightboxIndex(idx)}
           >
-            <div className="overflow-hidden border border-border bg-muted">
+            <div className={`flex w-full items-center justify-center bg-muted/[0.1] p-3 sm:p-4 ${idx === 0 ? 'h-[28rem] sm:h-[34rem]' : 'h-[20rem] sm:h-[24rem]'}`}>
               <img
                 src={img.image_url}
-                alt={img.caption || `Look ${idx + 2}`}
-                className="w-full h-auto transition-transform duration-500 group-hover:scale-[1.02]"
-                loading="lazy"
+                alt={img.caption || `Look ${idx + 1}`}
+                className="max-h-full max-w-full object-contain transition-transform duration-500 group-hover:scale-[1.015]"
+                loading={idx < 3 ? 'eager' : 'lazy'}
               />
             </div>
-          </div>
+            <div className="flex items-center justify-between gap-3 border-t border-border/80 px-3 py-2.5 sm:px-4">
+              <span className="type-chat-kicker text-muted-foreground">
+                {String(idx + 1).padStart(2, '0')}
+              </span>
+              <span className="type-chat-meta truncate text-muted-foreground">
+                {img.caption || t('openArchive')}
+              </span>
+            </div>
+          </button>
         ))}
       </div>
 

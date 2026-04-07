@@ -39,20 +39,20 @@ export function ReportsPage() {
 
   return (
     <section className="space-y-8 sm:space-y-10">
-      <header className="grid gap-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.75fr)] lg:gap-8 lg:pt-6">
+      <header className="grid gap-6 border-t border-border/80 pt-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.75fr)] lg:gap-8 lg:pt-6">
         <div className="space-y-3">
-          <p className="type-kicker-wide text-muted-foreground">
+          <p className="type-chat-kicker text-muted-foreground">
             {String(totalReports).padStart(2, '0')}
           </p>
           <h1 className="type-page-title max-w-[12ch] text-foreground">
             {t('title')}
           </h1>
         </div>
-        <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        <div className="flex flex-col justify-between gap-4 border-t border-border/80 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="type-meta max-w-[32ch] text-muted-foreground">
             {t('subtitle')}
           </p>
-          <div className="type-meta flex items-center justify-between border-t border-border pt-3 text-muted-foreground">
+          <div className="type-meta flex items-center justify-between border-t border-border/80 pt-3 text-muted-foreground">
             <span>{t('archiveLabel')}</span>
             <span>{String(page).padStart(2, '0')}</span>
           </div>
@@ -60,9 +60,9 @@ export function ReportsPage() {
       </header>
 
       {isLocked ? (
-        <div className="border border-border bg-card px-6 py-10 sm:px-8 sm:py-12">
+        <div className="border border-border/80 bg-background px-6 py-10 sm:px-8 sm:py-12">
           <div className="mx-auto flex max-w-2xl flex-col gap-4">
-            <p className="type-kicker-wide text-muted-foreground">{t('lockedEyebrow')}</p>
+            <p className="type-chat-kicker text-muted-foreground">{t('lockedEyebrow')}</p>
             <h2 className="type-page-title text-foreground sm:text-[2.6rem]">
               {t('lockedTitle')}
             </h2>
@@ -70,7 +70,7 @@ export function ReportsPage() {
               {t('lockedBody')}
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button asChild variant="ghost" className="h-10 px-4 text-[10px] font-semibold uppercase tracking-[0.14em]">
+              <Button asChild variant="ghost" className="type-chat-action h-10 rounded-none px-4">
                 <Link to="/profile?tab=access">{t('openMembership')}</Link>
               </Button>
               <RedeemDialog />
@@ -94,7 +94,7 @@ export function ReportsPage() {
                       className="group block h-full text-left"
                     >
                       <ArchiveSplitCard
-                        mediaClassName="bg-[#f1f1ed] dark:bg-[#141414]"
+                        mediaClassName="bg-background"
                         media={(
                           <>
                             <img
@@ -110,11 +110,11 @@ export function ReportsPage() {
                               }}
                             />
 
-                            <div className="hidden h-full w-full items-center justify-center px-8 py-12 text-center">
-                              <div className="space-y-3 border border-border px-6 py-5">
-                                <p className="type-kicker text-muted-foreground">
-                                  {report.brand}
-                                </p>
+                              <div className="hidden h-full w-full items-center justify-center px-8 py-12 text-center">
+                                <div className="space-y-3 border border-border px-6 py-5">
+                                  <p className="type-chat-kicker text-muted-foreground">
+                                    {report.brand}
+                                  </p>
                                 <p className="type-section-title text-foreground">
                                   {report.season}
                                 </p>
@@ -124,10 +124,10 @@ export function ReportsPage() {
                         )}
                         eyebrow={(
                           <div className="space-y-2">
-                            <p className="type-kicker-wide text-muted-foreground">
+                            <p className="type-chat-kicker text-muted-foreground">
                               {report.brand}
                             </p>
-                            <p className="type-kicker text-muted-foreground">
+                            <p className="type-chat-kicker text-muted-foreground">
                               {formatReportDate(report.updatedAt, i18n.language)}
                             </p>
                           </div>
@@ -137,13 +137,13 @@ export function ReportsPage() {
                         description={report.leadExcerpt || reportFallbackCopy(report)}
                         descriptionClassName="line-clamp-4"
                         footerStart={(
-                          <span className="type-kicker text-muted-foreground">
+                          <span className="type-chat-kicker text-muted-foreground">
                             {report.season}
                           </span>
                         )}
                         footerEnd={(
                           <div className="flex items-center gap-2 text-foreground">
-                            <span className="type-ui-label-sm">{t('openReport')}</span>
+                            <span className="type-chat-action">{t('openReport')}</span>
                             <ArrowUpRight className="h-4 w-4 transition-transform duration-fast group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={1.6} />
                           </div>
                         )}
@@ -156,13 +156,13 @@ export function ReportsPage() {
       )}
 
       {totalPages > 1 && (
-        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5" aria-label={t('pagination')}>
+        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border/80 pt-5" aria-label={t('pagination')}>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
             disabled={page === 1 || reportsQuery.isLoading}
-            className="min-h-[44px] min-w-[44px] px-3"
+            className="type-chat-action min-h-[44px] min-w-[44px] rounded-none px-3"
             aria-label={t('previousPage')}
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
@@ -170,7 +170,7 @@ export function ReportsPage() {
           </Button>
 
           <div className="text-center">
-            <p className="type-kicker text-muted-foreground">
+            <p className="type-chat-kicker text-muted-foreground">
               {t('pagination')}
             </p>
             <p className="mt-1 text-sm tabular-nums text-foreground">
@@ -183,7 +183,7 @@ export function ReportsPage() {
             size="sm"
             onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
             disabled={page === totalPages || reportsQuery.isLoading}
-            className="min-h-[44px] min-w-[44px] px-3"
+            className="type-chat-action min-h-[44px] min-w-[44px] rounded-none px-3"
             aria-label={t('nextPage')}
           >
             <span className="hidden sm:inline">{t('nextPage')}</span>
@@ -193,9 +193,9 @@ export function ReportsPage() {
       )}
 
       {reports.length === 0 && !reportsQuery.isLoading && (
-        <div className="border border-border px-6 py-12 text-center sm:px-8 sm:py-16">
+        <div className="border border-border/80 px-6 py-12 text-center sm:px-8 sm:py-16">
           <div className="mx-auto flex max-w-[18rem] flex-col items-center gap-4">
-            <div className="type-kicker-wide border border-border px-4 py-2 text-muted-foreground">
+            <div className="type-chat-kicker border border-border px-4 py-2 text-muted-foreground">
               00
             </div>
             <p className="type-section-title text-foreground">

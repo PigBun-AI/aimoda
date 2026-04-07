@@ -1,13 +1,22 @@
+import math
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 
 from ..dependencies import require_role
 from ..exceptions import AppError
-from ..models import AuthenticatedUser, StyleGapStatus, UpdateStyleGapRequest
+from ..models import (
+    AuthenticatedUser,
+    StyleGapStatus,
+    UpdateAdminGalleryRequest,
+    UpdateAdminReportRequest,
+    UpdateStyleGapRequest,
+)
+from ..repositories.gallery_repo import list_galleries_admin, update_gallery_admin_fields
 from ..repositories.user_repo import count_users, count_users_by_role
 from ..services.subscription_service import get_stats as get_subscription_stats
 from ..services.activity_service import get_daily_active_percent, get_activity_trend
+from ..services.report_service import get_report, get_reports_admin, serialize_report_public, update_report_admin
 from ..services.style_feedback_service import (
     get_style_gap_stats_admin,
     list_style_gap_events_admin,
@@ -30,6 +39,94 @@ def dashboard(user: Annotated[AuthenticatedUser, Depends(require_role(["admin"])
             "activityTrend": get_activity_trend(30),
         },
     }
+
+
+@router.get("/reports")
+def list_admin_reports(
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 12,
+    q: Annotated[str | None, Query(max_length=255)] = None,
+):
+    del user
+    reports, total = get_reports_admin(page=page, limit=limit, q=q)
+    return {
+        "success": True,
+        "data": {
+            "items": [serialize_report_public(report) for report in reports],
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "totalPages": math.ceil(total / limit) if limit else 0,
+            "q": q or "",
+        },
+    }
+
+
+@router.patch("/reports/{report_id}")
+def patch_admin_report(
+    report_id: int,
+    body: UpdateAdminReportRequest,
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    del user
+    updated = update_report_admin(
+        report_id,
+        title=body.title,
+        brand=body.brand,
+        season=body.season,
+        year=body.year,
+        cover_url=body.cover_url,
+        lead_excerpt=body.lead_excerpt,
+    )
+    if updated is None:
+        raise AppError("report not found", 404)
+    return {"success": True, "data": serialize_report_public(updated)}
+
+
+@router.get("/galleries")
+def list_admin_gallery_items(
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 12,
+    q: Annotated[str | None, Query(max_length=255)] = None,
+    status: Annotated[str | None, Query(max_length=32)] = None,
+):
+    del user
+    items, total = list_galleries_admin(page=page, limit=limit, q=q, status=status)
+    return {
+        "success": True,
+        "data": {
+            "items": items,
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "totalPages": math.ceil(total / limit) if limit else 0,
+            "q": q or "",
+            "status": status or "all",
+        },
+    }
+
+
+@router.patch("/galleries/{gallery_id}")
+def patch_admin_gallery_item(
+    gallery_id: str,
+    body: UpdateAdminGalleryRequest,
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    del user
+    updated = update_gallery_admin_fields(
+        gallery_id,
+        title=body.title,
+        description=body.description,
+        category=body.category,
+        tags=body.tags,
+        cover_url=body.cover_url,
+        status=body.status,
+    )
+    if updated is None:
+        raise AppError("gallery not found", 404)
+    return {"success": True, "data": updated}
 
 
 @router.get("/style-gaps")

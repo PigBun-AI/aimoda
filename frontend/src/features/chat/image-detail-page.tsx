@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, Languages, Moon, Sun, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Languages, Moon, Sun, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { useTheme } from '@/components/theme-toggle'
@@ -148,7 +148,6 @@ export function ImageDetailPage() {
   const isLoading = !currentImage && (isFetching || context !== null)
   const titleBrand = currentImage?.brand ? formatBrand(currentImage.brand) : t('image')
   const imageMeta = currentImage ? formatSeasonLabel(currentImage, t) : ''
-  const closeHref = contextId ? '/chat' : '/inspiration'
   const currentLanguageLabel = i18n.language === 'zh-CN' ? 'EN' : '中'
   const toggleLanguage = useCallback(() => {
     const nextLanguage = i18n.language === 'zh-CN' ? 'en' : 'zh-CN'
@@ -159,18 +158,8 @@ export function ImageDetailPage() {
   return (
     <div className="min-h-screen bg-background">
       <header data-image-detail-header="true" className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-md">
-        <div className="mx-auto flex min-h-16 max-w-screen-2xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="control-icon-sm flex shrink-0 items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
-              aria-label={t('back')}
-            >
-              <ArrowLeft size={16} />
-            </button>
-
-            <div className="hidden h-6 w-px bg-border sm:block" />
-
             <Link to="/" className="shrink-0 transition-opacity hover:opacity-70">
               <img src="/aimoda-logo.svg" alt="aimoda" className="h-[20px] w-auto dark:hidden" />
               <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-[20px] w-auto dark:block" />
@@ -178,11 +167,11 @@ export function ImageDetailPage() {
 
             <div className="hidden min-w-0 border-l border-border pl-4 sm:block">
               <div className="flex min-w-0 items-center gap-3">
-                <h1 className="type-ui-title-md truncate text-foreground">
+                <h1 className="type-chat-title truncate text-foreground">
                   {titleBrand}
                 </h1>
                 {imageMeta && (
-                  <span className="type-kicker truncate text-muted-foreground">
+                  <span className="type-chat-kicker truncate text-muted-foreground">
                     {imageMeta}
                   </span>
                 )}
@@ -203,7 +192,7 @@ export function ImageDetailPage() {
             <button
               type="button"
               onClick={toggleLanguage}
-              className="type-action-label control-pill-sm flex min-w-[56px] items-center justify-center gap-1 border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              className="type-chat-action control-pill-sm flex min-w-[56px] items-center justify-center gap-1 border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
               aria-label={i18n.language === 'zh-CN' ? t('switchToEn') : t('switchToZh')}
               title={i18n.language === 'zh-CN' ? t('switchToEn') : t('switchToZh')}
             >
@@ -220,7 +209,7 @@ export function ImageDetailPage() {
               </button>
             )}
             {hasMultiple && (
-              <div className="type-kicker control-pill-sm hidden min-w-[82px] items-center justify-center border border-border text-muted-foreground sm:flex">
+              <div className="type-chat-kicker control-pill-sm hidden min-w-[82px] items-center justify-center border border-border text-muted-foreground sm:flex">
                 {currentIndex + 1} / {images.length}
               </div>
             )}
@@ -233,18 +222,14 @@ export function ImageDetailPage() {
                 <ChevronRight size={16} />
               </button>
             )}
-            <Link
-              to={closeHref}
+            <button
+              type="button"
+              onClick={handleClose}
               className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
               aria-label={t('close')}
-              onClick={(event) => {
-                if (window.history.length <= 1) return
-                event.preventDefault()
-                handleClose()
-              }}
             >
               <X size={16} />
-            </Link>
+            </button>
           </div>
         </div>
       </header>
@@ -257,7 +242,7 @@ export function ImageDetailPage() {
               <span className="h-1.5 w-1.5 animate-pulse bg-muted-foreground" style={{ animationDelay: '0.2s' }} />
               <span className="h-1.5 w-1.5 animate-pulse bg-muted-foreground" style={{ animationDelay: '0.4s' }} />
             </div>
-            <p className="type-kicker-wide text-muted-foreground">
+            <p className="type-chat-kicker text-muted-foreground">
               {t('loadingImageDetails')}
             </p>
           </div>
@@ -265,13 +250,12 @@ export function ImageDetailPage() {
       )}
 
       {currentImage && (
-        <div className="mx-auto max-w-screen-2xl px-4 py-4 sm:px-6 sm:py-6">
+        <div className="w-full px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5 xl:px-6 xl:py-6">
           <section
-            className="overflow-hidden border border-border"
-            style={{ height: 'calc(100dvh - 64px - (clamp(16px, 2vw, 24px) * 2))' }}
+            className="overflow-hidden border border-border/80 bg-background lg:h-[calc(100dvh-64px-40px)] xl:h-[calc(100dvh-64px-48px)]"
           >
-            <div className="grid h-full min-h-0 gap-0 xl:grid-cols-[320px_minmax(0,1fr)_88px]">
-              <div className="min-h-0 border-b border-border xl:border-b-0 xl:border-r">
+            <div className="flex min-h-0 flex-col lg:grid lg:h-full lg:grid-cols-[minmax(280px,320px)_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_88px]">
+              <div className="order-3 min-h-0 border-t border-border lg:order-1 lg:border-r lg:border-t-0 xl:border-b-0">
                 <ImageInfoPanel
                   image={currentImage}
                   activeSearchTarget={activeSearchTarget}
@@ -280,7 +264,7 @@ export function ImageDetailPage() {
                 />
               </div>
 
-              <div className="relative min-h-0 border-b border-border bg-background xl:border-b-0">
+              <div className="order-1 relative min-h-0 border-b border-border bg-background lg:order-2 lg:border-b-0">
                 <ImageViewer
                   image={currentImage}
                   activeLabelKey={activeSearchTarget?.type === 'label' ? activeSearchTarget.key : null}
@@ -288,7 +272,7 @@ export function ImageDetailPage() {
                 />
               </div>
 
-              <div className="min-h-0 xl:border-l">
+              <div className="order-2 min-h-0 border-b border-border bg-background lg:order-3 lg:col-span-2 lg:border-b-0 lg:border-t xl:col-span-1 xl:border-l xl:border-t-0">
                 <ImageActionBar image={currentImage} />
               </div>
             </div>

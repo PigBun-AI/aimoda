@@ -29,6 +29,7 @@ export function useMembershipStatus() {
   const { t, i18n } = useTranslation('common')
   const snapshotQuery = useMembershipSnapshot()
   const snapshot = snapshotQuery.data
+  const subscription = snapshot?.subscription
   const aiAccess = snapshot?.features?.ai_chat
   const fashionAccess = snapshot?.features?.fashion_reports
   const isSubscriber = Boolean(snapshot?.subscription)
@@ -61,6 +62,7 @@ export function useMembershipStatus() {
   return useMemo(
     () => ({
       membershipSnapshot: snapshot as MembershipSnapshot | undefined,
+      subscription,
       isLoading: snapshotQuery.isLoading,
       isFetching: snapshotQuery.isFetching,
       refetch: snapshotQuery.refetch,
@@ -80,6 +82,8 @@ export function useMembershipStatus() {
       isLimitExceeded,
       aiQuotaLabel,
       resetLabel,
+      subscriptionStartsAt: subscription?.startsAt ?? null,
+      subscriptionEndsAt: subscription?.endsAt ?? null,
     }),
     [
       aiAccess,
@@ -97,6 +101,7 @@ export function useMembershipStatus() {
       planLabel,
       reportsSummary,
       resetLabel,
+      subscription,
       snapshot,
       snapshotQuery.isFetching,
       snapshotQuery.isLoading,

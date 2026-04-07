@@ -1,5 +1,8 @@
 import type {
   AdminUser,
+  AdminGallerySummary,
+  AdminGalleriesPage,
+  AdminReportsPage,
   AuthUser,
   DashboardData,
   GetStyleGapsParams,
@@ -13,6 +16,8 @@ import type {
   StyleGapListResponse,
   Subscription,
   UpdateStyleGapPayload,
+  UpdateAdminGalleryPayload,
+  UpdateAdminReportPayload,
   MembershipSnapshot,
 } from '@/lib/types'
 
@@ -612,4 +617,148 @@ export async function deleteReport(id: string): Promise<void> {
 export async function getAdminReports(): Promise<ReportSummary[]> {
   const result = await getReports(1, 100) // Admin sees all reports
   return result.reports
+}
+
+export async function getAdminReportsPage(params: {
+  page?: number
+  limit?: number
+  q?: string
+}): Promise<AdminReportsPage> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('page', String(params.page ?? 1))
+  searchParams.set('limit', String(params.limit ?? 12))
+  if (params.q?.trim()) searchParams.set('q', params.q.trim())
+
+  const data = await request<{
+    items: Array<ReportSummary & { coverUrl?: string | null; leadExcerpt?: string | null }>
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+    q: string
+  }>(`/api/admin/reports?${searchParams.toString()}`)
+
+  return {
+    items: data.items.map((report) => ({
+      ...report,
+      coverImageUrl: report.coverUrl || `/report-files/${report.slug}/cover.jpg`,
+    })),
+    total: data.total,
+    page: data.page,
+    limit: data.limit,
+    totalPages: data.totalPages,
+    q: data.q,
+  }
+}
+
+export async function updateAdminReport(id: string, payload: UpdateAdminReportPayload): Promise<ReportSummary> {
+  const data = await request<ReportSummary & { coverUrl?: string | null }>(`/api/admin/reports/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: payload.title,
+      brand: payload.brand,
+      season: payload.season,
+      year: payload.year,
+      cover_url: payload.coverUrl,
+      lead_excerpt: payload.leadExcerpt,
+    }),
+  })
+
+  return {
+    ...data,
+    coverImageUrl: data.coverUrl || `/report-files/${data.slug}/cover.jpg`,
+  }
+}
+
+export async function getAdminGalleriesPage(params: {
+  page?: number
+  limit?: number
+  q?: string
+  status?: string
+}): Promise<AdminGalleriesPage> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('page', String(params.page ?? 1))
+  searchParams.set('limit', String(params.limit ?? 12))
+  if (params.q?.trim()) searchParams.set('q', params.q.trim())
+  if (params.status?.trim()) searchParams.set('status', params.status.trim())
+
+  const data = await request<{
+    items: Array<{
+      id: string
+      title: string
+      description: string
+      category: string
+      tags: string[]
+      cover_url: string
+      status: string
+      image_count: number
+      created_at: string
+      updated_at: string
+    }>
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+    q: string
+    status: string
+  }>(`/api/admin/galleries?${searchParams.toString()}`)
+
+  return {
+    items: data.items.map((item): AdminGallerySummary => ({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      category: item.category,
+      tags: item.tags,
+      coverUrl: item.cover_url,
+      status: item.status,
+      imageCount: item.image_count,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    })),
+    total: data.total,
+    page: data.page,
+    limit: data.limit,
+    totalPages: data.totalPages,
+    q: data.q,
+    status: data.status,
+  }
+}
+
+export async function updateAdminGallery(id: string, payload: UpdateAdminGalleryPayload): Promise<AdminGallerySummary> {
+  const data = await request<{
+    id: string
+    title: string
+    description: string
+    category: string
+    tags: string[]
+    cover_url: string
+    status: string
+    image_count: number
+    created_at: string
+    updated_at: string
+  }>(`/api/admin/galleries/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: payload.title,
+      description: payload.description,
+      category: payload.category,
+      tags: payload.tags,
+      cover_url: payload.coverUrl,
+      status: payload.status,
+    }),
+  })
+
+  return {
+    id: data.id,
+    title: data.title,
+    description: data.description,
+    category: data.category,
+    tags: data.tags,
+    coverUrl: data.cover_url,
+    status: data.status,
+    imageCount: data.image_count,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  }
 }

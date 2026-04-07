@@ -67,20 +67,20 @@ export function ProfilePage() {
 
   return (
     <section className="space-y-8 font-sans">
-      <header className="grid gap-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.78fr)] lg:gap-8 lg:pt-6">
+      <header className="grid gap-6 border-t border-border/80 pt-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.78fr)] lg:gap-8 lg:pt-6">
         <div className="space-y-3">
-          <p className="type-kicker-wide text-muted-foreground">
+          <p className="type-chat-kicker text-muted-foreground">
             {currentUser?.role ?? 'guest'}
           </p>
           <h1 className="type-page-title max-w-[12ch] text-foreground">
             {currentUser?.name ?? t('profileTab')}
           </h1>
         </div>
-        <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        <div className="flex flex-col justify-between gap-4 border-t border-border/80 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="type-meta max-w-[32ch] break-all text-muted-foreground">
             {currentUser?.email ?? currentUser?.phone ?? t('notSet')}
           </p>
-          <div className="type-meta flex items-center justify-between border-t border-border pt-3 text-muted-foreground">
+          <div className="type-meta flex items-center justify-between border-t border-border/80 pt-3 text-muted-foreground">
             <span>{t('profile.accountLabel')}</span>
             <span>{String(visibleTabs.length).padStart(2, '0')}</span>
           </div>
@@ -88,7 +88,7 @@ export function ProfilePage() {
       </header>
 
       <div className="relative">
-        <div className="scrollbar-hide flex items-center gap-4 overflow-x-auto border-b border-border font-sans sm:gap-5">
+        <div className="scrollbar-hide flex items-center gap-5 overflow-x-auto border-b border-border/80 font-sans sm:gap-6">
           {visibleTabs.map(tab => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
@@ -106,7 +106,7 @@ export function ProfilePage() {
                   setSearchParams(nextParams, { replace: true })
                 }}
                 className={[
-                  'type-kicker relative flex items-center gap-2 whitespace-nowrap border-b pb-3 transition-colors duration-fast cursor-pointer font-sans',
+                  'type-chat-kicker relative flex items-center gap-2 whitespace-nowrap border-b pb-3 transition-colors duration-fast cursor-pointer font-sans',
                   isActive ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
                 ].join(' ')}
               >
@@ -127,9 +127,10 @@ export function ProfilePage() {
 }
 
 function ProfileContent() {
-  const { t } = useTranslation('common')
+  const { t, i18n } = useTranslation('common')
   const navigate = useNavigate()
   const currentUser = getSessionUser()
+  const { hasSubscription, planLabel, subscriptionStartsAt, subscriptionEndsAt } = useMembershipStatus()
 
   const handleLogout = useCallback(() => {
     queryClient.clear()
@@ -137,12 +138,21 @@ function ProfileContent() {
     navigate('/', { replace: true })
   }, [navigate])
 
+  const formatDateLabel = useCallback((value: string | null) => {
+    if (!value) return t('notSet')
+    return new Intl.DateTimeFormat(i18n.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(value))
+  }, [i18n.language, t])
+
   return (
     <div className="grid max-w-4xl gap-4 font-sans lg:grid-cols-[minmax(0,1.3fr)_minmax(240px,0.7fr)]">
-      <section className="border border-border">
-        <div className="grid gap-5 border-b border-border px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(150px,0.48fr)]">
+      <section className="border border-border/80 bg-background">
+        <div className="grid gap-5 border-b border-border/80 px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(150px,0.48fr)]">
           <div className="space-y-2">
-            <p className="type-kicker text-muted-foreground">
+            <p className="type-chat-kicker text-muted-foreground">
               {t('profile.accountEyebrow')}
             </p>
             <h2 className="type-section-title text-foreground sm:text-[2rem]">
@@ -150,11 +160,11 @@ function ProfileContent() {
             </h2>
           </div>
 
-          <div className="flex flex-col justify-end gap-3 border-t border-border pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+          <div className="flex flex-col justify-end gap-3 border-t border-border/80 pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
             <p className="type-meta text-muted-foreground">
               {currentUser?.role ?? 'guest'}
             </p>
-            <div className="type-kicker flex items-center justify-between border-t border-border pt-3 text-muted-foreground">
+            <div className="type-chat-kicker flex items-center justify-between border-t border-border/80 pt-3 text-muted-foreground">
               <span>{t('profile.fieldsLabel')}</span>
               <span>03</span>
             </div>
@@ -162,13 +172,13 @@ function ProfileContent() {
         </div>
 
         <div className="px-5">
-          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border py-4 sm:flex-row sm:items-center sm:gap-6">
+          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/80 py-4 sm:flex-row sm:items-center sm:gap-6">
             <span className="type-meta text-muted-foreground">{t('username')}</span>
             <span className="type-label text-foreground sm:text-right">{currentUser?.name ?? t('notSet')}</span>
           </div>
-          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border py-4 sm:flex-row sm:items-center sm:gap-6">
+          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/80 py-4 sm:flex-row sm:items-center sm:gap-6">
             <span className="type-meta text-muted-foreground">{t('role')}</span>
-            <span className="type-kicker text-foreground sm:text-right">{currentUser?.role ?? 'guest'}</span>
+            <span className="type-chat-kicker text-foreground sm:text-right">{currentUser?.role ?? 'guest'}</span>
           </div>
           <div className="flex flex-col items-start justify-between gap-1.5 py-4 sm:flex-row sm:items-center sm:gap-6">
             <span className="type-meta text-muted-foreground">{t('email')}</span>
@@ -178,19 +188,34 @@ function ProfileContent() {
       </section>
 
       <div className="space-y-4">
-        <div className="border border-border bg-card p-5 text-sm text-muted-foreground">
-          <p className="type-kicker text-muted-foreground">
+        <div className="border border-border/80 bg-background p-5 text-sm text-muted-foreground">
+          <p className="type-chat-kicker text-muted-foreground">
             {t('membership.profileTitle')}
           </p>
-          <p className="type-body-muted mt-3 max-w-[28ch]">
-            {t('membership.profileHint')}
-          </p>
+          <div className="mt-4 space-y-3">
+            <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-3">
+              <span className="type-meta text-muted-foreground">{t('membership.currentPlan')}</span>
+              <span className="type-chat-kicker text-right text-foreground">{planLabel}</span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-3">
+              <span className="type-meta text-muted-foreground">{t('membership.validFrom')}</span>
+              <span className="type-chat-kicker text-right text-foreground">
+                {hasSubscription ? formatDateLabel(subscriptionStartsAt) : t('membership.noMembershipPeriod')}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <span className="type-meta text-muted-foreground">{t('membership.validUntil')}</span>
+              <span className="type-chat-kicker text-right text-foreground">
+                {hasSubscription ? formatDateLabel(subscriptionEndsAt) : t('membership.noMembershipPeriod')}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">
           <Button
             variant="outline"
-            className="w-full justify-between gap-2"
+            className="type-chat-action w-full justify-between gap-2 rounded-none"
             onClick={handleLogout}
           >
             <span>{t('common:logout')}</span>
@@ -203,14 +228,23 @@ function ProfileContent() {
 }
 
 function AccessContent() {
-  const { t } = useTranslation('common')
-  const { planLabel, aiQuotaLabel, hasSubscription } = useMembershipStatus()
+  const { t, i18n } = useTranslation('common')
+  const { planLabel, aiQuotaLabel, hasSubscription, subscriptionStartsAt, subscriptionEndsAt } = useMembershipStatus()
+
+  const formatDateLabel = useCallback((value: string | null) => {
+    if (!value) return t('membership.noMembershipPeriod')
+    return new Intl.DateTimeFormat(i18n.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(value))
+  }, [i18n.language, t])
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 border border-border px-5 py-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(220px,0.75fr)] sm:px-6">
+      <section className="grid gap-4 border border-border/80 bg-background px-5 py-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(220px,0.75fr)] sm:px-6">
         <div className="space-y-3">
-          <p className="type-kicker text-muted-foreground">
+          <p className="type-chat-kicker text-muted-foreground">
             {t('accessTab')}
           </p>
           <h2 className="type-section-title text-foreground sm:text-[2.15rem]">
@@ -221,12 +255,12 @@ function AccessContent() {
           </p>
         </div>
 
-        <div className="type-meta flex flex-col justify-between gap-4 border-t border-border pt-4 text-muted-foreground lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border pb-3 sm:flex-row sm:items-center sm:gap-4">
+        <div className="type-meta flex flex-col justify-between gap-4 border-t border-border/80 pt-4 text-muted-foreground lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/80 pb-3 sm:flex-row sm:items-center sm:gap-4">
             <span>{t('membership.currentPlan')}</span>
             <span className="text-foreground">{planLabel}</span>
           </div>
-          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border pb-3 sm:flex-row sm:items-center sm:gap-4">
+          <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/80 pb-3 sm:flex-row sm:items-center sm:gap-4">
             <span>{t('membership.currentQuota')}</span>
             <span className="text-foreground">{aiQuotaLabel}</span>
           </div>
@@ -234,6 +268,14 @@ function AccessContent() {
             <span>{t('membership.reportAccess')}</span>
             <span className="text-foreground">
               {hasSubscription ? t('membership.reportsUnlocked') : t('membership.reportsLocked')}
+            </span>
+          </div>
+          <div className="flex flex-col items-start justify-between gap-1.5 border-t border-border/80 pt-3 sm:flex-row sm:items-center sm:gap-4">
+            <span>{t('membership.validPeriod')}</span>
+            <span className="text-right text-foreground">
+              {hasSubscription
+                ? `${formatDateLabel(subscriptionStartsAt)} — ${formatDateLabel(subscriptionEndsAt)}`
+                : t('membership.noMembershipPeriod')}
             </span>
           </div>
         </div>
