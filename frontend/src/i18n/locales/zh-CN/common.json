@@ -281,7 +281,11 @@
     "chatLimitMessage": "当前 AI 助手额度已用完，请兑换会员码后继续对话。",
     "chatLockedMessage": "当前账户暂未开放 AI 助手，请前往会员中心完成开通。",
     "profileTitle": "aimoda 访问权益",
-    "profileHint": "你的 AI 助手额度与报告访问状态会同步显示在这里。"
+    "profileHint": "你的 AI 助手额度与报告访问状态会同步显示在这里。",
+    "validFrom": "生效时间",
+    "validUntil": "截止时间",
+    "validPeriod": "会员周期",
+    "noMembershipPeriod": "未开通"
   },
   "profile": {
     "accountTitle": "账户资料",
@@ -289,5 +293,9 @@
     "accountLabel": "账户",
     "fieldsLabel": "字段"
   },
-  "accessTab": "访问权益"
+  "accessTab": "访问权益",
+  "dragImageHint": "可直接拖拽图片进入输入区进行分析。",
+  "dragImageReplaceHint": "可继续拖拽更多图片进入输入区。",
+  "dropImageHere": "松开以上传图片",
+  "dropImageHint": "支持将参考图直接拖入当前会话。"
 }

@@ -1,13 +1,14 @@
 // ImageDrawer — 结果面板（仿 aimoda-web ResultPanelContainer）
 
-import { useEffect, useRef, useState } from 'react'
-import { Maximize2, Minimize2, X, Loader2 } from 'lucide-react'
+import { type MouseEvent, useEffect, useRef, useState } from 'react'
+import { Download, Maximize2, Minimize2, X, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { DrawerData } from './chat-types'
 import { FashionImage } from './fashion-image'
 import { CHAT_THUMBNAIL_MAX_EDGE } from './oss-image'
+import { downloadImageAsset } from './image-download'
 
 const DRAWER_HEADER_META_CLASS = 'type-chat-meta text-muted-foreground'
 const DRAWER_HEADER_ICON_BUTTON_CLASS =
@@ -79,6 +80,11 @@ export function ImageDrawer({
     window.open(`/image/${img.image_id}`, '_blank')
   }
 
+  const handleImageDownload = (event: MouseEvent<HTMLButtonElement>, img: typeof safeImages[number]) => {
+    event.stopPropagation()
+    void downloadImageAsset(img.image_url, `${img.image_id}-${img.brand || 'fashion'}.jpg`)
+  }
+
   return (
     <div className={`flex h-full flex-col animate-in slide-in-from-right duration-normal bg-background ${isFullscreen ? 'border-l-0' : 'border-l border-border'}`}>
       <div className="border-b border-border/80 px-4 py-3 sm:px-5">
@@ -134,6 +140,15 @@ export function ImageDrawer({
               >
                 <FashionImage image={img} className="w-full h-full" thumbnailWidth={thumbnailWidth} />
                 <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
+                <button
+                  type="button"
+                  onClick={(event) => handleImageDownload(event, img)}
+                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground opacity-0 shadow-sm backdrop-blur-sm transition-opacity group-hover:opacity-100"
+                  title={t('download')}
+                  aria-label={t('download')}
+                >
+                  <Download size={14} />
+                </button>
               </div>
 
               <div className="space-y-1.5 text-left">

@@ -6,7 +6,7 @@ import re
 from urllib.parse import quote, unquote, urlsplit
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, Response, UploadFile, File, Query
+from fastapi import APIRouter, Cookie, Depends, Request, Response, UploadFile, File, Query
 from fastapi.responses import Response as FastAPIResponse
 from fastapi.responses import RedirectResponse
 
@@ -28,6 +28,7 @@ from ..services.report_service import (
     get_reports,
     delete_report_with_files,
     resolve_report_lead_excerpt,
+    serialize_report_public,
 )
 from ..services.auth_token import issue_report_preview_token, verify_report_preview_token
 from ..services.oss_service import get_oss_service
@@ -90,13 +91,6 @@ def _build_report_preview_url(report) -> str:
     return f"/api/reports/{report.id}/preview/{quote(entry_path, safe='/')}"
 
 
-def _serialize_report(report) -> dict:
-    payload = report.model_dump(by_alias=True)
-    payload["previewUrl"] = _build_report_preview_url(report)
-    payload["leadExcerpt"] = resolve_report_lead_excerpt(report)
-    return payload
-
-
 def _normalize_preview_asset_path(asset_path: str) -> str:
     cleaned = posixpath.normpath(asset_path or "").lstrip("/")
     if not cleaned or cleaned in {".", ".."} or cleaned.startswith("../") or "/../" in f"/{cleaned}":
@@ -128,6 +122,18 @@ def _build_oss_image_process(max_edge: int) -> str:
 def _append_oss_process(url: str, process: str) -> str:
     separator = "&" if "?" in url else "?"
     return f"{url}{separator}x-oss-process={quote(process, safe='')}"
+
+
+def _is_browser_document_request(request: Request, normalized_path: str) -> bool:
+    sec_fetch_dest = (request.headers.get("sec-fetch-dest") or "").lower()
+    accept = (request.headers.get("accept") or "").lower()
+    return sec_fetch_dest == "document" or (
+        _is_html_asset(normalized_path, "text/html") and "text/html" in accept and sec_fetch_dest != "iframe"
+    )
+
+
+def _redirect_to_report_shell(report_id: int) -> RedirectResponse:
+    return RedirectResponse(url=f"/reports/{report_id}", status_code=307)
 
 
 def _build_public_report_asset_url(report, normalized_path: str, *, process: str | None = None) -> str:
@@ -371,7 +377,7 @@ def list_reports(
     return {
         "success": True,
         "data": [
-            _serialize_report(r)
+            serialize_report_public(r)
             for r in reports
         ],
         "meta": {
@@ -426,7 +432,7 @@ def get_single_report(
     view_stat = get_view_status(user.id, user.role)
     _set_report_preview_cookie(response, user)
 
-    report_data = _serialize_report(report)
+    report_data = serialize_report_public(report)
 
     return {
         "success": True,
@@ -485,19 +491,28 @@ def launch_report_preview(
 
 @router.get("/{report_id}/preview/{asset_path:path}")
 def preview_report_asset(
+    request: Request,
     report_id: int,
     asset_path: str,
     max_edge: Annotated[int | None, Query(ge=256, le=2048)] = None,
     preview_token: Annotated[str | None, Cookie(alias=REPORT_PREVIEW_COOKIE_NAME)] = None,
 ):
+    normalized_path = _normalize_preview_asset_path(asset_path)
+
     if not preview_token:
+        if _is_browser_document_request(request, normalized_path):
+            return _redirect_to_report_shell(report_id)
         raise AppError("预览凭证已失效，请刷新页面重试", 401)
 
     try:
         user = verify_report_preview_token(preview_token)
     except ValueError as exc:
+        if _is_browser_document_request(request, normalized_path):
+            return _redirect_to_report_shell(report_id)
         raise AppError("预览凭证无效或已过期，请刷新页面重试", 401) from exc
     if user.session_id is not None and not is_session_valid(user.session_id, user.id):
+        if _is_browser_document_request(request, normalized_path):
+            return _redirect_to_report_shell(report_id)
         raise AppError("预览会话已失效，请重新登录", 401)
 
     report = get_report(report_id)
@@ -505,9 +520,10 @@ def preview_report_asset(
         raise AppError("未找到对应报告", 404)
 
     if not _can_access_report_preview(user, report_id):
+        if _is_browser_document_request(request, normalized_path):
+            return _redirect_to_report_shell(report_id)
         raise AppError("当前预览凭证无权访问该报告", 403)
 
-    normalized_path = _normalize_preview_asset_path(asset_path)
     guessed_media_type = mimetypes.guess_type(normalized_path)[0] or ""
 
     if _is_resizable_image(guessed_media_type):

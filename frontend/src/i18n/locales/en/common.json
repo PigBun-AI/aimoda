@@ -281,7 +281,11 @@
     "chatLimitMessage": "Your AI assistant quota is exhausted. Redeem a membership code to continue chatting.",
     "chatLockedMessage": "AI assistant access is not enabled on this account yet. Open membership to continue.",
     "profileTitle": "aimoda Access",
-    "profileHint": "Your AI assistant quota and report access status stay synced here."
+    "profileHint": "Your AI assistant quota and report access status stay synced here.",
+    "validFrom": "Starts",
+    "validUntil": "Ends",
+    "validPeriod": "Membership period",
+    "noMembershipPeriod": "Not activated"
   },
   "profile": {
     "accountTitle": "Account Details",
@@ -289,5 +293,9 @@
     "accountLabel": "Account",
     "fieldsLabel": "Fields"
   },
-  "accessTab": "Access"
+  "accessTab": "Access",
+  "dragImageHint": "Drag images into the composer for analysis.",
+  "dragImageReplaceHint": "You can keep dragging more images into the composer.",
+  "dropImageHere": "Drop to upload image",
+  "dropImageHint": "Reference images can be added directly to this session."
 }

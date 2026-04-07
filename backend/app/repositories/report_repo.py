@@ -76,6 +76,40 @@ def list_reports(page: int = 1, limit: int = 12) -> tuple[list[ReportRecord], in
     return [_map_report(r) for r in rows], total
 
 
+def list_reports_admin(page: int = 1, limit: int = 20, q: str | None = None) -> tuple[list[ReportRecord], int]:
+    offset = (page - 1) * limit
+    where_sql = ""
+    params: list[object] = []
+
+    if q and q.strip():
+        keyword = f"%{q.strip()}%"
+        where_sql = """
+            WHERE title ILIKE %s
+               OR brand ILIKE %s
+               OR season ILIKE %s
+               OR slug ILIKE %s
+        """
+        params = [keyword, keyword, keyword, keyword]
+
+    with _get_pg_conn() as conn:
+        count_row = conn.execute(
+            f"SELECT COUNT(*) FROM reports {where_sql}",
+            params,
+        ).fetchone()
+        total = count_row[0] if count_row else 0
+        rows = conn.execute(
+            f"""
+            SELECT {_REPORT_COLUMNS}
+            FROM reports
+            {where_sql}
+            ORDER BY updated_at DESC, id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (*params, limit, offset),
+        ).fetchall()
+    return [_map_report(r) for r in rows], total
+
+
 def delete_report_by_id(report_id: int) -> bool:
     with _get_pg_conn() as conn:
         result = conn.execute("DELETE FROM reports WHERE id = %s", (report_id,))
@@ -133,3 +167,54 @@ def update_report_metadata(report_id: int, metadata_json: dict | None) -> None:
             ),
         )
         conn.commit()
+
+
+def update_report_admin_fields(
+    report_id: int,
+    *,
+    title: str | None = None,
+    brand: str | None = None,
+    season: str | None = None,
+    year: int | None = None,
+    cover_url: str | None = None,
+    metadata_json: dict | None = None,
+) -> ReportRecord | None:
+    assignments: list[str] = []
+    params: list[object] = []
+
+    if title is not None:
+        assignments.append("title = %s")
+        params.append(title)
+    if brand is not None:
+        assignments.append("brand = %s")
+        params.append(brand)
+    if season is not None:
+        assignments.append("season = %s")
+        params.append(season)
+    if year is not None:
+        assignments.append("year = %s")
+        params.append(year)
+    if cover_url is not None:
+        assignments.append("cover_url = %s")
+        params.append(cover_url or None)
+    if metadata_json is not None:
+        assignments.append("metadata_json = %s")
+        params.append(psycopg.types.json.Json(metadata_json))
+
+    if not assignments:
+        return find_report_by_id(report_id)
+
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            f"""
+            UPDATE reports
+            SET {", ".join(assignments)},
+                updated_at = NOW()
+            WHERE id = %s
+            RETURNING {_REPORT_COLUMNS}
+            """,
+            (*params, report_id),
+        ).fetchone()
+        conn.commit()
+
+    return _map_report(row) if row else None

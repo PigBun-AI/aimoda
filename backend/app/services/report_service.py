@@ -10,7 +10,7 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from ..config import settings
 from ..constants import OPENCLAW_REPORT_TEMPLATE, OPENCLAW_UPLOAD_CONTRACT, REPORT_SPEC
@@ -22,6 +22,8 @@ from ..repositories.report_repo import (
     find_report_by_id,
     find_report_by_slug,
     list_reports,
+    list_reports_admin,
+    update_report_admin_fields,
     update_report_metadata,
 )
 from .report_scanner import extract_report_metadata, extract_report_lead_excerpt
@@ -49,6 +51,10 @@ def get_report(report_id: int) -> ReportRecord | None:
 
 def get_reports(page: int = 1, limit: int = 12) -> tuple[list[ReportRecord], int]:
     return list_reports(page, limit)
+
+
+def get_reports_admin(page: int = 1, limit: int = 20, q: str | None = None) -> tuple[list[ReportRecord], int]:
+    return list_reports_admin(page=page, limit=limit, q=q)
 
 
 def _parse_report_metadata_json(metadata_json: str | None) -> dict:
@@ -109,6 +115,52 @@ def resolve_report_lead_excerpt(report: ReportRecord) -> str | None:
         logger.warning("Failed to persist report lead excerpt for report %s: %s", report.slug, exc)
 
     return excerpt
+
+
+def serialize_report_public(report: ReportRecord) -> dict:
+    payload = report.model_dump(by_alias=True)
+    entry_path = _resolve_report_entry_path(report)
+    payload["previewUrl"] = f"/api/reports/{report.id}/preview/{quote(entry_path, safe='/')}"
+    payload["leadExcerpt"] = resolve_report_lead_excerpt(report)
+    payload["status"] = "published"
+    return payload
+
+
+def update_report_admin(
+    report_id: int,
+    *,
+    title: str | None = None,
+    brand: str | None = None,
+    season: str | None = None,
+    year: int | None = None,
+    cover_url: str | None = None,
+    lead_excerpt: str | None = None,
+) -> ReportRecord | None:
+    current = find_report_by_id(report_id)
+    if current is None:
+        return None
+
+    metadata = _parse_report_metadata_json(current.metadata_json)
+    metadata_dirty = False
+
+    if lead_excerpt is not None:
+        normalized_excerpt = lead_excerpt.strip()
+        if normalized_excerpt:
+            metadata["lead_excerpt"] = normalized_excerpt
+        else:
+            metadata.pop("lead_excerpt", None)
+            metadata.pop("leadExcerpt", None)
+        metadata_dirty = True
+
+    return update_report_admin_fields(
+        report_id,
+        title=title.strip() if isinstance(title, str) else None,
+        brand=brand.strip() if isinstance(brand, str) else None,
+        season=season.strip() if isinstance(season, str) else None,
+        year=year,
+        cover_url=cover_url.strip() if isinstance(cover_url, str) else None,
+        metadata_json=metadata if metadata_dirty else None,
+    )
 
 
 def delete_report_with_files(report_id: int) -> bool:

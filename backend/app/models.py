@@ -271,3 +271,36 @@ class UpdateStyleGapRequest(BaseModel):
     linked_style_name: str | None = Field(default=None, max_length=255)
     resolution_note: str | None = Field(default=None, max_length=2000)
     resolved_by: str | None = Field(default=None, max_length=255)
+
+
+class UpdateAdminReportRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    brand: str | None = Field(default=None, min_length=1, max_length=255)
+    season: str | None = Field(default=None, min_length=1, max_length=255)
+    year: int | None = Field(default=None, ge=1900, le=2100)
+    cover_url: str | None = Field(default=None, max_length=2000)
+    lead_excerpt: str | None = Field(default=None, max_length=2000)
+
+
+class UpdateAdminGalleryRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=4000)
+    category: str | None = Field(default=None, min_length=1, max_length=128)
+    tags: list[str] | None = None
+    cover_url: str | None = Field(default=None, max_length=2000)
+    status: str | None = Field(default=None, min_length=1, max_length=32)
+
+    @field_validator("tags")
+    @classmethod
+    def validate_tags(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        cleaned: list[str] = []
+        for item in value:
+            normalized = item.strip()
+            if not normalized:
+                continue
+            if len(normalized) > 64:
+                raise ValueError("tag is too long")
+            cleaned.append(normalized)
+        return cleaned

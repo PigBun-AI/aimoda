@@ -127,15 +127,25 @@ export function ProfilePage() {
 }
 
 function ProfileContent() {
-  const { t } = useTranslation('common')
+  const { t, i18n } = useTranslation('common')
   const navigate = useNavigate()
   const currentUser = getSessionUser()
+  const { hasSubscription, planLabel, subscriptionStartsAt, subscriptionEndsAt } = useMembershipStatus()
 
   const handleLogout = useCallback(() => {
     queryClient.clear()
     clearSession()
     navigate('/', { replace: true })
   }, [navigate])
+
+  const formatDateLabel = useCallback((value: string | null) => {
+    if (!value) return t('notSet')
+    return new Intl.DateTimeFormat(i18n.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(value))
+  }, [i18n.language, t])
 
   return (
     <div className="grid max-w-4xl gap-4 font-sans lg:grid-cols-[minmax(0,1.3fr)_minmax(240px,0.7fr)]">
@@ -182,9 +192,24 @@ function ProfileContent() {
           <p className="type-chat-kicker text-muted-foreground">
             {t('membership.profileTitle')}
           </p>
-          <p className="type-body-muted mt-3 max-w-[28ch]">
-            {t('membership.profileHint')}
-          </p>
+          <div className="mt-4 space-y-3">
+            <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-3">
+              <span className="type-meta text-muted-foreground">{t('membership.currentPlan')}</span>
+              <span className="type-chat-kicker text-right text-foreground">{planLabel}</span>
+            </div>
+            <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-3">
+              <span className="type-meta text-muted-foreground">{t('membership.validFrom')}</span>
+              <span className="type-chat-kicker text-right text-foreground">
+                {hasSubscription ? formatDateLabel(subscriptionStartsAt) : t('membership.noMembershipPeriod')}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <span className="type-meta text-muted-foreground">{t('membership.validUntil')}</span>
+              <span className="type-chat-kicker text-right text-foreground">
+                {hasSubscription ? formatDateLabel(subscriptionEndsAt) : t('membership.noMembershipPeriod')}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2">
@@ -203,8 +228,17 @@ function ProfileContent() {
 }
 
 function AccessContent() {
-  const { t } = useTranslation('common')
-  const { planLabel, aiQuotaLabel, hasSubscription } = useMembershipStatus()
+  const { t, i18n } = useTranslation('common')
+  const { planLabel, aiQuotaLabel, hasSubscription, subscriptionStartsAt, subscriptionEndsAt } = useMembershipStatus()
+
+  const formatDateLabel = useCallback((value: string | null) => {
+    if (!value) return t('membership.noMembershipPeriod')
+    return new Intl.DateTimeFormat(i18n.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(value))
+  }, [i18n.language, t])
 
   return (
     <div className="space-y-6">
@@ -234,6 +268,14 @@ function AccessContent() {
             <span>{t('membership.reportAccess')}</span>
             <span className="text-foreground">
               {hasSubscription ? t('membership.reportsUnlocked') : t('membership.reportsLocked')}
+            </span>
+          </div>
+          <div className="flex flex-col items-start justify-between gap-1.5 border-t border-border/80 pt-3 sm:flex-row sm:items-center sm:gap-4">
+            <span>{t('membership.validPeriod')}</span>
+            <span className="text-right text-foreground">
+              {hasSubscription
+                ? `${formatDateLabel(subscriptionStartsAt)} — ${formatDateLabel(subscriptionEndsAt)}`
+                : t('membership.noMembershipPeriod')}
             </span>
           </div>
         </div>
