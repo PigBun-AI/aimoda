@@ -86,27 +86,27 @@ export function InspirationPage() {
 
   return (
     <section className="space-y-8 sm:space-y-10">
-      <header className="grid gap-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.75fr)] lg:gap-8 lg:pt-6">
+      <header className="grid gap-6 border-t border-border/80 pt-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.75fr)] lg:gap-8 lg:pt-6">
         <div className="space-y-3">
-          <p className="type-kicker-wide text-muted-foreground">
+          <p className="type-chat-kicker text-muted-foreground">
             {String(total).padStart(2, '0')}
           </p>
           <h1 className="type-page-title max-w-[12ch] text-foreground">
             {t('inspiration')}
           </h1>
         </div>
-        <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+        <div className="flex flex-col justify-between gap-4 border-t border-border/80 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
           <p className="type-meta max-w-[32ch] text-muted-foreground">
             {t('inspirationSubtitle')}
           </p>
-          <div className="type-meta flex items-center justify-between border-t border-border pt-3 text-muted-foreground">
+          <div className="type-meta flex items-center justify-between border-t border-border/80 pt-3 text-muted-foreground">
             <span>{t('imageArchiveLabel')}</span>
             <span>{String(page).padStart(2, '0')}</span>
           </div>
         </div>
       </header>
 
-      <div className="-mx-4 overflow-x-auto border-t border-border px-4 pt-4 sm:mx-0 sm:px-0">
+      <div className="-mx-4 overflow-x-auto border-t border-border/80 px-4 pt-4 sm:mx-0 sm:px-0">
         <div className="flex min-w-max gap-2 pb-1 sm:flex-wrap sm:pb-0">
           {CATEGORIES.map((cat) => {
             const Icon = cat.icon
@@ -117,7 +117,7 @@ export function InspirationPage() {
                 variant={isActive ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setCategory(cat.value)}
-                className="gap-2"
+                className="type-chat-action gap-2 rounded-none"
               >
                 <Icon className="h-3.5 w-3.5" />
                 {t(cat.labelKey)}
@@ -151,7 +151,7 @@ export function InspirationPage() {
                           </div>
                         )}
                         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-background via-background/82 to-transparent px-4 pb-3 pt-8">
-                          <span className="type-kicker text-foreground/82">
+                          <span className="type-chat-kicker text-foreground/82">
                             {getCategoryLabel(gallery.category, t)}
                           </span>
                           <Badge variant="default" className="text-[9px]">
@@ -162,13 +162,13 @@ export function InspirationPage() {
                     )}
                     eyebrow={(
                       <div className="space-y-2">
-                        <p className="type-kicker-wide text-muted-foreground">
+                        <p className="type-chat-kicker text-muted-foreground">
                           {formatDate(gallery.updated_at, i18n.language)}
                         </p>
                       </div>
                     )}
                     counter={(
-                      <span className="type-kicker text-muted-foreground">
+                      <span className="type-chat-kicker text-muted-foreground">
                         {formatIssueNumber(index, page)}
                       </span>
                     )}
@@ -191,13 +191,13 @@ export function InspirationPage() {
                       </>
                     )}
                     footerStart={(
-                      <span className="type-kicker text-muted-foreground">
+                      <span className="type-chat-kicker text-muted-foreground">
                         {t('imageCount', { count: gallery.image_count })}
                       </span>
                     )}
                     footerEnd={(
                       <div className="flex items-center gap-2 text-foreground">
-                        <span className="type-ui-label-sm">{t('openArchive')}</span>
+                        <span className="type-chat-action">{t('openArchive')}</span>
                         <ArrowUpRight className="h-4 w-4 transition-transform duration-fast group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={1.6} />
                       </div>
                     )}
@@ -208,9 +208,9 @@ export function InspirationPage() {
       </div>
 
       {!loading && galleries.length === 0 && (
-        <div className="border border-border px-6 py-12 text-center sm:px-8 sm:py-16">
+        <div className="border border-border/80 px-6 py-12 text-center sm:px-8 sm:py-16">
           <div className="mx-auto flex max-w-[18rem] flex-col items-center gap-4">
-            <div className="type-kicker-wide border border-border px-4 py-2 text-muted-foreground">
+            <div className="type-chat-kicker border border-border px-4 py-2 text-muted-foreground">
               00
             </div>
             <p className="type-section-title text-foreground">
@@ -224,19 +224,19 @@ export function InspirationPage() {
       )}
 
       {totalPages > 1 && (
-        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5" aria-label="Inspiration pagination">
+        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border/80 pt-5" aria-label="Inspiration pagination">
           <Button
             variant="outline"
             size="sm"
             disabled={page <= 1}
             onClick={() => setPage(page - 1)}
-            className="min-h-[44px] min-w-[44px] px-3"
+            className="type-chat-action min-h-[44px] min-w-[44px] rounded-none px-3"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
             <span className="hidden sm:inline">{t('previous')}</span>
           </Button>
           <div className="text-center">
-            <p className="type-kicker text-muted-foreground">
+            <p className="type-chat-kicker text-muted-foreground">
               {t('page')}
             </p>
             <p className="mt-1 text-sm tabular-nums text-foreground">
@@ -248,7 +248,7 @@ export function InspirationPage() {
             size="sm"
             disabled={page >= totalPages}
             onClick={() => setPage(page + 1)}
-            className="min-h-[44px] min-w-[44px] px-3"
+            className="type-chat-action min-h-[44px] min-w-[44px] rounded-none px-3"
           >
             <span className="hidden sm:inline">{t('next')}</span>
             <ChevronRight className="h-4 w-4" strokeWidth={1.75} />

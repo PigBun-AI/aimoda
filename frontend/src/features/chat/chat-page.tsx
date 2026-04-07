@@ -19,13 +19,17 @@ function LoadingIndicator() {
   const { t } = useTranslation('common')
 
   return (
-    <div className="animate-in fade-in flex items-center gap-3 border-l border-border py-4 pl-4 duration-normal">
-      <div className="flex gap-1">
-        <div className="h-1.5 w-1.5 animate-pulse bg-primary" style={{ animationDelay: '0s' }} />
-        <div className="h-1.5 w-1.5 animate-pulse bg-primary" style={{ animationDelay: '0.25s' }} />
-        <div className="h-1.5 w-1.5 animate-pulse bg-primary" style={{ animationDelay: '0.5s' }} />
+    <div className="animate-in fade-in flex items-center gap-3 border-t border-border/80 py-4 duration-normal">
+      <div className="h-px flex-1 bg-border/70" />
+      <div className="flex min-w-0 items-center justify-center gap-2.5">
+        <div className="flex gap-1">
+          <div className="h-1 w-1 animate-pulse bg-foreground" style={{ animationDelay: '0s' }} />
+          <div className="h-1 w-1 animate-pulse bg-foreground" style={{ animationDelay: '0.25s' }} />
+          <div className="h-1 w-1 animate-pulse bg-foreground" style={{ animationDelay: '0.5s' }} />
+        </div>
+        <span className="type-chat-kicker text-muted-foreground">{t('agentThinking')}</span>
       </div>
-      <span className="type-kicker text-muted-foreground">{t('agentThinking')}</span>
+      <div className="h-px flex-1 bg-border/70" />
     </div>
   )
 }
@@ -35,6 +39,8 @@ function EmptyState() {
 
   return (
     <div className="flex min-h-full w-full items-center justify-center px-6 py-8 text-center">
+      {/* Keep the empty state deliberately simple; the editorialized split layout
+          pulled too much attention and made the chat entry feel heavier. */}
       <div className="flex w-full max-w-3xl flex-col items-center border border-border px-8 py-10 sm:px-12 sm:py-14">
         <div className="w-full max-w-xl border-b border-border pb-8">
           <div className="flex items-center justify-center gap-4">
@@ -243,14 +249,14 @@ export function ChatPage() {
 
   const composerStatusBar = (
     isSessionRunning || membershipBlocked || isLimitExceeded ? (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2.5">
         {isSessionRunning && (
-          <div className="grid gap-3 border border-border/70 bg-background/78 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0 space-y-1">
-              <p className="type-ui-label-xs text-muted-foreground/72">
+              <p className="type-chat-kicker text-muted-foreground/72">
                 {t('parallelSearchEyebrow')}
               </p>
-              <p className="type-ui-meta text-muted-foreground/88">
+              <p className="type-chat-meta text-muted-foreground/88">
                 {t('parallelSearchHint')}
               </p>
             </div>
@@ -258,7 +264,7 @@ export function ChatPage() {
               type="button"
               onClick={() => void handleCreateParallelSession()}
               disabled={isCreatingParallelSession}
-              className="type-action-label control-pill-sm inline-flex items-center justify-center border border-border text-foreground transition-colors hover:border-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
+              className="type-chat-action control-pill-sm inline-flex items-center justify-center border border-border text-foreground transition-colors hover:border-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
             >
               {isCreatingParallelSession ? t('loading') : t('parallelSearchAction')}
             </button>
@@ -268,20 +274,20 @@ export function ChatPage() {
         {(membershipBlocked || isLimitExceeded) && (
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
             <div className="min-w-0 space-y-1">
-              <p className="type-ui-label-xs text-muted-foreground/72">
+              <p className="type-chat-kicker text-muted-foreground/72">
                 {t('membership.chatAccessEyebrow')} · {planLabel}
               </p>
-              <p className={cn('type-ui-meta truncate text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
+              <p className={cn('type-chat-meta truncate text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
                 {aiSummary}
               </p>
             </div>
             <div className="flex items-center gap-3 sm:justify-end">
-              <span className={cn('type-ui-label-sm control-pill-sm inline-flex items-center text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
+              <span className={cn('type-chat-label control-pill-sm inline-flex items-center border border-border/70 px-3 text-muted-foreground/88', isLimitExceeded && 'border-destructive/30 text-destructive')}>
                 {aiQuotaLabel}
               </span>
               <Link
                 to="/profile?tab=access"
-                className="type-action-label control-pill-sm inline-flex items-center border border-transparent text-foreground transition-colors hover:border-border hover:text-muted-foreground"
+                className="type-chat-action control-pill-sm inline-flex items-center border border-transparent text-foreground transition-colors hover:border-border hover:text-muted-foreground"
               >
                 {t('membership.manageAction')}
               </Link>
@@ -304,11 +310,11 @@ export function ChatPage() {
           )}
           style={isDesktop ? { width: `${chatWidthPercent}%` } : undefined}
         >
-          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
             {messages.length === 0 ? (
               <EmptyState />
             ) : (
-              <div className="mx-auto w-full max-w-3xl border-t border-border pt-5 sm:pt-6">
+              <div className="mx-auto w-full max-w-3xl border-t border-border/80 pt-6 sm:pt-8">
                 {messages.map((msg) => (
                   <MessageBubble key={msg.id} msg={msg} onOpenDrawer={openDrawerFromSearchRequestId} />
                 ))}
@@ -355,7 +361,7 @@ export function ChatPage() {
                 <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
                   <button
                     onClick={() => setDrawerOpen(false)}
-                    className="type-ui-label-sm flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+                    className="type-chat-label flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <span>←</span>
                     <span>{t('backToChat')}</span>

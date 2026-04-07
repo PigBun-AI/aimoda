@@ -178,11 +178,11 @@ export function ImageDetailPage() {
 
             <div className="hidden min-w-0 border-l border-border pl-4 sm:block">
               <div className="flex min-w-0 items-center gap-3">
-                <h1 className="type-ui-title-md truncate text-foreground">
+                <h1 className="type-chat-title truncate text-foreground">
                   {titleBrand}
                 </h1>
                 {imageMeta && (
-                  <span className="type-kicker truncate text-muted-foreground">
+                  <span className="type-chat-kicker truncate text-muted-foreground">
                     {imageMeta}
                   </span>
                 )}
@@ -203,7 +203,7 @@ export function ImageDetailPage() {
             <button
               type="button"
               onClick={toggleLanguage}
-              className="type-action-label control-pill-sm flex min-w-[56px] items-center justify-center gap-1 border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              className="type-chat-action control-pill-sm flex min-w-[56px] items-center justify-center gap-1 border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
               aria-label={i18n.language === 'zh-CN' ? t('switchToEn') : t('switchToZh')}
               title={i18n.language === 'zh-CN' ? t('switchToEn') : t('switchToZh')}
             >
@@ -220,7 +220,7 @@ export function ImageDetailPage() {
               </button>
             )}
             {hasMultiple && (
-              <div className="type-kicker control-pill-sm hidden min-w-[82px] items-center justify-center border border-border text-muted-foreground sm:flex">
+              <div className="type-chat-kicker control-pill-sm hidden min-w-[82px] items-center justify-center border border-border text-muted-foreground sm:flex">
                 {currentIndex + 1} / {images.length}
               </div>
             )}
@@ -257,7 +257,7 @@ export function ImageDetailPage() {
               <span className="h-1.5 w-1.5 animate-pulse bg-muted-foreground" style={{ animationDelay: '0.2s' }} />
               <span className="h-1.5 w-1.5 animate-pulse bg-muted-foreground" style={{ animationDelay: '0.4s' }} />
             </div>
-            <p className="type-kicker-wide text-muted-foreground">
+            <p className="type-chat-kicker text-muted-foreground">
               {t('loadingImageDetails')}
             </p>
           </div>
@@ -267,7 +267,7 @@ export function ImageDetailPage() {
       {currentImage && (
         <div className="mx-auto max-w-screen-2xl px-4 py-4 sm:px-6 sm:py-6">
           <section
-            className="overflow-hidden border border-border"
+            className="overflow-hidden border border-border/80"
             style={{ height: 'calc(100dvh - 64px - (clamp(16px, 2vw, 24px) * 2))' }}
           >
             <div className="grid h-full min-h-0 gap-0 xl:grid-cols-[320px_minmax(0,1fr)_88px]">

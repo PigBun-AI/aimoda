@@ -128,21 +128,8 @@ export function ChatInput({
 
   return (
     <div className="bg-background px-3 pb-3 sm:px-4 sm:pb-4">
-      <div className="mx-auto flex max-w-3xl flex-col gap-2">
-        {(statusBar || infoMessage) && (
-          <div className="border border-border/80 bg-muted/16 px-4 py-3">
-            <div className="flex flex-col gap-2">
-              {statusBar && <div className="min-w-0">{statusBar}</div>}
-              {infoMessage && (
-                <p className="type-ui-meta text-muted-foreground/88">
-                  {infoMessage}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="relative border border-border bg-background transition-colors">
+      <div className="mx-auto max-w-3xl">
+        <div className="relative overflow-hidden border border-border bg-background transition-colors">
           <div className="flex flex-col">
             <input
               ref={fileInputRef}
@@ -153,8 +140,21 @@ export function ChatInput({
               onChange={handleFilesSelected}
             />
 
+            {(statusBar || infoMessage) && (
+              <div className="border-b border-border/80 bg-muted/[0.14] px-4 py-3 sm:px-5">
+                <div className="flex flex-col gap-2.5">
+                  {statusBar && <div className="min-w-0">{statusBar}</div>}
+                  {infoMessage && (
+                    <p className="type-chat-meta text-muted-foreground/88">
+                      {infoMessage}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {pendingImages.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto px-4 pt-4">
+              <div className="flex gap-2 overflow-x-auto px-4 pt-4 sm:px-5">
                 {pendingImages.map(image => (
                   <div key={image.id} className="relative shrink-0">
                     <img
@@ -175,22 +175,22 @@ export function ChatInput({
               </div>
             )}
 
-            <div className="flex h-[100px] flex-col sm:h-[130px]">
+            <div className="flex min-h-[118px] flex-col sm:min-h-[138px]">
               <textarea
                 value={inputValue}
                 onChange={event => setInputValue(event.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder={resolvedPlaceholder}
                 disabled={disabled}
-                className="flex-1 w-full resize-none bg-transparent px-5 pt-4 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                className="type-chat-body min-h-[76px] flex-1 w-full resize-none bg-transparent px-4 pt-4 text-foreground outline-none placeholder:text-muted-foreground/72 sm:px-5"
               />
 
-              <div className="flex items-center justify-between px-4 pb-3 pt-2 shrink-0">
+              <div className="flex shrink-0 items-center justify-between border-t border-border/70 bg-background px-3 pb-3 pt-2 sm:px-4">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handlePickImages}
-                    className="shrink-0 cursor-pointer p-2.5 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                    className="control-icon-sm shrink-0 cursor-pointer border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
                     title={t("uploadImage")}
                   >
                     <ImagePlus size={18} />
@@ -208,7 +208,7 @@ export function ChatInput({
                     onClick={onStop}
                   >
                     <Square size={14} fill="currentColor" />
-                    <span className="type-ui-label-sm">{isStopping ? t("stoppingAgent") : t("stopAgent")}</span>
+                    <span className="type-chat-action">{isStopping ? t("stoppingAgent") : t("stopAgent")}</span>
                   </Button>
                 ) : (
                   <Button
