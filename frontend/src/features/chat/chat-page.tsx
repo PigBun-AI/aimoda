@@ -1,19 +1,78 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { SlidersHorizontal, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ChatInput } from './chat-input'
 import { ImageDrawer } from './image-drawer'
 import { MessageBubble } from './message-bubble'
-import type { ChatComposerInput } from './chat-types'
+import { ChatPreferencesBar } from './chat-preferences-bar'
+import type { ChatComposerInput, ChatSessionPreferences } from './chat-types'
 import { useChat } from './chat-hooks'
 import { useChatLayoutStore } from './chat-layout-store'
 import { deriveSessionTitleFromBlocks } from './session-title'
 import { useSessionStore } from './session-store'
 import { useMembershipStatus } from '@/features/membership/use-membership'
+import { listFavoriteCollections, type FavoriteCollection } from '@/features/favorites/favorites-api'
 import { cn } from '@/lib/utils'
 import { useIsDesktop } from '@/lib/use-breakpoint'
+
+const EMPTY_CHAT_PREFERENCES: ChatSessionPreferences = {
+  gender: null,
+  quarter: null,
+  year: null,
+  taste_profile_id: null,
+  taste_profile_weight: 0.24,
+}
+
+function normalizeChatPreferences(preferences?: ChatSessionPreferences | null): ChatSessionPreferences {
+  return {
+    gender: preferences?.gender ?? null,
+    quarter: preferences?.quarter ?? null,
+    year: preferences?.year ?? null,
+    taste_profile_id: preferences?.taste_profile_id ?? null,
+    taste_profile_weight: preferences?.taste_profile_weight ?? 0.24,
+  }
+}
+
+function hasActiveChatPreferences(preferences: ChatSessionPreferences) {
+  return Boolean(
+    preferences.gender
+    || preferences.quarter
+    || preferences.year
+    || preferences.taste_profile_id,
+  )
+}
+
+function areChatPreferencesEqual(left: ChatSessionPreferences, right: ChatSessionPreferences) {
+  return (
+    (left.gender ?? null) === (right.gender ?? null)
+    && (left.quarter ?? null) === (right.quarter ?? null)
+    && (left.year ?? null) === (right.year ?? null)
+    && (left.taste_profile_id ?? null) === (right.taste_profile_id ?? null)
+    && (left.taste_profile_weight ?? 0.24) === (right.taste_profile_weight ?? 0.24)
+  )
+}
+
+function getQuarterPreferenceLabel(
+  quarter: ChatSessionPreferences['quarter'],
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
+  switch (quarter) {
+    case '早春':
+      return t('chatPreferenceQuarterResort')
+    case '春夏':
+      return t('chatPreferenceQuarterSS')
+    case '早秋':
+      return t('chatPreferenceQuarterPreFall')
+    case '秋冬':
+      return t('chatPreferenceQuarterFW')
+    default:
+      return ''
+  }
+}
 
 function LoadingIndicator() {
   const { t } = useTranslation('common')
@@ -76,6 +135,10 @@ export function ChatPage() {
   const membershipBlocked = aiStatus?.allowed === false
   const chatInputDisabled = membershipBlocked || isLimitExceeded
   const [isCreatingParallelSession, setIsCreatingParallelSession] = useState(false)
+  const [preferenceCollections, setPreferenceCollections] = useState<FavoriteCollection[]>([])
+  const [draftPreferences, setDraftPreferences] = useState<ChatSessionPreferences>(EMPTY_CHAT_PREFERENCES)
+  const [preferenceEditor, setPreferenceEditor] = useState<ChatSessionPreferences>(EMPTY_CHAT_PREFERENCES)
+  const [isPreferencesDialogOpen, setIsPreferencesDialogOpen] = useState(false)
   const chatInfoMessage = membershipBlocked
     ? t('membership.chatLockedMessage')
     : isLimitExceeded
@@ -96,6 +159,7 @@ export function ChatPage() {
     setActiveSessionId,
     loadSessions,
     newSession,
+    updateSessionChatPreferences,
   } = useSessionStore()
   const activeSession = sessions.find(session => session.id === activeSessionId) ?? null
 
@@ -110,7 +174,12 @@ export function ChatPage() {
     drawerData,
     openDrawerFromSearchRequestId,
     loadMoreDrawerImages,
-  } = useChat(activeSessionId)
+    applyDrawerTasteProfile,
+  } = useChat(
+    activeSessionId,
+    draftPreferences.taste_profile_id ?? null,
+    draftPreferences.taste_profile_weight ?? 0.24,
+  )
   const isSessionRunning = activeSession?.execution_status === 'running'
   const isSessionStopping = activeSession?.execution_status === 'stopping'
   const isSessionActive = isSessionRunning || isSessionStopping
@@ -159,6 +228,38 @@ export function ChatPage() {
   }, [drawerWidthPercent])
 
   useEffect(() => {
+    listFavoriteCollections()
+      .then(result => {
+        setPreferenceCollections(result.filter(collection => collection.can_apply_as_dna ?? collection.can_apply_as_taste))
+      })
+      .catch(() => {
+        setPreferenceCollections([])
+      })
+  }, [])
+
+  useEffect(() => {
+    if (!draftPreferences.taste_profile_id) return
+    if (preferenceCollections.some(collection => collection.id === draftPreferences.taste_profile_id)) return
+
+    const nextPreferences = { ...draftPreferences, taste_profile_id: null }
+    setDraftPreferences(nextPreferences)
+    if (activeSessionId) {
+      void updateSessionChatPreferences(activeSessionId, nextPreferences)
+    }
+  }, [activeSessionId, draftPreferences, preferenceCollections, updateSessionChatPreferences])
+
+  useEffect(() => {
+    if (activeSession) {
+      setDraftPreferences(normalizeChatPreferences(activeSession.preferences))
+    }
+  }, [activeSession?.id, activeSession?.preferences])
+
+  useEffect(() => {
+    if (!isPreferencesDialogOpen) return
+    setPreferenceEditor(normalizeChatPreferences(draftPreferences))
+  }, [draftPreferences, isPreferencesDialogOpen])
+
+  useEffect(() => {
     if (!drawerOpen || !isDesktop) {
       setDrawerFullscreen(false)
     }
@@ -187,7 +288,7 @@ export function ChatPage() {
     const nextTitle = deriveSessionTitleFromBlocks(input.content)
 
     if (!activeSessionId) {
-      const session = await newSession(nextTitle ?? '新对话')
+      const session = await newSession(nextTitle ?? '新对话', draftPreferences)
       if (!session) return
       await sendMessage(input, session.id)
       void refetchMembership()
@@ -196,19 +297,44 @@ export function ChatPage() {
 
     await sendMessage(input)
     void refetchMembership()
-  }, [activeSessionId, newSession, refetchMembership, sendMessage])
+  }, [activeSessionId, draftPreferences, newSession, refetchMembership, sendMessage])
 
   const handleCreateParallelSession = useCallback(async () => {
     if (isCreatingParallelSession) return
     setIsCreatingParallelSession(true)
     try {
-      const session = await newSession(t('fashionSearch'))
+      const session = await newSession(t('fashionSearch'), draftPreferences)
       if (!session) return
       navigate(`/chat?session=${session.id}`, { replace: false })
     } finally {
       setIsCreatingParallelSession(false)
     }
-  }, [isCreatingParallelSession, navigate, newSession, t])
+  }, [draftPreferences, isCreatingParallelSession, navigate, newSession, t])
+
+  const handlePreferencesChange = useCallback((next: ChatSessionPreferences) => {
+    setPreferenceEditor(normalizeChatPreferences(next))
+  }, [])
+
+  const commitPreferences = useCallback((next: ChatSessionPreferences) => {
+    const normalized = normalizeChatPreferences(next)
+    setDraftPreferences(normalized)
+    if (!activeSessionId) return
+    void updateSessionChatPreferences(activeSessionId, normalized)
+  }, [activeSessionId, updateSessionChatPreferences])
+
+  const handleOpenPreferencesDialog = useCallback(() => {
+    setPreferenceEditor(normalizeChatPreferences(draftPreferences))
+    setIsPreferencesDialogOpen(true)
+  }, [draftPreferences])
+
+  const handleApplyPreferences = useCallback(() => {
+    commitPreferences(preferenceEditor)
+    setIsPreferencesDialogOpen(false)
+  }, [commitPreferences, preferenceEditor])
+
+  const handleResetPreferences = useCallback(() => {
+    setPreferenceEditor({ ...EMPTY_CHAT_PREFERENCES })
+  }, [])
 
   const toggleDrawerFullscreen = useCallback(() => {
     if (!isDesktop || !drawerOpen) return
@@ -247,55 +373,97 @@ export function ChatPage() {
     ? (isDesktop && isDrawerFullscreen ? 0 : 100 - drawerWidthPercent)
     : 100
 
-  const composerStatusBar = (
-    isSessionRunning || membershipBlocked || isLimitExceeded ? (
-      <div className="flex flex-col gap-2.5">
-        {isSessionRunning && (
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div className="min-w-0 space-y-1">
-              <p className="type-chat-kicker text-muted-foreground/72">
-                {t('parallelSearchEyebrow')}
-              </p>
-              <p className="type-chat-meta text-muted-foreground/88">
-                {t('parallelSearchHint')}
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => void handleCreateParallelSession()}
-              disabled={isCreatingParallelSession}
-              className="type-chat-action control-pill-sm inline-flex items-center justify-center border border-border text-foreground transition-colors hover:border-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {isCreatingParallelSession ? t('loading') : t('parallelSearchAction')}
-            </button>
+  const hasComposerStatusBar = isSessionRunning || membershipBlocked || isLimitExceeded
+  const composerStatusBar = hasComposerStatusBar ? (
+    <div className="flex flex-col gap-2.5">
+      {isSessionRunning && (
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="min-w-0 space-y-1">
+            <p className="type-chat-kicker text-muted-foreground/72">
+              {t('parallelSearchEyebrow')}
+            </p>
+            <p className="type-chat-meta text-muted-foreground/88">
+              {t('parallelSearchHint')}
+            </p>
           </div>
-        )}
+          <button
+            type="button"
+            onClick={() => void handleCreateParallelSession()}
+            disabled={isCreatingParallelSession}
+            className="type-chat-action control-pill-sm inline-flex items-center justify-center border border-border text-foreground transition-colors hover:border-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
+          >
+            {isCreatingParallelSession ? t('loading') : t('parallelSearchAction')}
+          </button>
+        </div>
+      )}
 
-        {(membershipBlocked || isLimitExceeded) && (
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-            <div className="min-w-0 space-y-1">
-              <p className="type-chat-kicker text-muted-foreground/72">
-                {t('membership.chatAccessEyebrow')} · {planLabel}
-              </p>
-              <p className={cn('type-chat-meta truncate text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
-                {aiSummary}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 sm:justify-end">
-              <span className={cn('type-chat-label control-pill-sm inline-flex items-center border border-border/70 px-3 text-muted-foreground/88', isLimitExceeded && 'border-destructive/30 text-destructive')}>
-                {aiQuotaLabel}
-              </span>
-              <Link
-                to="/profile?tab=access"
-                className="type-chat-action control-pill-sm inline-flex items-center border border-transparent text-foreground transition-colors hover:border-border hover:text-muted-foreground"
-              >
-                {t('membership.manageAction')}
-              </Link>
-            </div>
+      {(membershipBlocked || isLimitExceeded) && (
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div className="min-w-0 space-y-1">
+            <p className="type-chat-kicker text-muted-foreground/72">
+              {t('membership.chatAccessEyebrow')} · {planLabel}
+            </p>
+            <p className={cn('type-chat-meta truncate text-muted-foreground/88', isLimitExceeded && 'text-destructive')}>
+              {aiSummary}
+            </p>
           </div>
-        )}
-      </div>
-    ) : undefined
+          <div className="flex items-center gap-3 sm:justify-end">
+            <span className={cn('type-chat-label control-pill-sm inline-flex items-center border border-border/70 px-3 text-muted-foreground/88', isLimitExceeded && 'border-destructive/30 text-destructive')}>
+              {aiQuotaLabel}
+            </span>
+            <Link
+              to="/profile?tab=access"
+              className="type-chat-action control-pill-sm inline-flex items-center border border-transparent text-foreground transition-colors hover:border-border hover:text-muted-foreground"
+            >
+              {t('membership.manageAction')}
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null
+
+  const preferenceSummary = useMemo(() => {
+    const parts: string[] = []
+    if (draftPreferences.gender) {
+      parts.push(t(draftPreferences.gender === 'female' ? 'chatPreferenceFemale' : 'chatPreferenceMale'))
+    }
+    if (draftPreferences.quarter) {
+      parts.push(getQuarterPreferenceLabel(draftPreferences.quarter, t))
+    }
+    if (draftPreferences.year) {
+      parts.push(String(draftPreferences.year))
+    }
+    if (draftPreferences.taste_profile_id) {
+      const matchedCollection = preferenceCollections.find(collection => collection.id === draftPreferences.taste_profile_id)
+      if (matchedCollection?.name) {
+        parts.push(matchedCollection.name)
+      }
+    }
+    return parts.length > 0 ? parts.join(' · ') : t('chatPreferenceAll')
+  }, [draftPreferences, preferenceCollections, t])
+
+  const hasPendingPreferenceChanges = !areChatPreferencesEqual(draftPreferences, preferenceEditor)
+
+  const preferenceActionBar = (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      onClick={handleOpenPreferencesDialog}
+      className={cn(
+        'h-11 min-w-[112px] items-center justify-start gap-2 rounded-none px-3 text-left',
+        hasActiveChatPreferences(draftPreferences) && 'border-foreground/55',
+      )}
+    >
+      <SlidersHorizontal size={14} />
+      <span className="flex min-w-0 flex-col items-start leading-none">
+        <span className="type-chat-action">{t('chatPreferencesTitle')}</span>
+        <span className="type-chat-meta max-w-[16ch] truncate text-muted-foreground/72">
+          {preferenceSummary}
+        </span>
+      </span>
+    </Button>
   )
 
   return (
@@ -332,6 +500,7 @@ export function ChatPage() {
             isStopping={isStopping}
             infoMessage={chatInfoMessage}
             statusBar={composerStatusBar}
+            actionBar={preferenceActionBar}
           />
         </div>
 
@@ -381,12 +550,42 @@ export function ChatPage() {
                 isFullscreen={isDesktop && isDrawerFullscreen}
                 onClose={() => setDrawerOpen(false)}
                 onLoadMore={loadMoreDrawerImages}
+                onTasteProfileChange={applyDrawerTasteProfile}
                 onToggleFullscreen={isDesktop ? toggleDrawerFullscreen : undefined}
               />
             </div>
           </>
         )}
       </div>
+
+      <Dialog open={isPreferencesDialogOpen} onOpenChange={setIsPreferencesDialogOpen}>
+        <DialogContent className="max-w-[880px] rounded-none border-border/80">
+          <DialogHeader>
+            <DialogTitle>{t('chatPreferencesTitle')}</DialogTitle>
+            <DialogDescription>{t('chatPreferencesHint')}</DialogDescription>
+          </DialogHeader>
+
+          <ChatPreferencesBar
+            value={preferenceEditor}
+            collections={preferenceCollections}
+            onChange={handlePreferencesChange}
+            showHeader={false}
+            className="gap-0"
+          />
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={handleResetPreferences}>
+              {t('chatPreferenceAll')}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setIsPreferencesDialogOpen(false)}>
+              {t('cancel')}
+            </Button>
+            <Button type="button" onClick={handleApplyPreferences} disabled={!hasPendingPreferenceChanges}>
+              {t('save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

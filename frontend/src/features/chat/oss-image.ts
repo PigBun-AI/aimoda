@@ -29,6 +29,8 @@ export const CHAT_THUMBNAIL_MAX_EDGE = {
   inlineToolPreview: 1280,
   resultPreview: 1280,
   contentImage: 1280,
-  drawer: 760,
-  drawerFocus: 1120,
+  // Keep preview surfaces on the same asset tier so drawer/detail switches
+  // do not visibly degrade image sharpness between contexts.
+  drawer: 1280,
+  drawerFocus: 1280,
 } as const

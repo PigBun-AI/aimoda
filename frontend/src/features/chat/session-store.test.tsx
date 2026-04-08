@@ -8,6 +8,7 @@ import {
   markSessionExecutionStatus,
   primeSessionForImmediateRun,
   resetSessionStore,
+  updateSessionChatPreferences,
   useSessionStore,
 } from './session-store'
 
@@ -18,10 +19,11 @@ vi.mock('./chat-api', () => ({
   updateSession: vi.fn(),
 }))
 
-import { createSession, listSessions } from './chat-api'
+import { createSession, listSessions, updateSession } from './chat-api'
 
 const mockedListSessions = vi.mocked(listSessions)
 const mockedCreateSession = vi.mocked(createSession)
+const mockedUpdateSession = vi.mocked(updateSession)
 
 describe('session store', () => {
   beforeEach(() => {
@@ -166,6 +168,115 @@ describe('session store', () => {
     expect(result.current.sessions[0]?.execution_status).toBe('running')
   })
 
+  it('preserves optimistic session preferences while polling still returns stale preferences', async () => {
+    const { result } = renderHook(() => useSessionStore())
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'running',
+        preferences: {
+          gender: 'female',
+          quarter: '春夏',
+          year: 2026,
+          taste_profile_id: null,
+          taste_profile_weight: 0.24,
+        },
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    let resolveUpdate: ((value: {
+      id: string
+      user_id: number
+      title: string
+      execution_status: 'running'
+      preferences: {
+        gender: 'male'
+        quarter: '秋冬'
+        year: 2027
+        taste_profile_id: null
+        taste_profile_weight: 0.24
+      }
+      created_at: string
+      updated_at: string
+    }) => void) | null = null
+
+    mockedUpdateSession.mockImplementationOnce(() => new Promise(resolve => {
+      resolveUpdate = resolve
+    }))
+
+    await act(async () => {
+      void updateSessionChatPreferences('session-1', {
+        gender: 'male',
+        quarter: '秋冬',
+        year: 2027,
+        taste_profile_id: null,
+        taste_profile_weight: 0.24,
+      })
+    })
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'running',
+        preferences: {
+          gender: 'female',
+          quarter: '春夏',
+          year: 2026,
+          taste_profile_id: null,
+          taste_profile_weight: 0.24,
+        },
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:01.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    expect(result.current.sessions[0]?.preferences).toMatchObject({
+      gender: 'male',
+      quarter: '秋冬',
+      year: 2027,
+    })
+
+    await act(async () => {
+      resolveUpdate?.({
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'running',
+        preferences: {
+          gender: 'male',
+          quarter: '秋冬',
+          year: 2027,
+          taste_profile_id: null,
+          taste_profile_weight: 0.24,
+        },
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:05.000Z',
+      })
+      await Promise.resolve()
+    })
+
+    expect(result.current.sessions[0]?.preferences).toMatchObject({
+      gender: 'male',
+      quarter: '秋冬',
+      year: 2027,
+    })
+  })
+
   it('does not preserve optimistic running state once the same run id is completed by the server', async () => {
     const { result } = renderHook(() => useSessionStore())
 
@@ -199,6 +310,53 @@ describe('session store', () => {
         last_run_completed_at: '2026-03-21T09:31:00.000Z',
         created_at: '2026-03-21T09:00:00.000Z',
         updated_at: '2026-03-21T09:31:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    expect(result.current.sessions[0]).toMatchObject({
+      execution_status: 'completed',
+      current_run_id: null,
+      last_run_id: 'run-1',
+    })
+  })
+
+  it('preserves a locally completed run when polling briefly returns the same run as running', async () => {
+    const { result } = renderHook(() => useSessionStore())
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'idle',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:00.000Z',
+      },
+    ])
+
+    await act(async () => {
+      await loadSessions()
+    })
+
+    act(() => {
+      markSessionExecutionStatus('session-1', 'running', null, 'run-1')
+      markSessionExecutionStatus('session-1', 'completed', null, 'run-1')
+    })
+
+    mockedListSessions.mockResolvedValueOnce([
+      {
+        id: 'session-1',
+        user_id: 1,
+        title: 'Trend Watch',
+        execution_status: 'running',
+        current_run_id: 'run-1',
+        last_run_id: 'run-1',
+        created_at: '2026-03-21T09:00:00.000Z',
+        updated_at: '2026-03-21T09:30:02.000Z',
       },
     ])
 
@@ -451,7 +609,7 @@ describe('session store', () => {
       await createNewSession('红色连衣裙')
     })
 
-    expect(mockedCreateSession).toHaveBeenCalledWith('红色连衣裙')
+    expect(mockedCreateSession).toHaveBeenCalledWith('红色连衣裙', undefined)
   })
 
   it('replaces a heuristic title with the finalized ai title from polling', async () => {

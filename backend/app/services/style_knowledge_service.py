@@ -7,6 +7,7 @@ from qdrant_client.models import FieldCondition, Filter, MatchText, MatchValue
 
 from ..agent.qdrant_utils import encode_style_text, get_qdrant
 from ..config import settings
+from ..value_normalization import normalize_quarter_list
 
 
 def _style_collection_name() -> str:
@@ -150,8 +151,9 @@ def build_style_retrieval_plan(style: dict[str, Any], *, user_query: str) -> dic
         suggested_filters["fabric"] = features["fabric"]
     if features["silhouette"]:
         suggested_filters["silhouette"] = features["silhouette"]
-    if features["season_relevance"]:
-        suggested_filters["season"] = features["season_relevance"][:2]
+    quarter_filters = normalize_quarter_list(features["season_relevance"])
+    if quarter_filters:
+        suggested_filters["quarter"] = quarter_filters[:2]
 
     gender = str(features.get("gender", "")).strip().lower()
     if gender and gender not in {"all", "unisex"}:
@@ -178,7 +180,7 @@ def build_style_retrieval_plan(style: dict[str, Any], *, user_query: str) -> dic
             "recommended_next_step": "start_collection",
             "recommended_strategy": (
                 "Use style_rich_text as the semantic grounding text, optionally combine it with the user's direct query, "
-                "then apply only high-confidence concrete filters such as fabric, silhouette, season, or gender if the user needs more precision. "
+                "then apply only high-confidence concrete filters such as fabric, silhouette, quarter, or gender if the user needs more precision. "
                 "If no single garment category is resolved yet, keep palette/fabric cues inside semantic retrieval instead of calling add_filter(...) immediately."
             ),
             "avoid_as_hard_filters": ["palette", "reference_brands", "style_name"],

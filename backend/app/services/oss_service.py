@@ -17,7 +17,7 @@ import hashlib
 import logging
 import mimetypes
 import re
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from typing import BinaryIO
@@ -27,6 +27,8 @@ import oss2
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+_OSS_METADATA_KEY_PATTERN = re.compile(r"[^a-z0-9-]+")
 
 # Artifact storage sub-paths
 ARTIFACT_SUBPATHS = {
@@ -56,13 +58,84 @@ class OSSService:
         self.access_key_secret = access_key_secret or settings.OSS_ACCESS_KEY_SECRET
         self.bucket_name = bucket_name or settings.OSS_BUCKET_NAME
         self.endpoint = endpoint or settings.OSS_ENDPOINT
+        self.endpoint_host = self._normalize_endpoint_host(self.endpoint)
+        self.client_endpoint = self._build_endpoint_url(self.endpoint_host)
         self._bucket: oss2.Bucket | None = None
+        self._direct_upload_cors_ready = False
 
     def _get_bucket(self) -> oss2.Bucket:
         if self._bucket is None:
             auth = oss2.Auth(self.access_key_id, self.access_key_secret)
-            self._bucket = oss2.Bucket(auth, self.endpoint, self.bucket_name)
+            self._bucket = oss2.Bucket(auth, self.client_endpoint, self.bucket_name)
         return self._bucket
+
+    @staticmethod
+    def _normalize_endpoint_host(endpoint: str) -> str:
+        parsed = urlsplit(endpoint if "://" in endpoint else f"//{endpoint}")
+        return (parsed.netloc or parsed.path).strip("/")
+
+    @staticmethod
+    def _build_endpoint_url(endpoint_host: str) -> str:
+        scheme = "https" if settings.OSS_USE_HTTPS else "http"
+        return f"{scheme}://{endpoint_host}"
+
+    @staticmethod
+    def _split_csv(value: str | None, *, fallback: list[str]) -> list[str]:
+        if value is None:
+            return fallback
+        parts = [part.strip() for part in value.split(",")]
+        normalized = [part for part in parts if part]
+        return normalized or fallback
+
+    @staticmethod
+    def _normalize_list(values: list[str] | None) -> list[str]:
+        return [str(value).strip() for value in (values or []) if str(value).strip()]
+
+    def _normalize_signed_url(self, signed_url: str) -> str:
+        parsed = urlsplit(signed_url)
+        scheme = "https" if settings.OSS_USE_HTTPS else (parsed.scheme or "http")
+        netloc = parsed.netloc or f"{self.bucket_name}.{self.endpoint_host}"
+        return urlunsplit((scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+    @staticmethod
+    def _cors_rule_matches(rule: oss2.models.CorsRule, desired: oss2.models.CorsRule) -> bool:
+        return (
+            set(OSSService._normalize_list(getattr(rule, "allowed_origins", None))) == set(OSSService._normalize_list(getattr(desired, "allowed_origins", None)))
+            and set(OSSService._normalize_list(getattr(rule, "allowed_methods", None))) == set(OSSService._normalize_list(getattr(desired, "allowed_methods", None)))
+            and set(OSSService._normalize_list(getattr(rule, "allowed_headers", None))) == set(OSSService._normalize_list(getattr(desired, "allowed_headers", None)))
+            and set(OSSService._normalize_list(getattr(rule, "expose_headers", None))) == set(OSSService._normalize_list(getattr(desired, "expose_headers", None)))
+            and int(getattr(rule, "max_age_seconds", 0) or 0) == int(getattr(desired, "max_age_seconds", 0) or 0)
+        )
+
+    def ensure_direct_upload_cors(self) -> bool:
+        bucket = self._get_bucket()
+        desired_rule = oss2.models.CorsRule(
+            allowed_origins=self._split_csv(settings.OSS_CORS_ALLOWED_ORIGINS, fallback=["*"]),
+            allowed_methods=self._split_csv(settings.OSS_CORS_ALLOWED_METHODS, fallback=["GET", "HEAD", "PUT", "POST"]),
+            allowed_headers=self._split_csv(settings.OSS_CORS_ALLOWED_HEADERS, fallback=["*"]),
+            expose_headers=self._split_csv(settings.OSS_CORS_EXPOSE_HEADERS, fallback=["ETag", "x-oss-request-id"]),
+            max_age_seconds=settings.OSS_CORS_MAX_AGE_SECONDS,
+        )
+
+        try:
+            current = bucket.get_bucket_cors()
+            rules = list(getattr(current, "rules", []) or [])
+        except oss2.exceptions.NoSuchCors:
+            rules = []
+
+        if any(self._cors_rule_matches(rule, desired_rule) for rule in rules):
+            self._direct_upload_cors_ready = True
+            return False
+
+        rules.append(desired_rule)
+        bucket.put_bucket_cors(oss2.models.BucketCors(rules))
+        self._direct_upload_cors_ready = True
+        logger.info(
+            "Updated OSS bucket CORS for direct browser uploads: origins=%s methods=%s",
+            desired_rule.allowed_origins,
+            desired_rule.allowed_methods,
+        )
+        return True
 
     # ── Path builders ────────────────────────────────────────────────────────────
 
@@ -100,7 +173,45 @@ class OSSService:
         safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", PurePosixPath(filename).name or "report.zip")
         return f"report-uploads/{job_id}/{safe_name}"
 
+    @staticmethod
+    def collection_upload_path(
+        user_id: int,
+        collection_id: str,
+        filename: str,
+        content_type: str | None = None,
+    ) -> str:
+        ext = PurePosixPath(filename).suffix.lower()
+        if not ext and content_type:
+            ext = mimetypes.guess_extension(content_type) or ".jpg"
+        if not ext:
+            ext = ".jpg"
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        digest = hashlib.md5(f"{user_id}{collection_id}{filename}{timestamp}".encode()).hexdigest()[:10]
+        return f"users/{user_id}/collections/{collection_id}/{digest}{ext}"
+
+    @staticmethod
+    def collection_upload_prefix(user_id: int, collection_id: str) -> str:
+        return f"users/{user_id}/collections/{collection_id}/"
+
     # ── Upload ───────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _build_oss_metadata_headers(metadata: dict | None) -> dict[str, str]:
+        """Convert arbitrary metadata keys into OSS-safe x-oss-meta-* headers."""
+        if not metadata:
+            return {}
+
+        headers: dict[str, str] = {}
+        for raw_key, raw_value in metadata.items():
+            if raw_value is None:
+                continue
+
+            normalized_key = _OSS_METADATA_KEY_PATTERN.sub("-", str(raw_key).strip().lower()).strip("-")
+            if not normalized_key:
+                continue
+
+            headers[f"x-oss-meta-{normalized_key}"] = str(raw_value)
+        return headers
 
     def upload_file(
         self,
@@ -118,9 +229,7 @@ class OSSService:
             content_type = guessed or "application/octet-stream"
 
         headers = {"Content-Type": content_type}
-        if metadata:
-            for k, v in metadata.items():
-                headers[f"x-oss-meta-{k}"] = str(v)
+        headers.update(self._build_oss_metadata_headers(metadata))
 
         if isinstance(file_content, bytes):
             result = bucket.put_object(oss_path, file_content, headers=headers)
@@ -194,7 +303,7 @@ class OSSService:
     ) -> str:
         """Generate a time-limited signed URL for private buckets."""
         bucket = self._get_bucket()
-        return bucket.sign_url("GET", oss_path, expires_seconds)
+        return self._normalize_signed_url(bucket.sign_url("GET", oss_path, expires_seconds))
 
     def get_signed_upload_url(
         self,
@@ -205,8 +314,13 @@ class OSSService:
     ) -> tuple[str, dict[str, str]]:
         """Generate a signed PUT URL for direct-to-OSS uploads."""
         bucket = self._get_bucket()
+        if not self._direct_upload_cors_ready:
+            try:
+                self.ensure_direct_upload_cors()
+            except Exception:
+                logger.warning("Failed to ensure OSS bucket CORS for direct uploads", exc_info=True)
         headers = {"Content-Type": content_type}
-        signed_url = bucket.sign_url("PUT", oss_path, expires_seconds, headers=headers)
+        signed_url = self._normalize_signed_url(bucket.sign_url("PUT", oss_path, expires_seconds, headers=headers))
         return signed_url, headers
 
     def get_url(self, oss_path: str, public_base_url: str | None = None) -> str:
@@ -214,12 +328,12 @@ class OSSService:
         base_url = (
             public_base_url
             or settings.OSS_PUBLIC_BASE
-            or f"https://{self.bucket_name}.{self.endpoint}"
+            or f"https://{self.bucket_name}.{self.endpoint_host}"
         ).rstrip("/")
         parsed = urlsplit(base_url)
         if parsed.scheme and parsed.netloc:
             return f"{base_url}/{oss_path}"
-        return f"https://{self.bucket_name}.{self.endpoint}/{oss_path}"
+        return f"https://{self.bucket_name}.{self.endpoint_host}/{oss_path}"
 
     # ── Delete ───────────────────────────────────────────────────────────────────
 

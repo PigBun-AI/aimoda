@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableConfig
 from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny, Range
 
 from .qdrant_utils import get_collection, scroll_all
+from ..value_normalization import normalize_quarter_value
 
 # ═══════════════════════════════════════════════════════════════
 #  Session State Storage
@@ -86,8 +87,10 @@ def build_session_filter(session):
         elif f["type"] == "meta":
             key = f["key"]
             val = f["value"]
-            if key == "season":
-                must_conditions.append(FieldCondition(key="season", match=MatchAny(any=[val.lower()])))
+            if key in {"season", "quarter"}:
+                quarter = normalize_quarter_value(val)
+                if quarter:
+                    must_conditions.append(FieldCondition(key="quarter", match=MatchAny(any=[quarter])))
             elif key == "year_min":
                 must_conditions.append(FieldCondition(key="year", range=Range(gte=int(val))))
             else:
@@ -171,6 +174,8 @@ def apply_session_filters(client, session, *, cancel_check: CancelCheck = None):
 def available_values(client, dimension, category=None, current_filters=None, *, cancel_check: CancelCheck = None):
     """Find what values are available for a dimension given current filters."""
     collection = get_collection()
+    if dimension == "season":
+        dimension = "quarter"
     must_conditions = []
     if current_filters:
         for f in current_filters:
@@ -190,8 +195,10 @@ def available_values(client, dimension, category=None, current_filters=None, *, 
             elif f["type"] == "meta":
                 key = f["key"]
                 val = f["value"]
-                if key == "season":
-                    must_conditions.append(FieldCondition(key="season", match=MatchAny(any=[val.lower()])))
+                if key in {"season", "quarter"}:
+                    quarter = normalize_quarter_value(val)
+                    if quarter:
+                        must_conditions.append(FieldCondition(key="quarter", match=MatchAny(any=[quarter])))
                 elif key == "year_min":
                     must_conditions.append(FieldCondition(key="year", range=Range(gte=int(val))))
                 else:
@@ -231,6 +238,13 @@ def available_values(client, dimension, category=None, current_filters=None, *, 
                 _call_cancel_check(cancel_check)
             for cat in p.payload.get("categories", []):
                 counter[cat] += 1
+    elif dimension == "quarter":
+        for index, p in enumerate(pts):
+            if index % 50 == 0:
+                _call_cancel_check(cancel_check)
+            quarter = normalize_quarter_value(p.payload.get("quarter") or p.payload.get("season"))
+            if quarter:
+                counter[quarter] += 1
     else:
         for index, p in enumerate(pts):
             if index % 50 == 0:

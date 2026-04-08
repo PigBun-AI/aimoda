@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     OSS_BUCKET_NAME: str = ""
     OSS_ENDPOINT: str = "oss-cn-hangzhou.aliyuncs.com"
     OSS_PUBLIC_BASE: str | None = None
+    OSS_USE_HTTPS: bool = True
+    OSS_CORS_ALLOWED_ORIGINS: str = "*"
+    OSS_CORS_ALLOWED_METHODS: str = "GET,HEAD,PUT,POST"
+    OSS_CORS_ALLOWED_HEADERS: str = "*"
+    OSS_CORS_EXPOSE_HEADERS: str = "ETag,x-oss-request-id"
+    OSS_CORS_MAX_AGE_SECONDS: int = 86400
     REPORT_PREVIEW_TOKEN_TTL_SECONDS: int = 900
 
     # SMS auth
@@ -73,6 +79,7 @@ class Settings(BaseSettings):
     SMS_RESEND_INTERVAL_SECONDS: int = 60
     SMS_DAILY_SEND_LIMIT: int = 20
     SMS_MOCK_CODE: str = "123456"
+    FAVORITE_UPLOAD_JOB_STALE_SECONDS: int = 1800
     ALIYUN_SMS_ACCESS_KEY_ID: str = ""
     ALIYUN_SMS_ACCESS_KEY_SECRET: str = ""
     ALIYUN_SMS_ENDPOINT: str = "dysmsapi.aliyuncs.com"

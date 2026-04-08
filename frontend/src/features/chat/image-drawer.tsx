@@ -1,14 +1,18 @@
 // ImageDrawer — 结果面板（仿 aimoda-web ResultPanelContainer）
 
-import { type MouseEvent, useEffect, useRef, useState } from 'react'
-import { Download, Maximize2, Minimize2, X, Loader2 } from 'lucide-react'
+import { type MouseEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { Download, Heart, Maximize2, Minimize2, X, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import type { DrawerData } from './chat-types'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import type { DrawerData, ImageResult } from './chat-types'
 import { FashionImage } from './fashion-image'
 import { CHAT_THUMBNAIL_MAX_EDGE } from './oss-image'
 import { downloadImageAsset } from './image-download'
+import { CHAT_PREFERENCE_WEIGHT_OPTIONS, normalizeChatPreferenceWeightValue } from './chat-preferences-bar'
+import { FavoriteImageDialog } from '@/features/favorites/favorite-image-dialog'
+import { listFavoriteCollections, lookupFavoriteCollections, type FavoriteCollection } from '@/features/favorites/favorites-api'
 
 const DRAWER_HEADER_META_CLASS = 'type-chat-meta text-muted-foreground'
 const DRAWER_HEADER_ICON_BUTTON_CLASS =
@@ -32,6 +36,7 @@ interface ImageDrawerProps {
   isFullscreen?: boolean
   onClose: () => void
   onLoadMore: () => void
+  onTasteProfileChange?: (next: { tasteProfileId: string | null; tasteProfileWeight?: number | null }) => void
   onToggleFullscreen?: () => void
 }
 
@@ -41,11 +46,15 @@ export function ImageDrawer({
   isFullscreen = false,
   onClose,
   onLoadMore,
+  onTasteProfileChange,
   onToggleFullscreen,
 }: ImageDrawerProps) {
   const { t } = useTranslation('common')
   const gridRef = useRef<HTMLDivElement | null>(null)
   const [columnCount, setColumnCount] = useState(isFullscreen ? 6 : 4)
+  const [collections, setCollections] = useState<FavoriteCollection[]>([])
+  const [favoriteTarget, setFavoriteTarget] = useState<ImageResult | null>(null)
+  const [favoriteMap, setFavoriteMap] = useState<Record<string, string[]>>({})
   if (!open || !data) return null
 
   const safeImages = data.images || []
@@ -76,6 +85,29 @@ export function ImageDrawer({
     return () => observer.disconnect()
   }, [isFullscreen])
 
+  useEffect(() => {
+    if (!open || !data.searchRequestId) return
+    listFavoriteCollections()
+      .then(result => setCollections(result.filter(collection => collection.can_apply_as_dna ?? collection.can_apply_as_taste)))
+      .catch(() => setCollections([]))
+  }, [data.searchRequestId, open])
+
+  useEffect(() => {
+    setFavoriteMap(prev => {
+      const next = { ...prev }
+      for (const image of safeImages) {
+        if (Array.isArray(image.favorite_collection_ids)) {
+          next[image.image_id] = image.favorite_collection_ids
+          continue
+        }
+        if (image.is_favorited === false && !(image.image_id in next)) {
+          next[image.image_id] = []
+        }
+      }
+      return next
+    })
+  }, [safeImages])
+
   const handleImageClick = (img: typeof safeImages[number]) => {
     window.open(`/image/${img.image_id}`, '_blank')
   }
@@ -84,6 +116,22 @@ export function ImageDrawer({
     event.stopPropagation()
     void downloadImageAsset(img.image_url, `${img.image_id}-${img.brand || 'fashion'}.jpg`)
   }
+
+  const handleFavoriteOpen = (event: MouseEvent<HTMLButtonElement>, img: ImageResult) => {
+    event.stopPropagation()
+    setFavoriteTarget(img)
+    if (img.favorite_collection_ids || favoriteMap[img.image_id]) return
+    lookupFavoriteCollections(img.image_id)
+      .then(result => {
+        setFavoriteMap(prev => ({ ...prev, [img.image_id]: result.map(collection => collection.id) }))
+      })
+      .catch(() => {})
+  }
+
+  const handleFavoriteCollectionsChanged = useCallback((collectionIds: string[]) => {
+    if (!favoriteTarget) return
+    setFavoriteMap(prev => ({ ...prev, [favoriteTarget.image_id]: collectionIds }))
+  }, [favoriteTarget])
 
   return (
     <div className={`flex h-full flex-col animate-in slide-in-from-right duration-normal bg-background ${isFullscreen ? 'border-l-0' : 'border-l border-border'}`}>
@@ -117,6 +165,56 @@ export function ImageDrawer({
             </button>
           </div>
         </div>
+
+        {data.searchRequestId && collections.length > 0 && (
+          <div className="mt-3 grid gap-3 border-t border-border/80 pt-3 lg:grid-cols-[minmax(0,1fr)_220px_168px] lg:items-center">
+            <div className="type-chat-meta text-muted-foreground">
+              {t('favoriteDrawerHint')}
+            </div>
+            <Select
+              value={data.tasteProfileId ?? 'none'}
+              onValueChange={value =>
+                onTasteProfileChange?.({
+                  tasteProfileId: value === 'none' ? null : value,
+                  tasteProfileWeight: data.tasteProfileWeight ?? 0.24,
+                })
+              }
+            >
+              <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
+                <SelectValue placeholder={t('favoriteDrawerSelect')} />
+              </SelectTrigger>
+              <SelectContent className="rounded-none border-border/80">
+                <SelectItem value="none">{t('favoriteDrawerNone')}</SelectItem>
+                {collections.map(collection => (
+                  <SelectItem key={collection.id} value={collection.id}>
+                    {collection.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={normalizeChatPreferenceWeightValue(data.tasteProfileWeight)}
+              onValueChange={value =>
+                onTasteProfileChange?.({
+                  tasteProfileId: data.tasteProfileId ?? null,
+                  tasteProfileWeight: Number(value),
+                })
+              }
+              disabled={!data.tasteProfileId}
+            >
+              <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-none border-border/80">
+                {CHAT_PREFERENCE_WEIGHT_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={String(option.value)}>
+                    {t(option.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
@@ -140,15 +238,29 @@ export function ImageDrawer({
               >
                 <FashionImage image={img} className="w-full h-full" thumbnailWidth={thumbnailWidth} />
                 <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
-                <button
-                  type="button"
-                  onClick={(event) => handleImageDownload(event, img)}
-                  className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground opacity-0 shadow-sm backdrop-blur-sm transition-opacity group-hover:opacity-100"
-                  title={t('download')}
-                  aria-label={t('download')}
-                >
-                  <Download size={14} />
-                </button>
+                <div className="absolute right-2 top-2 flex flex-col gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={(event) => handleFavoriteOpen(event, img)}
+                    className="flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-foreground"
+                    title={t('favorite')}
+                    aria-label={t('favorite')}
+                  >
+                    <Heart
+                      size={14}
+                      fill={favoriteMap[img.image_id]?.length ? 'currentColor' : 'none'}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => handleImageDownload(event, img)}
+                    className="flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-foreground"
+                    title={t('download')}
+                    aria-label={t('download')}
+                  >
+                    <Download size={14} />
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5 text-left">
@@ -198,6 +310,19 @@ export function ImageDrawer({
           <p className="type-chat-kicker mt-8 pb-2 text-center text-muted-foreground">{t('allImagesLoaded')}</p>
         )}
       </div>
+
+      {favoriteTarget && (
+        <FavoriteImageDialog
+          image={favoriteTarget}
+          open={Boolean(favoriteTarget)}
+          onOpenChange={openState => {
+            if (!openState) {
+              setFavoriteTarget(null)
+            }
+          }}
+          onCollectionsChanged={handleFavoriteCollectionsChanged}
+        />
+      )}
     </div>
   )
 }

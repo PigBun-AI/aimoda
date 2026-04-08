@@ -278,6 +278,8 @@ def build_turn_playbook(context: TurnContext) -> str:
 
     lines.append("abstract_style_requires_translation=true")
     lines.append("abstract_style_prefers_search_style_tool=true")
+    lines.append("abstract_style_dual_show_collection_allowed=true")
+    lines.append("abstract_style_second_result_group_requires_meaningful_difference=true")
     lines.append("unsupported_filter_dimensions=style,mood,vibe")
 
     if primary_category:

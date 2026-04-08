@@ -15,6 +15,7 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 import time
 import uuid
 from typing import Annotated, Any, AsyncGenerator
@@ -26,6 +27,7 @@ from pydantic import BaseModel
 from ..dependencies import get_current_user
 from ..models import AuthenticatedUser
 from ..services.feature_access_service import consume_feature_access, get_feature_access_status
+from ..services.favorite_service import annotate_catalog_image_results
 from ..services.chat_service import (
     create_session,
     list_sessions,
@@ -46,6 +48,7 @@ from ..services.chat_service import (
     get_compaction_bootstrap_payload,
     clear_compaction_bootstrap,
 )
+from ..services.taste_profile_service import apply_taste_profile_to_query, rerank_image_candidates
 from ..services.oss_service import get_oss_service
 from ..services.websocket_manager import ws_manager
 from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registry
@@ -54,6 +57,7 @@ from ..repositories.session_repo import is_session_valid
 from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
 from ..agent.qdrant_utils import get_qdrant, format_result, get_collection, encode_image
+from ..value_normalization import normalize_quarter_value
 from ..agent.session_state import (
     count_session,
     get_session_page,
@@ -79,6 +83,8 @@ from ..agent.query_context import (
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+logger = logging.getLogger(__name__)
+_detached_post_run_tasks: set[asyncio.Task[Any]] = set()
 
 
 # ── Request/Response models ──
@@ -89,13 +95,23 @@ class ChatRequest(BaseModel):
     history: list[dict] = []
 
 
+class SessionPreferencesPayload(BaseModel):
+    gender: str | None = None
+    quarter: str | None = None
+    year: int | None = None
+    taste_profile_id: str | None = None
+    taste_profile_weight: float | None = None
+
+
 class CreateSessionRequest(BaseModel):
     title: str = "新对话"
+    preferences: SessionPreferencesPayload | None = None
 
 
 class UpdateSessionRequest(BaseModel):
     title: str | None = None
     pinned: bool | None = None
+    preferences: SessionPreferencesPayload | None = None
 
 
 class ListMessagesRequest(BaseModel):
@@ -109,6 +125,8 @@ class SearchSessionRequest(BaseModel):
     search_request_id: str
     offset: int = 0
     limit: int = 20
+    taste_profile_id: str | None = None
+    taste_profile_weight: float | None = None
 
 
 class StopSessionRunRequest(BaseModel):
@@ -212,6 +230,7 @@ async def _persist_streaming_assistant_message(
     stream_result: StreamResult,
     stream_state: str,
     run_id: str | None = None,
+    thread_version: int | None = None,
 ) -> str | None:
     blocks = _materialize_stream_blocks(stream_result)
     if not blocks and not message_id:
@@ -222,6 +241,8 @@ async def _persist_streaming_assistant_message(
         metadata_patch["stop_reason"] = stream_result.stop_reason
     if run_id:
         metadata_patch["run_id"] = run_id
+    if thread_version is not None:
+        metadata_patch["thread_version"] = int(thread_version)
 
     if message_id:
         await asyncio.to_thread(
@@ -247,6 +268,43 @@ async def _persist_streaming_assistant_message(
 
 def _resolve_interrupted_execution_status(stream_result: StreamResult) -> str:
     return "completed" if _materialize_stream_blocks(stream_result) else "idle"
+
+
+def _track_detached_post_run_task(task: asyncio.Task[Any]) -> None:
+    _detached_post_run_tasks.add(task)
+
+    def _cleanup(finished_task: asyncio.Task[Any]) -> None:
+        _detached_post_run_tasks.discard(finished_task)
+        try:
+            exc = finished_task.exception()
+        except asyncio.CancelledError:
+            return
+        if exc is not None:
+            logger.error(
+                "Detached post-run cleanup failed",
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
+
+    task.add_done_callback(_cleanup)
+
+
+def _launch_post_run_title_finalize(
+    *,
+    session_id: str,
+    raw_content_blocks: list[dict[str, Any]],
+    assistant_blocks: list[dict[str, Any]],
+) -> None:
+    async def _cleanup() -> None:
+        if not assistant_blocks:
+            return
+        await asyncio.to_thread(
+            finalize_session_title,
+            session_id,
+            raw_content_blocks,
+            assistant_blocks,
+        )
+
+    _track_detached_post_run_task(asyncio.create_task(_cleanup()))
 
 
 def _summarize_tool_payload(payload: dict[str, Any]) -> str:
@@ -362,6 +420,8 @@ def _extract_style_hints_from_payload(payload: dict[str, Any]) -> tuple[str, str
 async def _restore_agent_session_from_history(
     thread_id: str,
     history: list[dict[str, Any]],
+    *,
+    thread_version: int,
 ) -> dict[str, Any] | None:
     """Hydrate agent session state from the latest persisted show_collection result.
 
@@ -372,6 +432,20 @@ async def _restore_agent_session_from_history(
         return None
 
     for message in reversed(history):
+        metadata = message.get("metadata", {})
+        message_thread_version = None
+        if isinstance(metadata, dict):
+            raw_thread_version = metadata.get("thread_version")
+            try:
+                message_thread_version = int(raw_thread_version) if raw_thread_version not in (None, "") else None
+            except (TypeError, ValueError):
+                message_thread_version = None
+
+        if message_thread_version is None and thread_version > 1:
+            continue
+        if message_thread_version is not None and message_thread_version != thread_version:
+            continue
+
         blocks = message.get("content", [])
         if not isinstance(blocks, list):
             continue
@@ -592,6 +666,7 @@ def _compose_agent_input(
     fallback_image_count: int = 0,
     turn_playbook: str = "",
     compaction_bootstrap: str = "",
+    session_preferences: str = "",
 ) -> str:
     image_count = len(_extract_image_blocks(blocks))
     text = _extract_text_from_blocks(blocks)
@@ -600,6 +675,8 @@ def _compose_agent_input(
         prefix_parts.append(turn_playbook)
     if compaction_bootstrap:
         prefix_parts.append(compaction_bootstrap)
+    if session_preferences:
+        prefix_parts.append(session_preferences)
     prefix = "\n\n".join(prefix_parts)
     prefix = f"{prefix}\n\n" if prefix else ""
 
@@ -622,6 +699,39 @@ def _compose_agent_input(
         return f"{prefix}{body}" if prefix else body
 
     return f"{prefix}{text}" if prefix else text
+
+
+def _format_session_preferences(preferences: dict[str, Any] | None) -> str:
+    payload = dict(preferences or {})
+    gender = str(payload.get("gender") or "").strip().lower()
+    quarter = str(payload.get("quarter") or "").strip()
+    year = payload.get("year")
+    taste_profile_id = str(payload.get("taste_profile_id") or "").strip()
+    taste_profile_weight = payload.get("taste_profile_weight")
+
+    if not any([gender, quarter, year, taste_profile_id]):
+        return ""
+
+    gender_label = "女装" if gender == "female" else "男装" if gender == "male" else ""
+    lines = [
+        "[SESSION_PREFERENCES]",
+        "以下是本会话的默认检索偏好。除非用户本轮明确覆盖，否则请将其视为隐含约束并在检索时优先沿用：",
+    ]
+    if gender_label:
+        lines.append(f"- 性别偏好：{gender_label}")
+    if quarter:
+        lines.append(f"- 季度偏好：{quarter}")
+    if year not in (None, ""):
+        lines.append(f"- 年份偏好：{year}")
+    if taste_profile_id:
+        weight = 0.0
+        try:
+            weight = float(taste_profile_weight)
+        except (TypeError, ValueError):
+            weight = 0.0
+        lines.append(f"- 偏好图集排序：已启用（权重 {int(round(weight * 100))}%）")
+    lines.append("若用户本轮消息给出了新的明确限定，以用户当前消息为准。")
+    return "\n".join(lines)
 
 
 def _format_compaction_bootstrap(bootstrap: dict[str, Any] | None) -> str:
@@ -727,7 +837,11 @@ async def chat_endpoint(
         thread_id=thread_id,
     )
     if not restored_agent_session:
-        restored_agent_session = await _restore_agent_session_from_history(thread_id, req.history)
+        restored_agent_session = await _restore_agent_session_from_history(
+            thread_id,
+            req.history,
+            thread_version=int(session.get("thread_version", 1) or 1),
+        )
 
     image_blocks = _extract_image_blocks(raw_content_blocks)
     query_text = _extract_text_from_blocks(raw_content_blocks)
@@ -754,6 +868,7 @@ async def chat_endpoint(
         fallback_image_count=len(fallback_image_blocks),
         turn_playbook=build_turn_playbook(turn_context),
         compaction_bootstrap=_format_compaction_bootstrap(compaction_bootstrap),
+        session_preferences=_format_session_preferences(session.get("preferences")),
     )
     query_context = merge_query_contexts(
         get_session_query_context(thread_id),
@@ -773,7 +888,11 @@ async def chat_endpoint(
     )
 
     await asyncio.to_thread(
-        create_message, req.session_id, "user", content_blocks
+        create_message,
+        req.session_id,
+        "user",
+        content_blocks,
+        metadata={"thread_version": int(session.get("thread_version", 1) or 1)},
     )
 
     # Create StreamResult to collect full assistant text
@@ -805,6 +924,7 @@ async def chat_endpoint(
             stream_result=stream_result,
             stream_state=stream_state,
             run_id=run_id,
+            thread_version=int(session.get("thread_version", 1) or 1),
         )
         last_persisted_snapshot = snapshot
         last_persist_at = now
@@ -834,42 +954,39 @@ async def chat_endpoint(
             # After streaming completes, persist assistant message using ContentBlocks
             if stream_result.content_blocks:
                 await _sync_assistant_progress(force=True, stream_state="completed")
-                await asyncio.to_thread(
-                    finalize_session_title,
-                    req.session_id,
-                    raw_content_blocks,
-                    stream_result.content_blocks,
-                )
-            await asyncio.to_thread(
-                clear_compaction_bootstrap,
-                req.session_id,
-                thread_version=int(session.get("thread_version", 1) or 1),
-            )
             await asyncio.to_thread(
                 set_session_execution_status,
                 req.session_id,
                 execution_status="completed",
                 run_id=run_id,
             )
-        except (asyncio.CancelledError, ChatRunCancelledError):
-            await _sync_assistant_progress(force=True, stream_state="interrupted")
-            if stream_result.content_blocks:
-                await asyncio.to_thread(
-                    finalize_session_title,
-                    req.session_id,
-                    raw_content_blocks,
-                    stream_result.content_blocks,
-                )
             await asyncio.to_thread(
                 clear_compaction_bootstrap,
                 req.session_id,
                 thread_version=int(session.get("thread_version", 1) or 1),
             )
+            _launch_post_run_title_finalize(
+                session_id=req.session_id,
+                raw_content_blocks=raw_content_blocks,
+                assistant_blocks=list(stream_result.content_blocks),
+            )
+        except (asyncio.CancelledError, ChatRunCancelledError):
+            await _sync_assistant_progress(force=True, stream_state="interrupted")
             await asyncio.to_thread(
                 set_session_execution_status,
                 req.session_id,
                 execution_status=_resolve_interrupted_execution_status(stream_result),
                 run_id=run_id,
+            )
+            await asyncio.to_thread(
+                clear_compaction_bootstrap,
+                req.session_id,
+                thread_version=int(session.get("thread_version", 1) or 1),
+            )
+            _launch_post_run_title_finalize(
+                session_id=req.session_id,
+                raw_content_blocks=raw_content_blocks,
+                assistant_blocks=list(stream_result.content_blocks),
             )
         except Exception:
             import traceback
@@ -991,14 +1108,27 @@ async def search_session_endpoint(
 
     client = get_qdrant()
     total = count_session(client, session)
-    page = get_session_page(client, session, offset=req.offset, limit=req.limit)
+    effective_session = dict(session)
+    effective_query_vector, effective_vector_type = apply_taste_profile_to_query(
+        user.id,
+        req.taste_profile_id,
+        query_vector=(
+            list(session.get("q_emb"))
+            if isinstance(session.get("q_emb"), list)
+            else None
+        ),
+        query_vector_type=str(session.get("vector_type") or "").strip() or None,
+        blend_weight=req.taste_profile_weight if req.taste_profile_weight is not None else 0.24,
+    )
+    effective_session["q_emb"] = effective_query_vector
+    if effective_vector_type:
+        effective_session["vector_type"] = effective_vector_type
 
-    formatted_page = []
-    for p in page:
-        item = format_result(p.payload, getattr(p, 'score', 0))
-        item.pop("garments_raw", None)
-        item.pop("extracted_colors_raw", None)
-        formatted_page.append(item)
+    page = get_session_page(client, effective_session, offset=req.offset, limit=req.limit)
+    formatted_page = _annotate_catalog_images_for_user(
+        user.id,
+        _format_candidate_payloads(_payload_candidates_from_points(page)),
+    )
 
     return {
         "images": formatted_page,
@@ -1033,7 +1163,8 @@ async def get_image_detail(
         item = _format_result(points[0].payload, 0)
         item.pop("garments_raw", None)
         item.pop("extracted_colors_raw", None)
-        return item
+        annotated = _annotate_catalog_images_for_user(user.id, [item])
+        return annotated[0] if annotated else item
     except HTTPException:
         raise
     except Exception as e:
@@ -1057,8 +1188,12 @@ class SearchSimilarRequest(BaseModel):
     image_id: str | None = None
     top_category: str | None = None  # tops / bottoms / full → chooses named vector
     gender: str | None = None  # hard filter: female / male
+    quarter: str | None = None
+    season: str | None = None
     page: int = 1
     page_size: int = 56
+    taste_profile_id: str | None = None
+    taste_profile_weight: float | None = None
 
 
 class SearchByColorRequest(BaseModel):
@@ -1069,8 +1204,11 @@ class SearchByColorRequest(BaseModel):
     min_percentage: float = 0.0
     gender: str | None = None
     quarter: str | None = None
+    season: str | None = None
     page: int = 1
     page_size: int = 56
+    taste_profile_id: str | None = None
+    taste_profile_weight: float | None = None
 
 
 def _scroll_filtered_page(
@@ -1125,6 +1263,53 @@ def _scroll_filtered_page(
     return records
 
 
+def _candidate_limit(total: int, offset: int, limit: int) -> int:
+    if total <= 0:
+        return 0
+    return min(total, max(offset + (limit * 6), 96))
+
+
+def _payload_candidates_from_points(points: list[Any]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for index, point in enumerate(points):
+        payload = dict(getattr(point, "payload", {}) or {})
+        image_id = str(getattr(point, "id", "") or payload.get("image_id") or "")
+        if not image_id:
+            continue
+        payload.setdefault("image_id", image_id)
+        candidates.append(
+            {
+                "image_id": image_id,
+                "payload": payload,
+                "base_score": getattr(point, "score", None),
+                "base_rank": index,
+            }
+        )
+    return candidates
+
+
+def _format_candidate_payloads(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    formatted: list[dict[str, Any]] = []
+    for candidate in candidates:
+        item = format_result(candidate["payload"], candidate.get("base_score") or 0)
+        item.pop("garments_raw", None)
+        item.pop("extracted_colors_raw", None)
+        formatted.append(item)
+    return formatted
+
+
+def _annotate_catalog_images_for_user(
+    user_id: int,
+    images: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not images:
+        return images
+    try:
+        return annotate_catalog_image_results(user_id, images)
+    except Exception:
+        return images
+
+
 @router.post("/search_similar")
 async def search_similar_endpoint(
     req: SearchSimilarRequest,
@@ -1142,6 +1327,8 @@ async def search_similar_endpoint(
             categories=req.categories,
             garment_tags=req.garment_tags,
             gender=req.gender,
+            quarter=req.quarter,
+            season=req.season,
         )
 
         offset = (req.page - 1) * req.page_size
@@ -1185,22 +1372,23 @@ async def search_similar_endpoint(
 
         if query_vector:
             # KNN similarity search using the named vector
-            query_response = client.query_points(
-                collection_name=collection,
-                query=query_vector,
-                using=vector_name,
-                query_filter=qdrant_filter,
-                limit=req.page_size,
-                offset=offset,
-                with_payload=True,
-            )
-            results = query_response.points
             count_result = client.count(
                 collection_name=collection,
                 count_filter=qdrant_filter,
                 exact=True,
             )
             total = count_result.count
+            requested_limit = _candidate_limit(total, offset, req.page_size) if req.taste_profile_id else req.page_size
+            query_response = client.query_points(
+                collection_name=collection,
+                query=query_vector,
+                using=vector_name,
+                query_filter=qdrant_filter,
+                limit=requested_limit,
+                offset=0 if req.taste_profile_id else offset,
+                with_payload=True,
+            )
+            results = query_response.points
             print(f"[search_similar] Vector search found {len(results)} results (total filtered: {total})")
         else:
             # Fallback to filtered scroll using the same page-based contract as vector search.
@@ -1210,25 +1398,36 @@ async def search_similar_endpoint(
                 exact=True,
             )
             total = count_result.count
+            requested_limit = _candidate_limit(total, offset, req.page_size) if req.taste_profile_id else req.page_size
             results = _scroll_filtered_page(
                 client=client,
                 collection_name=collection,
                 scroll_filter=qdrant_filter,
-                offset=offset,
-                limit=req.page_size,
+                offset=0 if req.taste_profile_id else offset,
+                limit=requested_limit,
                 with_payload=True,
             )
             print(f"[search_similar] Scroll fallback found {len(results)} results (total: {total})")
 
+        candidate_payloads = _payload_candidates_from_points(results)
+        if req.taste_profile_id:
+            candidate_payloads = rerank_image_candidates(
+                user.id,
+                req.taste_profile_id,
+                candidate_payloads,
+                blend_weight=req.taste_profile_weight if req.taste_profile_weight is not None else 0.24,
+            )
+            candidate_payloads = candidate_payloads[offset:offset + req.page_size]
+
         formatted = []
-        for p in results:
-            item = _format_result(p.payload, getattr(p, 'score', 0))
+        for candidate in candidate_payloads:
+            item = _format_result(candidate["payload"], candidate.get("base_score") or 0)
             item.pop("garments_raw", None)
             item.pop("extracted_colors_raw", None)
             formatted.append(item)
 
         return {
-            "images": formatted,
+            "images": _annotate_catalog_images_for_user(user.id, formatted),
             "total": total,
             "page": req.page,
             "page_size": req.page_size,
@@ -1260,25 +1459,55 @@ async def search_by_color_endpoint(
     from ..agent.qdrant_utils import format_result as _format_result
 
     color_index = get_color_index()
+    requested_page_size = (
+        _candidate_limit(req.page * req.page_size, (req.page - 1) * req.page_size, req.page_size)
+        if req.taste_profile_id
+        else req.page_size
+    )
     result = color_index.search(
         target_hex=req.hex.strip(),
         threshold=req.threshold,
         min_percentage=req.min_percentage,
         gender=req.gender,
-        quarter=req.quarter,
-        page=req.page,
-        page_size=req.page_size,
+        quarter=normalize_quarter_value(req.quarter or req.season),
+        page=1 if req.taste_profile_id else req.page,
+        page_size=requested_page_size,
     )
 
+    color_candidates: list[dict[str, Any]] = []
+    for index, (_pct, _dist, payload) in enumerate(result["results"]):
+        image_id = str(payload.get("image_id") or "")
+        if not image_id:
+            continue
+        color_payload = dict(payload)
+        color_payload.setdefault("image_id", image_id)
+        color_candidates.append(
+            {
+                "image_id": image_id,
+                "payload": color_payload,
+                "base_rank": index,
+            }
+        )
+
+    if req.taste_profile_id:
+        offset = (req.page - 1) * req.page_size
+        color_candidates = rerank_image_candidates(
+            user.id,
+            req.taste_profile_id,
+            color_candidates,
+            blend_weight=req.taste_profile_weight if req.taste_profile_weight is not None else 0.24,
+        )
+        color_candidates = color_candidates[offset:offset + req.page_size]
+
     formatted = []
-    for _pct, _dist, payload in result["results"]:
-        item = _format_result(payload, 0)
+    for candidate in color_candidates:
+        item = _format_result(candidate["payload"], 0)
         item.pop("garments_raw", None)
         item.pop("extracted_colors_raw", None)
         formatted.append(item)
 
     return {
-        "images": formatted,
+        "images": _annotate_catalog_images_for_user(user.id, formatted),
         "total": result["total"],
         "page": result["page"],
         "page_size": result["page_size"],
@@ -1303,7 +1532,11 @@ async def create_session_endpoint(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ):
     """Create a new chat session."""
-    session = create_session(user.id, req.title)
+    session = create_session(
+        user.id,
+        req.title,
+        preferences=req.preferences.model_dump() if req.preferences else None,
+    )
     return {"success": True, "data": session}
 
 
@@ -1319,6 +1552,7 @@ async def update_session_endpoint(
         user.id,
         title=req.title,
         pinned=req.pinned,
+        preferences=req.preferences.model_dump(exclude_unset=True) if req.preferences else None,
     )
     if not updated:
         return JSONResponse(
@@ -1499,6 +1733,7 @@ async def websocket_chat(websocket: WebSocket):
                     restored_agent_session = await _restore_agent_session_from_history(
                         thread_id,
                         msg.get("history", []),
+                        thread_version=int(session.get("thread_version", 1) or 1),
                     )
                 image_blocks = _extract_image_blocks(raw_content_blocks)
                 query_text = _extract_text_from_blocks(raw_content_blocks)
@@ -1525,6 +1760,7 @@ async def websocket_chat(websocket: WebSocket):
                     fallback_image_count=len(fallback_image_blocks),
                     turn_playbook=build_turn_playbook(turn_context),
                     compaction_bootstrap=_format_compaction_bootstrap(compaction_bootstrap),
+                    session_preferences=_format_session_preferences(session.get("preferences") if isinstance(session, dict) else None),
                 )
                 query_context = merge_query_contexts(
                     get_session_query_context(thread_id),
@@ -1542,7 +1778,11 @@ async def websocket_chat(websocket: WebSocket):
                 )
 
                 await asyncio.to_thread(
-                    create_message, session_id, "user", content_blocks
+                    create_message,
+                    session_id,
+                    "user",
+                    content_blocks,
+                    metadata={"thread_version": int(session.get("thread_version", 1) or 1)},
                 )
 
                 stream_result = StreamResult()
@@ -1573,6 +1813,7 @@ async def websocket_chat(websocket: WebSocket):
                         stream_result=stream_result,
                         stream_state=stream_state,
                         run_id=run_id,
+                        thread_version=int(session.get("thread_version", 1) or 1),
                     )
                     last_persisted_snapshot = snapshot
                     last_persist_at = now
@@ -1591,42 +1832,39 @@ async def websocket_chat(websocket: WebSocket):
 
                     if stream_result.content_blocks:
                         await _sync_assistant_progress(force=True, stream_state="completed")
-                        await asyncio.to_thread(
-                            finalize_session_title,
-                            session_id,
-                            raw_content_blocks,
-                            stream_result.content_blocks,
-                        )
-                    await asyncio.to_thread(
-                        clear_compaction_bootstrap,
-                        session_id,
-                        thread_version=int(session.get("thread_version", 1) or 1),
-                    )
                     await asyncio.to_thread(
                         set_session_execution_status,
                         session_id,
                         execution_status="completed",
                         run_id=run_id,
                     )
-                except (WebSocketDisconnect, asyncio.CancelledError, ChatRunCancelledError):
-                    await _sync_assistant_progress(force=True, stream_state="interrupted")
-                    if stream_result.content_blocks:
-                        await asyncio.to_thread(
-                            finalize_session_title,
-                            session_id,
-                            raw_content_blocks,
-                            stream_result.content_blocks,
-                        )
                     await asyncio.to_thread(
                         clear_compaction_bootstrap,
                         session_id,
                         thread_version=int(session.get("thread_version", 1) or 1),
                     )
+                    _launch_post_run_title_finalize(
+                        session_id=session_id,
+                        raw_content_blocks=raw_content_blocks,
+                        assistant_blocks=list(stream_result.content_blocks),
+                    )
+                except (WebSocketDisconnect, asyncio.CancelledError, ChatRunCancelledError):
+                    await _sync_assistant_progress(force=True, stream_state="interrupted")
                     await asyncio.to_thread(
                         set_session_execution_status,
                         session_id,
                         execution_status=_resolve_interrupted_execution_status(stream_result),
                         run_id=run_id,
+                    )
+                    await asyncio.to_thread(
+                        clear_compaction_bootstrap,
+                        session_id,
+                        thread_version=int(session.get("thread_version", 1) or 1),
+                    )
+                    _launch_post_run_title_finalize(
+                        session_id=session_id,
+                        raw_content_blocks=raw_content_blocks,
+                        assistant_blocks=list(stream_result.content_blocks),
                     )
                     raise
                 except Exception:

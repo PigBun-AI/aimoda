@@ -18,8 +18,17 @@ export interface ChatSession {
   message_count?: number
   thread_version?: number
   active_summary_version?: number
+  preferences?: ChatSessionPreferences
   created_at: string
   updated_at: string
+}
+
+export interface ChatSessionPreferences {
+  gender?: 'female' | 'male' | null
+  quarter?: '早春' | '春夏' | '早秋' | '秋冬' | null
+  year?: number | null
+  taste_profile_id?: string | null
+  taste_profile_weight?: number | null
 }
 
 export interface ImageSourceBase64 {
@@ -75,7 +84,7 @@ export interface FashionVisionAnalysis {
     color: string[]
     fabric: string[]
     gender: string
-    season: string[]
+    quarter: string[]
   }
   follow_up_questions_zh: string[]
 }
@@ -206,6 +215,8 @@ export interface ImageResult {
   colors: string[]
   style: string
   object_area?: ObjectArea | null
+  is_favorited?: boolean
+  favorite_collection_ids?: string[]
 }
 
 export interface SearchSessionState {
@@ -220,6 +231,8 @@ export interface DrawerData {
   stepLabel: string
   images: ImageResult[]
   searchRequestId: string | null
+  tasteProfileId?: string | null
+  tasteProfileWeight?: number | null
   offset: number
   hasMore: boolean
   total?: number

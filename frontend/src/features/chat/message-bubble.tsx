@@ -490,7 +490,7 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
     ...analysis.hard_filters.color.map((value) => ({ label: t('filterColor'), value })),
     ...analysis.hard_filters.fabric.map((value) => ({ label: t('filterFabric'), value })),
     ...(analysis.hard_filters.gender ? [{ label: t('filterGender'), value: analysis.hard_filters.gender }] : []),
-    ...analysis.hard_filters.season.map((value) => ({ label: t('filterSeason'), value })),
+    ...analysis.hard_filters.quarter.map((value) => ({ label: t('filterQuarter'), value })),
   ]
 
   return (

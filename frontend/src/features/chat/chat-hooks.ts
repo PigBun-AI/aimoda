@@ -28,7 +28,11 @@ function toolResultLooksLikeError(content: string): boolean {
 /**
  * Main chat hook — manages messages, SSE streaming, and drawer state
  */
-export function useChat(sessionId: string | null) {
+export function useChat(
+  sessionId: string | null,
+  defaultTasteProfileId: string | null = null,
+  defaultTasteProfileWeight: number | null = 0.24,
+) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerData, setDrawerData] = useState<DrawerData | null>(null)
   const { messages, isLoading } = useChatMessageStore(sessionId)
@@ -297,6 +301,8 @@ export function useChat(sessionId: string | null) {
         stepLabel: step.toolName,
         images: [],
         searchRequestId,
+        tasteProfileId: defaultTasteProfileId,
+        tasteProfileWeight: defaultTasteProfileWeight,
         offset: 0,
         hasMore: true,
         isLoadingMore: true,
@@ -304,7 +310,13 @@ export function useChat(sessionId: string | null) {
       setDrawerOpen(true)
 
       try {
-        const data = await fetchSearchSessionById(searchRequestId, 0)
+        const data = await fetchSearchSessionById(
+          searchRequestId,
+          0,
+          20,
+          defaultTasteProfileId,
+          defaultTasteProfileWeight,
+        )
         setDrawerData(prev => prev ? {
           ...prev,
           images: data.images || [],
@@ -321,13 +333,15 @@ export function useChat(sessionId: string | null) {
         stepLabel: step.toolName,
         images: step.images!,
         searchRequestId: null,
+        tasteProfileId: defaultTasteProfileId,
+        tasteProfileWeight: defaultTasteProfileWeight,
         offset: 0,
         hasMore: false,
         isLoadingMore: false,
       })
       setDrawerOpen(true)
     }
-  }, [])
+  }, [defaultTasteProfileId, defaultTasteProfileWeight])
 
   /** Open drawer directly from a search_request_id (used by SearchResultCard) */
   const openDrawerFromSearchRequestId = useCallback(async (searchRequestId: string) => {
@@ -335,6 +349,8 @@ export function useChat(sessionId: string | null) {
       stepLabel: 'show_collection',
       images: [],
       searchRequestId,
+      tasteProfileId: defaultTasteProfileId,
+      tasteProfileWeight: defaultTasteProfileWeight,
       offset: 0,
       hasMore: true,
       isLoadingMore: true,
@@ -342,7 +358,13 @@ export function useChat(sessionId: string | null) {
     setDrawerOpen(true)
 
     try {
-      const data = await fetchSearchSessionById(searchRequestId, 0)
+      const data = await fetchSearchSessionById(
+        searchRequestId,
+        0,
+        20,
+        defaultTasteProfileId,
+        defaultTasteProfileWeight,
+      )
       setDrawerData(prev => prev ? {
         ...prev,
         images: data.images || [],
@@ -354,14 +376,20 @@ export function useChat(sessionId: string | null) {
     } catch (e) {
       console.error('load search session error', e)
     }
-  }, [])
+  }, [defaultTasteProfileId, defaultTasteProfileWeight])
 
   const loadMoreDrawerImages = useCallback(async () => {
     if (!drawerData?.searchRequestId || !drawerData.hasMore) return
 
     setDrawerData(prev => prev ? { ...prev, isLoadingMore: true } : null)
     try {
-      const data = await fetchSearchSessionById(drawerData.searchRequestId, drawerData.offset)
+      const data = await fetchSearchSessionById(
+        drawerData.searchRequestId,
+        drawerData.offset,
+        20,
+        drawerData.tasteProfileId ?? null,
+        drawerData.tasteProfileWeight ?? null,
+      )
       setDrawerData(prev => prev ? {
         ...prev,
         images: [...prev.images, ...(data.images || [])],
@@ -373,6 +401,52 @@ export function useChat(sessionId: string | null) {
       console.error(e)
     }
   }, [drawerData])
+
+  const applyDrawerTasteProfile = useCallback(async ({
+    tasteProfileId,
+    tasteProfileWeight,
+  }: {
+    tasteProfileId: string | null
+    tasteProfileWeight?: number | null
+  }) => {
+    if (!drawerData?.searchRequestId) return
+    const nextWeight = tasteProfileId
+      ? (typeof tasteProfileWeight === 'number' ? tasteProfileWeight : (drawerData.tasteProfileWeight ?? defaultTasteProfileWeight ?? 0.24))
+      : 0.24
+
+    setDrawerData(prev => prev ? {
+      ...prev,
+      images: [],
+      offset: 0,
+      tasteProfileId,
+      tasteProfileWeight: nextWeight,
+      hasMore: true,
+      isLoadingMore: true,
+    } : null)
+
+    try {
+      const data = await fetchSearchSessionById(
+        drawerData.searchRequestId,
+        0,
+        20,
+        tasteProfileId,
+        nextWeight,
+      )
+      setDrawerData(prev => prev ? {
+        ...prev,
+        images: data.images || [],
+        offset: data.offset + data.limit,
+        hasMore: data.has_more,
+        total: data.total,
+        isLoadingMore: false,
+        tasteProfileId,
+        tasteProfileWeight: nextWeight,
+      } : null)
+    } catch (error) {
+      console.error(error)
+      setDrawerData(prev => prev ? { ...prev, isLoadingMore: false, tasteProfileId, tasteProfileWeight: nextWeight } : null)
+    }
+  }, [defaultTasteProfileWeight, drawerData])
 
   return {
     messages,
@@ -386,6 +460,7 @@ export function useChat(sessionId: string | null) {
     openDrawer,
     openDrawerFromSearchRequestId,
     loadMoreDrawerImages,
+    applyDrawerTasteProfile,
   }
 }
 

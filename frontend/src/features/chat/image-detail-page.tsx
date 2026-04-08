@@ -28,7 +28,9 @@ function formatSeasonLabel(image: ImageResult, t: (key: string) => string) {
 
   if (image.year) parts.push(String(image.year))
 
-  if (image.season) {
+  if (image.quarter) {
+    parts.push(String(image.quarter))
+  } else if (image.season) {
     const seasonMap: Record<string, string> = {
       spring: t('seasonSpringSummer'),
       summer: t('seasonSpringSummer'),
@@ -43,8 +45,6 @@ function formatSeasonLabel(image: ImageResult, t: (key: string) => string) {
     const normalized = typeof image.season === 'string' ? image.season.toLowerCase() : ''
     parts.push(seasonMap[normalized] || String(image.season))
   }
-
-  if (image.quarter) parts.push(String(image.quarter))
 
   return parts.join(' / ')
 }

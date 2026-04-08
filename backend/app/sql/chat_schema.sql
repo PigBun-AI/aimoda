@@ -155,7 +155,176 @@ CREATE TABLE IF NOT EXISTS session_context_summaries (
 CREATE INDEX IF NOT EXISTS idx_context_summaries_session_version
     ON session_context_summaries(session_id, version DESC);
 
--- ── 5. style gap feedback ───────────────────────────────────────────────────
+-- ── 5. favorite collections / taste profiles ───────────────────────────────
+CREATE TABLE IF NOT EXISTS favorite_collections (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             INTEGER NOT NULL,
+    name                TEXT NOT NULL,
+    description         TEXT NOT NULL DEFAULT '',
+    cover_image_id      TEXT,
+    cover_image_url     TEXT,
+    profile_status      TEXT NOT NULL DEFAULT 'empty'
+                        CHECK (profile_status IN ('empty', 'ready', 'unavailable')),
+    profile_vector      JSONB,
+    profile_vector_type TEXT NOT NULL DEFAULT 'fashion_clip',
+    item_count          INTEGER NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION favorite_collections_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS favorite_collections_updated_at ON favorite_collections;
+CREATE TRIGGER favorite_collections_updated_at
+    BEFORE UPDATE ON favorite_collections
+    FOR EACH ROW EXECUTE FUNCTION favorite_collections_set_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_favorite_collections_user_updated
+    ON favorite_collections(user_id, updated_at DESC, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS favorite_collection_items (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    collection_id   UUID NOT NULL,
+    image_id        TEXT NOT NULL,
+    image_url       TEXT NOT NULL,
+    brand           TEXT,
+    year            INTEGER,
+    quarter         TEXT,
+    season          TEXT,
+    gender          TEXT,
+    added_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT favorite_collection_items_collection_fkey
+        FOREIGN KEY (collection_id) REFERENCES favorite_collections(id) ON DELETE CASCADE,
+    CONSTRAINT favorite_collection_items_unique_image
+        UNIQUE (collection_id, image_id)
+);
+
+CREATE OR REPLACE FUNCTION favorite_collection_items_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS favorite_collection_items_updated_at ON favorite_collection_items;
+CREATE TRIGGER favorite_collection_items_updated_at
+    BEFORE UPDATE ON favorite_collection_items
+    FOR EACH ROW EXECUTE FUNCTION favorite_collection_items_set_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_favorite_collection_items_collection_added
+    ON favorite_collection_items(collection_id, added_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_favorite_collection_items_image
+    ON favorite_collection_items(image_id);
+
+ALTER TABLE favorite_collection_items
+    ADD COLUMN IF NOT EXISTS source_type TEXT NOT NULL DEFAULT 'catalog';
+ALTER TABLE favorite_collection_items
+    ADD COLUMN IF NOT EXISTS source_ref_id TEXT;
+ALTER TABLE favorite_collection_items
+    ADD COLUMN IF NOT EXISTS original_filename TEXT;
+ALTER TABLE favorite_collection_items
+    ADD COLUMN IF NOT EXISTS mime_type TEXT;
+ALTER TABLE favorite_collection_items
+    ADD COLUMN IF NOT EXISTS embedding_vector JSONB;
+ALTER TABLE favorite_collection_items
+    ADD COLUMN IF NOT EXISTS embedding_vector_type TEXT NOT NULL DEFAULT 'fashion_clip';
+ALTER TABLE favorite_collection_items
+    ADD COLUMN IF NOT EXISTS storage_path TEXT;
+
+UPDATE favorite_collection_items
+SET source_type = 'catalog'
+WHERE source_type IS NULL OR btrim(source_type) = '';
+
+UPDATE favorite_collection_items
+SET source_ref_id = image_id
+WHERE source_ref_id IS NULL AND image_id IS NOT NULL;
+
+ALTER TABLE favorite_collection_items
+    ALTER COLUMN source_ref_id SET NOT NULL;
+
+ALTER TABLE favorite_collection_items
+    DROP CONSTRAINT IF EXISTS favorite_collection_items_source_type_check;
+ALTER TABLE favorite_collection_items
+    ADD CONSTRAINT favorite_collection_items_source_type_check
+    CHECK (source_type IN ('catalog', 'upload'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_favorite_collection_items_collection_source_ref
+    ON favorite_collection_items(collection_id, source_type, source_ref_id);
+
+CREATE TABLE IF NOT EXISTS favorite_collection_upload_jobs (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    collection_id   UUID NOT NULL,
+    user_id         INTEGER NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'uploading', 'queued', 'processing', 'completed', 'partial_failed', 'failed')),
+    total_count     INTEGER NOT NULL DEFAULT 0,
+    error_message   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    CONSTRAINT favorite_collection_upload_jobs_collection_fkey
+        FOREIGN KEY (collection_id) REFERENCES favorite_collections(id) ON DELETE CASCADE
+);
+
+CREATE OR REPLACE FUNCTION favorite_collection_upload_jobs_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS favorite_collection_upload_jobs_updated_at ON favorite_collection_upload_jobs;
+CREATE TRIGGER favorite_collection_upload_jobs_updated_at
+    BEFORE UPDATE ON favorite_collection_upload_jobs
+    FOR EACH ROW EXECUTE FUNCTION favorite_collection_upload_jobs_set_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_favorite_collection_upload_jobs_collection_created
+    ON favorite_collection_upload_jobs(collection_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_favorite_collection_upload_jobs_user_status
+    ON favorite_collection_upload_jobs(user_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS favorite_collection_upload_job_items (
+    id                      UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_id                  UUID NOT NULL,
+    collection_id           UUID NOT NULL,
+    filename                TEXT NOT NULL,
+    content_type            TEXT NOT NULL,
+    file_size_bytes         BIGINT NOT NULL DEFAULT 0,
+    object_key              TEXT NOT NULL,
+    status                  TEXT NOT NULL DEFAULT 'pending'
+                            CHECK (status IN ('pending', 'uploaded', 'upload_failed', 'processing', 'completed', 'failed')),
+    sort_order              INTEGER NOT NULL DEFAULT 0,
+    error_message           TEXT,
+    favorite_item_image_id  TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at              TIMESTAMPTZ,
+    completed_at            TIMESTAMPTZ,
+    CONSTRAINT favorite_collection_upload_job_items_job_fkey
+        FOREIGN KEY (job_id) REFERENCES favorite_collection_upload_jobs(id) ON DELETE CASCADE,
+    CONSTRAINT favorite_collection_upload_job_items_collection_fkey
+        FOREIGN KEY (collection_id) REFERENCES favorite_collections(id) ON DELETE CASCADE,
+    CONSTRAINT favorite_collection_upload_job_items_unique_object_key
+        UNIQUE (job_id, object_key)
+);
+
+CREATE OR REPLACE FUNCTION favorite_collection_upload_job_items_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS favorite_collection_upload_job_items_updated_at ON favorite_collection_upload_job_items;
+CREATE TRIGGER favorite_collection_upload_job_items_updated_at
+    BEFORE UPDATE ON favorite_collection_upload_job_items
+    FOR EACH ROW EXECUTE FUNCTION favorite_collection_upload_job_items_set_updated_at();
+
+CREATE INDEX IF NOT EXISTS idx_favorite_collection_upload_job_items_job_sort
+    ON favorite_collection_upload_job_items(job_id, sort_order ASC, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_favorite_collection_upload_job_items_job_status
+    ON favorite_collection_upload_job_items(job_id, status, sort_order ASC);
+
+-- ── 6. style gap feedback ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS style_gap_signals (
     id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     query_normalized  TEXT NOT NULL UNIQUE,

@@ -10,7 +10,9 @@ from .config import settings
 from .database import initialize_database
 from .exceptions import AppError
 from .postgres import close_pg_pool
-from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries, report_mcp_internal
+from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries, report_mcp_internal, favorites
+from .services.favorite_upload_job_service import recover_favorite_upload_jobs
+from .services.oss_service import get_oss_service
 from .services.report_upload_job_service import recover_report_upload_jobs
 
 PG_REPORT_SCHEMA_LOCK_KEY = 4201001
@@ -102,6 +104,35 @@ def _recover_report_upload_jobs():
         logging.getLogger(__name__).warning("Failed to recover report upload jobs: %s", e)
 
 
+def _recover_favorite_upload_jobs():
+    """Fail stale in-flight favorite upload jobs left behind by restarts."""
+    import logging
+
+    try:
+        recovered = recover_favorite_upload_jobs()
+        if recovered:
+            logging.getLogger(__name__).warning(
+                "Marked %d stale favorite upload jobs as failed during startup",
+                recovered,
+            )
+    except Exception as e:
+        logging.getLogger(__name__).warning("Failed to recover favorite upload jobs: %s", e)
+
+
+def _ensure_oss_direct_upload_cors():
+    """Ensure the OSS bucket is ready for browser direct uploads."""
+    import logging
+
+    try:
+        updated = get_oss_service().ensure_direct_upload_cors()
+        if updated:
+            logging.getLogger(__name__).warning(
+                "Applied OSS CORS configuration for browser direct uploads",
+            )
+    except Exception as e:
+        logging.getLogger(__name__).warning("Failed to ensure OSS direct upload CORS: %s", e)
+
+
 def _init_pg_gallery_indexes():
     """Ensure read-path indexes exist for inspiration gallery tables.
 
@@ -161,6 +192,8 @@ _init_pg_report_schema() # PostgreSQL (reports, report_views)
 _init_pg_chat_schema()   # PostgreSQL (chat_sessions, messages, artifacts)
 _init_pg_gallery_indexes() # PostgreSQL gallery read-path indexes
 _recover_report_upload_jobs()
+_recover_favorite_upload_jobs()
+_ensure_oss_direct_upload_cors()
 
 app = FastAPI(title="Fashion Report API", version="1.0.0")
 app.state.limiter = limiter
@@ -250,6 +283,7 @@ app.include_router(redemption_codes.user_router, prefix="/api")
 app.include_router(mcp.router, prefix="/api")
 app.include_router(report_mcp_internal.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(favorites.router, prefix="/api")
 app.include_router(oss.router, prefix="/api")
 app.include_router(galleries.router, prefix="/api")
 

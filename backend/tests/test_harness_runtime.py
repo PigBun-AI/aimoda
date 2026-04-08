@@ -234,8 +234,8 @@ class HarnessRuntimeTest(unittest.TestCase):
 
     def test_analyze_trends_uses_selective_scroll_for_non_facet_dimensions(self):
         points = [
-            SimpleNamespace(payload={"season": ["fall-winter"]}),
-            SimpleNamespace(payload={"season": ["fall-winter", "resort"]}),
+            SimpleNamespace(payload={"quarter": "秋冬", "season": ["fall-winter"]}),
+            SimpleNamespace(payload={"quarter": "秋冬", "season": ["fall-winter", "resort"]}),
         ]
 
         with patch("backend.app.agent.tools.get_collection", return_value="fashion_items"), patch(
@@ -245,15 +245,38 @@ class HarnessRuntimeTest(unittest.TestCase):
         ) as mock_iter_scroll:
             result = json.loads(
                 analyze_trends.invoke(
-                    {"dimension": "season", "top_n": 5},
+                    {"dimension": "quarter", "top_n": 5},
                     config=self.config,
                 )
             )
 
         self.assertEqual(result["total_items_analyzed"], 2)
-        self.assertEqual(result["ranking"][0]["name"], "fall-winter")
+        self.assertEqual(result["ranking"][0]["name"], "秋冬")
         self.assertEqual(result["ranking"][0]["count"], 2)
         self.assertTrue(mock_iter_scroll.called)
+
+    def test_analyze_trends_accepts_json_stringified_list_arguments(self):
+        captured: dict[str, object] = {}
+
+        def _fake_build_qdrant_filter(**kwargs):
+            captured.update(kwargs)
+            return None
+
+        with patch("backend.app.agent.tools.get_collection", return_value="fashion_items"), patch(
+            "backend.app.agent.tools.get_qdrant", return_value=object()
+        ), patch("backend.app.agent.tools.build_qdrant_filter", side_effect=_fake_build_qdrant_filter), patch(
+            "backend.app.agent.tools.iter_scroll", return_value=iter([])
+        ):
+            result = json.loads(
+                analyze_trends.invoke(
+                    {"dimension": "brand", "categories": '["jacket"]', "quarter": '["fw"]', "top_n": 5},
+                    config=self.config,
+                )
+            )
+
+        self.assertEqual(result["total_items_analyzed"], 0)
+        self.assertEqual(captured["categories"], ["jacket"])
+        self.assertEqual(captured["quarter"], ["秋冬"])
 
     @patch("backend.app.agent.tools.set_session_agent_runtime")
     @patch("backend.app.agent.tools.count_session", return_value=120)

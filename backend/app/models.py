@@ -13,6 +13,8 @@ RedemptionCodeStatus = Literal["unused", "used", "expired"]
 SubscriptionStatus = Literal["active", "expired"]
 ActivityAction = Literal["login", "view_report", "redeem_code", "upload_report"]
 ReportUploadJobStatus = Literal["pending", "processing", "completed", "failed"]
+FavoriteUploadJobStatus = Literal["pending", "uploading", "queued", "processing", "completed", "partial_failed", "failed"]
+FavoriteUploadItemStatus = Literal["pending", "uploaded", "upload_failed", "processing", "completed", "failed"]
 UsagePeriodType = Literal["lifetime", "daily"]
 FeatureCode = Literal["ai_chat", "fashion_reports", "inspiration", "image_generation", "video_generation"]
 SmsPurpose = Literal["login", "register"]
@@ -112,6 +114,43 @@ class ReportUploadJobRecord(CamelModel):
     updated_at: str
     started_at: str | None = None
     completed_at: str | None = None
+
+
+class FavoriteUploadJobItemRecord(CamelModel):
+    id: str
+    job_id: str
+    collection_id: str
+    filename: str
+    content_type: str
+    file_size_bytes: int
+    object_key: str
+    status: FavoriteUploadItemStatus
+    sort_order: int
+    error_message: str | None = None
+    favorite_item_image_id: str | None = None
+    created_at: str
+    updated_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
+class FavoriteUploadJobRecord(CamelModel):
+    id: str
+    collection_id: str
+    user_id: int
+    status: FavoriteUploadJobStatus
+    total_count: int
+    pending_count: int = 0
+    uploaded_count: int = 0
+    processing_count: int = 0
+    completed_count: int = 0
+    failed_count: int = 0
+    error_message: str | None = None
+    created_at: str
+    updated_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+    items: list[FavoriteUploadJobItemRecord] = Field(default_factory=list)
 
 
 # --- Redemption Code ---

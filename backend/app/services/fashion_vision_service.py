@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from ..config import settings
+from ..value_normalization import normalize_quarter_list
 
 _SKILL_CACHE: str | None = None
 _PROMPT_PATTERN = re.compile(
@@ -201,7 +202,9 @@ def _normalize_output(data: dict[str, Any], image_count: int) -> dict[str, Any]:
                 "color": _normalize_string_list(hard_filters.get("color")),
                 "fabric": _normalize_string_list(hard_filters.get("fabric")),
                 "gender": str(hard_filters.get("gender", "")).strip(),
-                "season": _normalize_string_list(hard_filters.get("season")),
+                # VLM cannot reliably infer official fashion-calendar quarter labels.
+                # Only preserve explicit quarter when the upstream contract provides one.
+                "quarter": normalize_quarter_list(hard_filters.get("quarter")),
             },
             "follow_up_questions_zh": _normalize_string_list(merged.get("follow_up_questions_zh")),
         },

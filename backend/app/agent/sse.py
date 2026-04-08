@@ -66,7 +66,6 @@ def extract_images_from_json(text: str) -> tuple[list[dict], dict]:
                     "brand": item.get("brand", ""),
                     "year": item.get("year"),
                     "quarter": item.get("quarter") or item.get("season"),
-                    "season": item.get("season"),
                     "score": item.get("score", 0),
                     "garments": item.get("garments", []),
                     "colors": item.get("colors", []),
