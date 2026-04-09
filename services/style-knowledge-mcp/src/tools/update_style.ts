@@ -11,20 +11,48 @@ import { findByStyleName, upsertPoint } from "../qdrant.js";
 import { encodeText } from "../encoder.js";
 import type { StyleKnowledge } from "../types.js";
 import { buildStyleRichText, withSearchFields } from "../style_text.js";
+import {
+  jsonStringCompatibleArray,
+  jsonStringCompatibleObject,
+  parseStructuredArgs,
+} from "../tool_input.js";
+
+const updateFieldsRuntimeSchema = z.object({
+  aliases: z.array(z.string()).optional(),
+  visual_description: z.string().optional(),
+  palette: z.array(z.string()).optional(),
+  silhouette: z.array(z.string()).optional(),
+  fabric: z.array(z.string()).optional(),
+  details: z.array(z.string()).optional(),
+  reference_brands: z.array(z.string()).optional(),
+  category: z.string().optional(),
+  season_relevance: z.array(z.string()).optional(),
+  gender: z.string().optional(),
+  source: z.string().optional(),
+  source_url: z.string().optional(),
+  source_title: z.string().optional(),
+  confidence: z.number().optional(),
+  popularity_score: z.number().optional(),
+});
+
+const updateStyleRuntimeSchema = z.object({
+  style_name: z.string(),
+  updates: updateFieldsRuntimeSchema,
+  replace_aliases: z.boolean().optional().default(false),
+});
 
 export const updateStyleSchema = {
   style_name: z.string().describe("要更新的风格英文名"),
-  updates: z
-    .object({
-      aliases: z.array(z.string()).optional(),
+  updates: jsonStringCompatibleObject({
+      aliases: jsonStringCompatibleArray(z.string()).optional(),
       visual_description: z.string().optional(),
-      palette: z.array(z.string()).optional(),
-      silhouette: z.array(z.string()).optional(),
-      fabric: z.array(z.string()).optional(),
-      details: z.array(z.string()).optional(),
-      reference_brands: z.array(z.string()).optional(),
+      palette: jsonStringCompatibleArray(z.string()).optional(),
+      silhouette: jsonStringCompatibleArray(z.string()).optional(),
+      fabric: jsonStringCompatibleArray(z.string()).optional(),
+      details: jsonStringCompatibleArray(z.string()).optional(),
+      reference_brands: jsonStringCompatibleArray(z.string()).optional(),
       category: z.string().optional(),
-      season_relevance: z.array(z.string()).optional(),
+      season_relevance: jsonStringCompatibleArray(z.string()).optional(),
       gender: z.string().optional(),
       source: z.string().optional(),
       source_url: z.string().optional(),
@@ -45,7 +73,13 @@ export async function updateStyle(args: {
   updates: Partial<StyleKnowledge>;
   replace_aliases: boolean;
 }) {
-  const existing = await findByStyleName(args.style_name);
+  const normalizedArgs = parseStructuredArgs(
+    updateStyleRuntimeSchema,
+    args,
+    "update_style arguments",
+  );
+
+  const existing = await findByStyleName(normalizedArgs.style_name);
 
   if (!existing) {
     return {
@@ -54,7 +88,7 @@ export async function updateStyle(args: {
           type: "text" as const,
           text: JSON.stringify({
             status: "error",
-            message: `style "${args.style_name}" not found`,
+            message: `style "${normalizedArgs.style_name}" not found`,
             updated_fields: [],
           }),
         },
@@ -69,12 +103,12 @@ export async function updateStyle(args: {
   // 构建新 payload
   const newPayload: StyleKnowledge = { ...oldPayload, updated_at: now };
 
-  if (args.updates.aliases) {
-    if (args.replace_aliases) {
-      newPayload.aliases = args.updates.aliases;
+  if (normalizedArgs.updates.aliases) {
+    if (normalizedArgs.replace_aliases) {
+      newPayload.aliases = normalizedArgs.updates.aliases;
     } else {
       newPayload.aliases = Array.from(
-        new Set([...oldPayload.aliases, ...args.updates.aliases])
+        new Set([...oldPayload.aliases, ...normalizedArgs.updates.aliases])
       );
     }
     updatedFields.push("aliases");
@@ -98,8 +132,8 @@ export async function updateStyle(args: {
   ] as const;
 
   for (const field of simpleFields) {
-    if (args.updates[field] !== undefined) {
-      (newPayload as any)[field] = args.updates[field];
+    if (normalizedArgs.updates[field] !== undefined) {
+      (newPayload as any)[field] = normalizedArgs.updates[field];
       updatedFields.push(field);
     }
   }
@@ -107,10 +141,10 @@ export async function updateStyle(args: {
   // visual_description 变更 → 重新编码向量
   let vector: number[];
   if (
-    args.updates.visual_description &&
-    args.updates.visual_description !== oldPayload.visual_description
+    normalizedArgs.updates.visual_description &&
+    normalizedArgs.updates.visual_description !== oldPayload.visual_description
   ) {
-    newPayload.visual_description = args.updates.visual_description;
+    newPayload.visual_description = normalizedArgs.updates.visual_description;
     updatedFields.push("visual_description");
   }
 

@@ -72,3 +72,21 @@ export async function deleteGalleryFromOSS(galleryId: string): Promise<void> {
     marker = list.nextContinuationToken || undefined;
   } while (marker);
 }
+
+function extractOssObjectKey(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const key = decodeURIComponent(parsed.pathname.replace(/^\/+/, ""));
+    if (!key.startsWith(`${CONFIG.OSS_GALLERY_PREFIX}/`)) return null;
+    return key;
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteObjectsByUrls(urls: string[]): Promise<void> {
+  const keys = Array.from(new Set(urls.map(extractOssObjectKey).filter(Boolean) as string[]));
+  if (keys.length === 0) return;
+  const oss = getClient();
+  await oss.deleteMulti(keys, { quiet: true });
+}
