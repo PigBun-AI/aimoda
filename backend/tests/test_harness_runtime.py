@@ -155,6 +155,32 @@ class HarnessRuntimeTest(unittest.TestCase):
         self.assertEqual(result.get("error_type"), "invalid_arguments")
         self.assertFalse(result.get("retry_same_call", True))
 
+    def test_add_filter_uses_exact_count_validation(self):
+        session = {
+            "query": "",
+            "vector_type": "tag",
+            "q_emb": None,
+            "filters": [],
+            "active": True,
+        }
+        set_session(self.config, session)
+
+        with patch("backend.app.agent.tools.get_qdrant", return_value=object()), patch(
+            "backend.app.agent.tools.count_session",
+            return_value=12,
+        ) as mock_count:
+            result = json.loads(
+                add_filter.func(
+                    "brand",
+                    "Akris",
+                    config=self.config,
+                )
+            )
+
+        self.assertEqual(result.get("action"), "filter_added")
+        self.assertEqual(mock_count.call_count, 1)
+        self.assertTrue(mock_count.call_args.kwargs["exact"])
+
     @patch("backend.app.agent.tools.count_session", return_value=24)
     def test_brand_only_request_autobinds_missing_add_filter_dimension_to_brand(self, mock_count):
         session = {

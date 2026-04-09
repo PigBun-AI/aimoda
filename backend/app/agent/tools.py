@@ -629,12 +629,13 @@ def search_style(
     - canonical style match
     - compact style features
     - retrieval_query_en for semantic search
-    - suggested concrete filters with lower failure risk
+    - optional concrete filters with lower failure risk
 
     Typical next step:
     1. call search_style(query)
     2. use retrieval_plan.retrieval_query_en to call start_collection(...)
-    3. only then add high-confidence concrete filters if needed
+    3. inspect/show the style-grounded pool first
+    4. only then add high-confidence concrete filters if needed
     """
     _ensure_run_active(config, stage="search_style:start")
     try:
@@ -782,11 +783,11 @@ def start_collection(
                 f"Collection started with {count} images using {len(image_vectors)} uploaded image(s). Use add_filter to narrow down."
                 if image_vectors and not style_retrieval_query
                 else (
-                    f"Collection started with {count} images using style knowledge grounding. Use add_filter to narrow down."
+                    f"Collection started with {count} images using style knowledge grounding. Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
                     if style_retrieval_query and not image_vectors
                     else (
                         f"Collection started with {count} images using {len(image_vectors)} uploaded image(s) and style knowledge grounding. "
-                        "Use add_filter to narrow down."
+                        "Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
                     )
                 )
             )
@@ -974,9 +975,10 @@ def add_filter(
     test_filters = session["filters"] + [entry]
     test_session = dict(session)
     test_session["filters"] = test_filters
-    count = count_session(client, test_session, cancel_check=cancel_check, exact=False)
-    if count <= 0:
-        count = count_session(client, test_session, cancel_check=cancel_check, exact=True)
+    # Validation must use an exact count. Qdrant's approximate count is fast, but
+    # it can over-report matches for nested garment filters and falsely accept
+    # impossible add_filter requests.
+    count = count_session(client, test_session, cancel_check=cancel_check, exact=True)
 
     if count > 0:
         clear_invalid_filter_attempt(

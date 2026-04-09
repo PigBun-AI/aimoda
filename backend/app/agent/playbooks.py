@@ -48,6 +48,8 @@ Help the user reach a satisfying image set quickly by iteratively narrowing or b
 - Image-driven queries: use `fashion_vision(...)` before applying text filters. If the image implies multiple garments or no single category, prefer semantic retrieval first and delay category-bound filters.
 - Abstract style requests: use `search_style(...)` first, then retrieve with its `retrieval_query_en` before adding concrete filters.
 - If `search_style(...)` has no exact match, use its fallback semantic description as a heuristic template and continue retrieval; do not stop just because the style library has no direct hit.
+- For abstract style requests, `retrieval_query_en` is the primary execution payload. Do not immediately translate returned style cues into hard filters by default.
+- After a style-grounded `start_collection(...)`, prefer `show_collection()` or a light inspection first. Add filters only when the user explicitly asked for those constraints, or when the current pool is still too broad and the filter is high-confidence.
 - For abstract style requests, default to one strong result set unless you are highly confident that an additional group would provide clearly different value.
 - When you recommend an extra clickable viewing direction in the final answer, model it as a semantic query plus hard filters (brand / gender / quarter / year), instead of describing an iterative filter-edit sequence.
 """

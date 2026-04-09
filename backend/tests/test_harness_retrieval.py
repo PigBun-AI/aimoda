@@ -147,6 +147,7 @@ def test_search_style_tool_returns_retrieval_plan(monkeypatch):
             "retrieval_query_en": "understated elegance, palette: camel",
             "semantic_boost_terms": ["soft tailoring", "wool"],
             "suggested_filters": {"fabric": ["wool"]},
+            "apply_filters_by_default": False,
             "soft_constraints": {"palette": ["camel"]},
             "agent_guidance": {"recommended_next_step": "start_collection"},
         },
@@ -158,6 +159,7 @@ def test_search_style_tool_returns_retrieval_plan(monkeypatch):
     assert payload["status"] == "ok"
     assert payload["primary_style"]["style_name"] == "quiet luxury"
     assert payload["retrieval_plan"]["retrieval_query_en"] == "understated elegance, palette: camel"
+    assert payload["retrieval_plan"]["apply_filters_by_default"] is False
 
 
 def test_search_style_tool_persists_style_session_context(monkeypatch):

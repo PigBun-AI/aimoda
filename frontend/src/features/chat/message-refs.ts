@@ -59,9 +59,14 @@ export type MessageAnnotation =
   | MessageRefSpansAnnotation
   | { type: string; [key: string]: unknown }
 
+export interface MessageTextMarks {
+  strong?: boolean
+  emphasis?: boolean
+}
+
 export type MessageRenderSegment =
   | { type: "text"; text: string }
-  | { type: "ref"; text: string; target: MessageRefTarget }
+  | { type: "ref"; text: string; target: MessageRefTarget; marks?: MessageTextMarks }
 
 const MESSAGE_REF_PREFIX = "aimoda://ref/"
 const STRUCTURED_REFS_START = "[AIMODA_REFS]"
@@ -73,6 +78,7 @@ type ReplacementRange = {
   end: number
   text: string
   target: MessageRefTarget
+  marks?: MessageTextMarks
 }
 
 function decodeBase64Url(input: string): string {
@@ -221,6 +227,82 @@ function findNthExactRange(
   return null
 }
 
+function extractOuterMarkdownMarks(
+  content: string,
+  start: number,
+  end: number,
+): { start: number; end: number; marks?: MessageTextMarks } {
+  let expandedStart = start
+  let expandedEnd = end
+  const marks: MessageTextMarks = {}
+  let changed = true
+
+  while (changed) {
+    changed = false
+
+    const beforeStrong = content.slice(Math.max(0, expandedStart - 2), expandedStart)
+    const afterStrong = content.slice(expandedEnd, expandedEnd + 2)
+    if ((beforeStrong === "**" || beforeStrong === "__") && afterStrong === beforeStrong) {
+      expandedStart -= 2
+      expandedEnd += 2
+      marks.strong = true
+      changed = true
+      continue
+    }
+
+    const beforeEmphasis = content.slice(Math.max(0, expandedStart - 1), expandedStart)
+    const afterEmphasis = content.slice(expandedEnd, expandedEnd + 1)
+    if ((beforeEmphasis === "*" || beforeEmphasis === "_") && afterEmphasis === beforeEmphasis) {
+      const doubledBefore = content.slice(Math.max(0, expandedStart - 2), expandedStart) === beforeEmphasis.repeat(2)
+      const doubledAfter = content.slice(expandedEnd, expandedEnd + 2) === afterEmphasis.repeat(2)
+      if (!doubledBefore && !doubledAfter) {
+        expandedStart -= 1
+        expandedEnd += 1
+        marks.emphasis = true
+        changed = true
+      }
+    }
+  }
+
+  return {
+    start: expandedStart,
+    end: expandedEnd,
+    marks: Object.keys(marks).length > 0 ? marks : undefined,
+  }
+}
+
+function stripLabelMarkdownMarks(label: string): { text: string; marks?: MessageTextMarks } {
+  let text = label
+  const marks: MessageTextMarks = {}
+  let changed = true
+
+  while (changed) {
+    changed = false
+    if (
+      (text.startsWith("**") && text.endsWith("**"))
+      || (text.startsWith("__") && text.endsWith("__"))
+    ) {
+      text = text.slice(2, -2)
+      marks.strong = true
+      changed = true
+      continue
+    }
+    if (
+      (text.startsWith("*") && text.endsWith("*"))
+      || (text.startsWith("_") && text.endsWith("_"))
+    ) {
+      text = text.slice(1, -1)
+      marks.emphasis = true
+      changed = true
+    }
+  }
+
+  return {
+    text,
+    marks: Object.keys(marks).length > 0 ? marks : undefined,
+  }
+}
+
 function findSpanReplacements(content: string, annotations?: MessageAnnotation[]): ReplacementRange[] {
   if (!annotations?.length || !content.trim()) return []
 
@@ -237,11 +319,14 @@ function findSpanReplacements(content: string, annotations?: MessageAnnotation[]
     if (!item?.target || typeof item.quote !== "string") return
     const range = findNthExactRange(content, item.quote, item.occurrence ?? 1, occupied)
     if (!range) return
-    occupied.push(range)
+    const markedRange = extractOuterMarkdownMarks(content, range.start, range.end)
+    occupied.push({ start: markedRange.start, end: markedRange.end })
     replacements.push({
-      ...range,
+      start: markedRange.start,
+      end: markedRange.end,
       text: content.slice(range.start, range.end),
       target: item.target,
+      marks: markedRange.marks,
     })
   })
 
@@ -293,11 +378,14 @@ function findPhraseReplacements(
       return
     }
 
-    occupied.push(range)
+    const markedRange = extractOuterMarkdownMarks(content, range.start, range.end)
+    occupied.push({ start: markedRange.start, end: markedRange.end })
     replacements.push({
-      ...range,
+      start: markedRange.start,
+      end: markedRange.end,
       text: content.slice(range.start, range.end),
       target: item.target,
+      marks: markedRange.marks,
     })
   })
 
@@ -328,6 +416,7 @@ function buildSegmentsFromReplacements(
       type: "ref",
       text: replacement.text,
       target: replacement.target,
+      marks: replacement.marks,
     })
     cursor = replacement.end
   })
@@ -356,10 +445,11 @@ function parseLegacyMessageRefSegments(content: string): MessageRenderSegment[] 
     const target = parseMessageRefUrl(href)
     if (!target) continue
 
+    const parsedLabel = stripLabelMarkdownMarks(label)
     if (start > cursor) {
       segments.push({ type: "text", text: content.slice(cursor, start) })
     }
-    segments.push({ type: "ref", text: label, target })
+    segments.push({ type: "ref", text: parsedLabel.text, target, marks: parsedLabel.marks })
     cursor = start + raw.length
   }
 

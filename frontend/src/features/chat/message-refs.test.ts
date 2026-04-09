@@ -89,6 +89,29 @@ describe("message refs", () => {
     ])
   })
 
+  it("preserves surrounding markdown strong markers on ref spans", () => {
+    const target = {
+      kind: "search_request" as const,
+      search_request_id: "artifact-strong",
+      label: "Valentino",
+    }
+
+    expect(buildMessageRefSegments("建议看 **Valentino** 的这组。", [{
+      type: "message_ref_spans",
+      items: [
+        {
+          target,
+          quote: "Valentino",
+          occurrence: 1,
+        },
+      ],
+    }])).toEqual([
+      { type: "text", text: "建议看 " },
+      { type: "ref", text: "Valentino", target, marks: { strong: true } },
+      { type: "text", text: " 的这组。" },
+    ])
+  })
+
   it("falls back to inline numeric refs when phrases cannot be matched", () => {
     const target = {
       kind: "search_request" as const,
@@ -122,6 +145,21 @@ describe("message refs", () => {
     expect(buildMessageRefSegments(`建议先看 [Dior](${href})。`)).toEqual([
       { type: "text", text: "建议先看 " },
       { type: "ref", text: "Dior", target },
+      { type: "text", text: "。" },
+    ])
+  })
+
+  it("strips markdown emphasis from legacy aimoda labels and keeps the mark metadata", () => {
+    const target = {
+      kind: "search_request" as const,
+      search_request_id: "artifact-legacy-strong",
+      label: "Dior",
+    }
+    const href = buildMessageRefUrl(target)
+
+    expect(buildMessageRefSegments(`建议先看 [**Dior**](${href})。`)).toEqual([
+      { type: "text", text: "建议先看 " },
+      { type: "ref", text: "Dior", target, marks: { strong: true } },
       { type: "text", text: "。" },
     ])
   })

@@ -35,6 +35,8 @@ def test_build_style_retrieval_plan_extracts_semantic_and_filter_cues():
     assert "style_name:" in plan["style_rich_text"]
     assert plan["suggested_filters"]["fabric"] == ["wool", "silk", "cashmere"]
     assert plan["suggested_filters"]["gender"] == "women"
+    assert plan["apply_filters_by_default"] is False
+    assert plan["preferred_result_strategy"] == "query_first_then_optional_precision_filters"
     assert "reference_brands" in plan["soft_constraints"]
 
 

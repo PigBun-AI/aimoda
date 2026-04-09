@@ -62,4 +62,31 @@ describe("ChatMarkdown", () => {
     await user.click(screen.getByRole("button", { name: "Dior" }))
     expect(onMessageRefClick).toHaveBeenCalledWith(target)
   })
+
+  it("keeps strong emphasis styling on inline ref buttons without leaking markdown markers", () => {
+    const target = {
+      kind: "search_request" as const,
+      search_request_id: "artifact-strong",
+      label: "Valentino",
+    }
+
+    const { container } = render(
+      <ChatMarkdown
+        content="建议看 **Valentino** 的这组。"
+        annotations={[
+          {
+            type: "message_ref_spans",
+            items: [{ quote: "Valentino", occurrence: 1, target }],
+          },
+        ]}
+      />,
+    )
+
+    const button = screen.getByRole("button", { name: "Valentino" })
+    expect(button.className).toContain("font-semibold")
+    expect(container.textContent).toContain("建议看")
+    expect(container.textContent).toContain("Valentino")
+    expect(container.textContent).toContain("的这组。")
+    expect(container.textContent).not.toContain("**")
+  })
 })
