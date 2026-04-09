@@ -660,4 +660,4 @@ async def stream_agent_response(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        yield sse_event({"type": "error", "message": str(e)})
+        raise

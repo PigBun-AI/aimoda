@@ -18,17 +18,36 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
+from ..config import settings
 from ..dependencies import get_current_user
 from ..models import AuthenticatedUser
 from ..services.feature_access_service import consume_feature_access, get_feature_access_status
 from ..services.favorite_service import annotate_catalog_image_results
+from ..services.chat_reference_service import (
+    append_collection_result_references,
+    build_bundle_result_metadata,
+    dedupe_collection_result_blocks,
+    extract_collection_result_payloads,
+)
+from ..services.chat_ref_linker_service import attach_message_ref_spans
+from ..services.chat_search_plan_ref_service import attach_search_plan_ref_spans
+from ..services.chat_structured_ref_service import (
+    REFS_END_MARKER,
+    REFS_START_MARKER,
+    attach_structured_message_refs,
+)
+from ..services.chat_runtime_ref_service import attach_runtime_brand_refs
+from ..services.search_plan_service import materialize_search_plan_ref
+from ..services.chat_bundle_service import maybe_materialize_style_bundle
 from ..services.chat_service import (
+    create_artifact,
     create_session,
     list_sessions,
     update_session_preferences,
@@ -47,6 +66,7 @@ from ..services.chat_service import (
     maybe_compact_session,
     get_compaction_bootstrap_payload,
     clear_compaction_bootstrap,
+    reset_session_runtime_checkpoint,
 )
 from ..services.taste_profile_service import apply_taste_profile_to_query, rerank_image_candidates
 from ..services.oss_service import get_oss_service
@@ -85,6 +105,7 @@ from ..agent.query_context import (
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
 _detached_post_run_tasks: set[asyncio.Task[Any]] = set()
+REF_ENRICHMENT_TIMEOUT_SECONDS = settings.REF_ENRICHMENT_TIMEOUT_SECONDS
 
 
 # ── Request/Response models ──
@@ -131,6 +152,20 @@ class SearchSessionRequest(BaseModel):
 
 class StopSessionRunRequest(BaseModel):
     run_id: str | None = None
+
+
+class ResolveSearchPlanRefRequest(BaseModel):
+    session_id: str
+    current_session_id: str | None = None
+    label: str | None = None
+    query: str = ""
+    categories: list[str] | None = None
+    brand: str | None = None
+    gender: str | None = None
+    quarter: str | None = None
+    year_min: int | None = None
+    image_type: str | None = None
+    source: str | None = None
 
 
 def _normalize_message_content(content: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -222,6 +257,25 @@ def _materialize_stream_blocks(stream_result: StreamResult) -> list[dict[str, An
         if isinstance(block, dict) and block
     ]
 
+def _create_bundle_result_artifact(
+    *,
+    session_id: str,
+    message_id: str | None,
+    blocks: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    collection_payloads = extract_collection_result_payloads(blocks)
+    if len(collection_payloads) <= 1:
+        return None
+
+    return create_artifact(
+        session_id=session_id,
+        message_id=message_id,
+        artifact_type="bundle_result",
+        storage_type="database",
+        metadata=build_bundle_result_metadata(collection_payloads),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+    )
+
 
 async def _persist_streaming_assistant_message(
     *,
@@ -231,10 +285,11 @@ async def _persist_streaming_assistant_message(
     stream_state: str,
     run_id: str | None = None,
     thread_version: int | None = None,
-) -> str | None:
-    blocks = _materialize_stream_blocks(stream_result)
-    if not blocks and not message_id:
-        return None
+    request_query_text: str = "",
+) -> tuple[str | None, list[dict[str, Any]] | None]:
+    raw_blocks = _materialize_stream_blocks(stream_result)
+    if not raw_blocks and not message_id:
+        return None, None
 
     metadata_patch: dict[str, Any] = {"stream_state": stream_state}
     if stream_result.stop_reason:
@@ -244,30 +299,197 @@ async def _persist_streaming_assistant_message(
     if thread_version is not None:
         metadata_patch["thread_version"] = int(thread_version)
 
-    if message_id:
+    persisted_message_id = message_id
+
+    if persisted_message_id:
+        await asyncio.to_thread(
+            update_message,
+            persisted_message_id,
+            content=raw_blocks,
+            metadata_patch=metadata_patch,
+        )
+    else:
+        if not raw_blocks:
+            return None, None
+
+        created = await asyncio.to_thread(
+            create_message,
+            session_id,
+            "assistant",
+            raw_blocks,
+            metadata=metadata_patch,
+        )
+        persisted_message_id = str(created["id"])
+
+    if stream_state == "streaming" or not persisted_message_id:
+        return persisted_message_id, None
+
+    raw_blocks = dedupe_collection_result_blocks(raw_blocks)
+    raw_blocks, has_structured_refs = attach_structured_message_refs(
+        raw_blocks,
+        session_id=session_id,
+    )
+    has_runtime_refs = False
+    if not has_structured_refs:
+        raw_blocks, has_runtime_refs = attach_runtime_brand_refs(
+            raw_blocks,
+            session_id=session_id,
+            request_query_text=request_query_text,
+        )
+    ref_enrichment_status = (
+        "completed"
+        if has_structured_refs or has_runtime_refs
+        else "pending"
+        if _should_schedule_ref_enrichment(raw_blocks)
+        else "skipped"
+    )
+    await asyncio.to_thread(
+        update_message,
+        persisted_message_id,
+        content=raw_blocks,
+        metadata_patch={
+            **metadata_patch,
+            "ref_enrichment_status": ref_enrichment_status,
+        },
+    )
+    return persisted_message_id, raw_blocks
+
+
+def _should_schedule_ref_enrichment(blocks: list[dict[str, Any]]) -> bool:
+    if not blocks:
+        return False
+    if any(
+        isinstance(block, dict)
+        and block.get("type") == "text"
+        and isinstance(block.get("annotations"), list)
+        and any(
+            isinstance(annotation, dict) and annotation.get("type") == "message_ref_spans"
+            for annotation in block.get("annotations", [])
+        )
+        for block in blocks
+    ):
+        return False
+    has_text = any(
+        isinstance(block, dict)
+        and block.get("type") == "text"
+        and str(block.get("text", "")).strip()
+        for block in blocks
+    )
+    return has_text and bool(extract_collection_result_payloads(blocks))
+
+
+def _build_ref_enriched_blocks(
+    *,
+    session_id: str,
+    message_id: str,
+    blocks: list[dict[str, Any]],
+    request_query_text: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    bundle_artifact = _create_bundle_result_artifact(
+        session_id=session_id,
+        message_id=message_id,
+        blocks=blocks,
+    )
+    if not bundle_artifact:
+        bundle_artifact = maybe_materialize_style_bundle(
+            session_id=session_id,
+            message_id=message_id,
+            blocks=blocks,
+            request_query_text=request_query_text,
+        )
+
+    bundle_artifact_id = (
+        str(bundle_artifact["artifact"]["id"])
+        if isinstance(bundle_artifact, dict) and "artifact" in bundle_artifact
+        else str(bundle_artifact["id"])
+        if isinstance(bundle_artifact, dict) and bundle_artifact.get("id")
+        else None
+    )
+    bundle_groups = None
+    if isinstance(bundle_artifact, dict) and isinstance(bundle_artifact.get("groups"), list):
+        bundle_groups = [dict(group) for group in bundle_artifact["groups"] if isinstance(group, dict)]
+
+    finalized_blocks = append_collection_result_references(
+        blocks,
+        bundle_artifact_id=bundle_artifact_id,
+        bundle_groups=bundle_groups,
+    )
+    finalized_blocks = attach_message_ref_spans(finalized_blocks)
+    finalized_blocks = attach_search_plan_ref_spans(
+        finalized_blocks,
+        session_id=session_id,
+        request_query_text=request_query_text,
+    )
+
+    metadata_patch: dict[str, Any] = {
+        "ref_enrichment_status": "completed",
+    }
+    if bundle_artifact_id:
+        metadata_patch["bundle_artifact_id"] = bundle_artifact_id
+    return finalized_blocks, metadata_patch
+
+
+def _launch_post_run_ref_enrichment(
+    *,
+    session_id: str,
+    message_id: str | None,
+    blocks: list[dict[str, Any]],
+    request_query_text: str,
+) -> None:
+    if not message_id or not _should_schedule_ref_enrichment(blocks):
+        return
+
+    async def _run() -> None:
+        try:
+            logger.info("Starting detached ref enrichment for session %s", session_id)
+            finalized_blocks, metadata_patch = await asyncio.wait_for(
+                asyncio.to_thread(
+                    _build_ref_enriched_blocks,
+                    session_id=session_id,
+                    message_id=message_id,
+                    blocks=blocks,
+                    request_query_text=request_query_text,
+                ),
+                timeout=REF_ENRICHMENT_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Message ref enrichment timed out for session %s", session_id)
+            await asyncio.to_thread(
+                update_message,
+                message_id,
+                metadata_patch={"ref_enrichment_status": "timeout"},
+            )
+            return
+        except Exception:
+            logger.exception("Message ref enrichment failed for session %s", session_id)
+            await asyncio.to_thread(
+                update_message,
+                message_id,
+                metadata_patch={"ref_enrichment_status": "error"},
+            )
+            return
+
         await asyncio.to_thread(
             update_message,
             message_id,
-            content=blocks,
+            content=finalized_blocks,
             metadata_patch=metadata_patch,
         )
-        return message_id
+        logger.info("Completed detached ref enrichment for session %s", session_id)
 
-    if not blocks:
-        return None
-
-    created = await asyncio.to_thread(
-        create_message,
-        session_id,
-        "assistant",
-        blocks,
-        metadata=metadata_patch,
-    )
-    return str(created["id"])
+    _track_detached_post_run_task(asyncio.create_task(_run()))
 
 
 def _resolve_interrupted_execution_status(stream_result: StreamResult) -> str:
     return "completed" if _materialize_stream_blocks(stream_result) else "idle"
+
+
+def _is_invalid_chat_history_error(error: Exception) -> bool:
+    message = str(error)
+    return (
+        "INVALID_CHAT_HISTORY" in message
+        or "do not have a corresponding ToolMessage" in message
+    )
 
 
 def _track_detached_post_run_task(task: asyncio.Task[Any]) -> None:
@@ -673,6 +895,7 @@ def _compose_agent_input(
     prefix_parts = []
     if turn_playbook:
         prefix_parts.append(turn_playbook)
+    prefix_parts.append(_format_inline_ref_protocol())
     if compaction_bootstrap:
         prefix_parts.append(compaction_bootstrap)
     if session_preferences:
@@ -732,6 +955,34 @@ def _format_session_preferences(preferences: dict[str, Any] | None) -> str:
         lines.append(f"- 偏好图集排序：已启用（权重 {int(round(weight * 100))}%）")
     lines.append("若用户本轮消息给出了新的明确限定，以用户当前消息为准。")
     return "\n".join(lines)
+
+
+def _format_inline_ref_protocol() -> str:
+    example = json.dumps({
+        "items": [
+            {
+                "quote": "Akris 的连衣裙",
+                "label": "Akris 连衣裙",
+                "query": "sculptural red dress luxury editorial",
+                "brand": "Akris",
+                "categories": ["dress"],
+                "quarter": "秋冬",
+            }
+        ]
+    }, ensure_ascii=False)
+    return "\n".join([
+        "[INLINE_REF_PROTOCOL]",
+        "当你在最终回答中提到一个值得用户点击继续看图的品牌 / 方向 / 推荐句时，可在答案末尾追加一个隐藏的结构化 ref 块。",
+        f"使用格式：\n{REFS_START_MARKER}{example}{REFS_END_MARKER}",
+        "并且必须包在 [AIMODA_REFS] 与 [/AIMODA_REFS] 之间。",
+        "规则：",
+        "1. `quote` 必须是你正文里原样出现的连续短语。",
+        "2. 对 drawer 类 ref，采用‘语义 query + 硬过滤’：brand / gender / quarter / year_min 直接作为硬过滤；主要检索意图写进 query。",
+        "3. 若推荐的是新品牌/新方向，不要复用旧结果集；直接给新的 query/filter 计划。",
+        "4. 只给少量高价值 ref，宁缺毋滥。",
+        "5. 若没有可靠 ref，就不要输出这个块。",
+        "[/INLINE_REF_PROTOCOL]",
+    ])
 
 
 def _format_compaction_bootstrap(bootstrap: dict[str, Any] | None) -> str:
@@ -800,6 +1051,13 @@ async def chat_endpoint(
                 "error": "AI 助手次数已用尽，请开通会员或兑换订阅后继续使用",
                 "data": {"feature": access.model_dump(by_alias=True)},
             },
+        )
+
+    active_run = await chat_run_registry.get_session_run(req.session_id)
+    if active_run and active_run.user_id == user.id:
+        return JSONResponse(
+            status_code=409,
+            content={"success": False, "error": "当前会话仍在执行中，请先停止或等待完成"},
         )
 
     access = await asyncio.to_thread(
@@ -898,11 +1156,12 @@ async def chat_endpoint(
     # Create StreamResult to collect full assistant text
     stream_result = StreamResult()
     assistant_message_id: str | None = None
+    last_completed_blocks: list[dict[str, Any]] | None = None
     last_persisted_snapshot = ""
     last_persist_at = 0.0
 
     async def _sync_assistant_progress(*, force: bool = False, stream_state: str = "streaming") -> None:
-        nonlocal assistant_message_id, last_persisted_snapshot, last_persist_at
+        nonlocal assistant_message_id, last_completed_blocks, last_persisted_snapshot, last_persist_at
 
         blocks = _materialize_stream_blocks(stream_result)
         if not blocks and not assistant_message_id and stream_state == "streaming":
@@ -918,14 +1177,17 @@ async def chat_endpoint(
         ):
             return
 
-        assistant_message_id = await _persist_streaming_assistant_message(
+        assistant_message_id, finalized_blocks = await _persist_streaming_assistant_message(
             session_id=req.session_id,
             message_id=assistant_message_id,
             stream_result=stream_result,
             stream_state=stream_state,
             run_id=run_id,
             thread_version=int(session.get("thread_version", 1) or 1),
+            request_query_text=query_text,
         )
+        if finalized_blocks is not None:
+            last_completed_blocks = finalized_blocks
         last_persisted_snapshot = snapshot
         last_persist_at = now
 
@@ -954,11 +1216,22 @@ async def chat_endpoint(
             # After streaming completes, persist assistant message using ContentBlocks
             if stream_result.content_blocks:
                 await _sync_assistant_progress(force=True, stream_state="completed")
+                if last_completed_blocks:
+                    _enqueue_stream_chunk(sse_event({
+                        "type": "message_finalized",
+                        "content": last_completed_blocks,
+                    }))
             await asyncio.to_thread(
                 set_session_execution_status,
                 req.session_id,
                 execution_status="completed",
                 run_id=run_id,
+            )
+            _launch_post_run_ref_enrichment(
+                session_id=req.session_id,
+                message_id=assistant_message_id,
+                blocks=list(last_completed_blocks or stream_result.content_blocks),
+                request_query_text=query_text,
             )
             await asyncio.to_thread(
                 clear_compaction_bootstrap,
@@ -988,9 +1261,22 @@ async def chat_endpoint(
                 raw_content_blocks=raw_content_blocks,
                 assistant_blocks=list(stream_result.content_blocks),
             )
-        except Exception:
+        except Exception as exc:
             import traceback
             traceback.print_exc()
+            invalid_history_repaired = False
+            error_message = "Agent stream failed. Check server logs."
+            if _is_invalid_chat_history_error(exc):
+                next_thread_version = await asyncio.to_thread(
+                    reset_session_runtime_checkpoint,
+                    req.session_id,
+                )
+                invalid_history_repaired = next_thread_version is not None
+                error_message = (
+                    "检测到会话运行时历史损坏，已自动重置当前会话线程。请重新发送上一条消息。"
+                    if invalid_history_repaired
+                    else "检测到会话运行时历史损坏，请刷新后重试。"
+                )
             await _sync_assistant_progress(force=True, stream_state="error")
             await asyncio.to_thread(
                 clear_compaction_bootstrap,
@@ -1002,9 +1288,9 @@ async def chat_endpoint(
                 req.session_id,
                 execution_status="error",
                 run_id=run_id,
-                error_message="Agent stream failed. Check server logs.",
+                error_message=error_message,
             )
-            _enqueue_stream_chunk(sse_event({"type": "error", "message": "Agent stream failed. Check server logs."}))
+            _enqueue_stream_chunk(sse_event({"type": "error", "message": error_message}))
         finally:
             set_query_context(thread_id, None)
             clear_turn_context(thread_id)
@@ -1137,6 +1423,47 @@ async def search_session_endpoint(
         "limit": req.limit,
         "has_more": req.offset + req.limit < total,
     }
+
+
+@router.post("/resolve_search_plan_ref")
+async def resolve_search_plan_ref_endpoint(
+    req: ResolveSearchPlanRefRequest,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+):
+    try:
+        payload = await asyncio.to_thread(
+            materialize_search_plan_ref,
+            user_id=user.id,
+            session_id=req.session_id,
+            current_session_id=req.current_session_id,
+            plan=req.model_dump(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return {"data": payload}
+
+
+@router.get("/artifacts/{artifact_id}")
+async def get_chat_artifact_endpoint(
+    artifact_id: str,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+):
+    artifact = await asyncio.to_thread(get_artifact, artifact_id)
+    if not artifact:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "结果不存在"},
+        )
+
+    session = await asyncio.to_thread(get_session, artifact["session_id"])
+    if not session or session.get("user_id") != user.id:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "结果不存在"},
+        )
+
+    return {"success": True, "data": artifact}
 
 
 # ── Single image detail endpoint ──
@@ -1807,7 +2134,7 @@ async def websocket_chat(websocket: WebSocket):
                     ):
                         return
 
-                    assistant_message_id = await _persist_streaming_assistant_message(
+                    assistant_message_id, _ = await _persist_streaming_assistant_message(
                         session_id=session_id,
                         message_id=assistant_message_id,
                         stream_result=stream_result,

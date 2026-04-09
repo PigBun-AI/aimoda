@@ -1,7 +1,8 @@
 // Chat API client — SSE streaming + session CRUD
 
 import { ApiError, handleUnauthorizedSession } from '@/lib/api'
-import type { ChatSession, ChatSessionPreferences, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
+import type { ChatArtifact, ChatSession, ChatSessionPreferences, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
+import type { SearchPlanMessageRef } from './message-refs'
 
 const authTokenStorageKey = 'fashion-report-access-token'
 
@@ -181,6 +182,56 @@ export async function fetchSearchSessionById(
   return resp.json()
 }
 
+export async function getChatArtifact(artifactId: string): Promise<ChatArtifact> {
+  const resp = await fetch(`/api/chat/artifacts/${artifactId}`, {
+    headers: authHeaders(),
+  })
+  if (!resp.ok) {
+    handle401(resp)
+    throw new Error(`HTTP ${resp.status}`)
+  }
+  const payload = await resp.json() as { data?: ChatArtifact }
+  if (!payload.data) {
+    throw new Error('Artifact payload missing')
+  }
+  return payload.data
+}
+
+export async function resolveSearchPlanRef(
+  target: SearchPlanMessageRef,
+  currentSessionId?: string | null,
+): Promise<{
+  search_request_id: string
+  total: number
+  label?: string
+  filters_applied?: string[]
+}> {
+  const resp = await fetch('/api/chat/resolve_search_plan_ref', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      ...target,
+      current_session_id: currentSessionId ?? null,
+    }),
+  })
+  if (!resp.ok) {
+    handle401(resp)
+    throw new Error(`HTTP ${resp.status}`)
+  }
+  const payload = await resp.json() as {
+    data?: {
+      search_request_id: string
+      total: number
+      label?: string
+      filters_applied?: string[]
+    }
+  }
+  if (!payload.data?.search_request_id) {
+    throw new Error('Search plan resolve payload missing')
+  }
+  return payload.data
+}
+
 // ── Session CRUD ──
 
 export async function listSessions(): Promise<ChatSession[]> {
@@ -231,7 +282,12 @@ export async function deleteSessionApi(sessionId: string): Promise<void> {
 /**
  * Fetch messages for a given session
  */
-export async function getSessionMessages(sessionId: string): Promise<Array<{ id: string; role: string; content: ContentBlock[] | string }>> {
+export async function getSessionMessages(sessionId: string): Promise<Array<{
+  id: string
+  role: string
+  content: ContentBlock[] | string
+  metadata?: Record<string, unknown>
+}>> {
   const resp = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
     headers: authHeaders(),
   })

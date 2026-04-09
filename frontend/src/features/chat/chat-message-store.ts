@@ -139,6 +139,7 @@ export function replaceAssistantMessage(
   sessionId: string,
   assistantMessageId: string,
   content: ChatMessage['content'],
+  metadata?: ChatMessage['metadata'],
 ) {
   updateSessionState(sessionId, current => ({
     ...current,
@@ -146,7 +147,7 @@ export function replaceAssistantMessage(
     localRevision: current.localRevision + 1,
     messages: current.messages.map(message => (
       message.id === assistantMessageId
-        ? { ...message, content }
+        ? { ...message, content, ...(metadata ? { metadata } : {}) }
         : message
     )),
   }))

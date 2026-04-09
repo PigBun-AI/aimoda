@@ -661,8 +661,10 @@ def search_style(
         style_retrieval_query = str(retrieval_plan.get("retrieval_query_en", "")).strip()
         style_rich_text = str(payload.get("rich_text", "")).strip() or str(retrieval_plan.get("style_rich_text", "")).strip()
         style_name = str(primary_style.get("style_name", "")).strip()
+        match_confidence = str(payload.get("match_confidence", "") or "").strip().lower()
+        should_auto_ground = match_confidence != "candidate"
 
-        if style_retrieval_query or style_rich_text:
+        if should_auto_ground and (style_retrieval_query or style_rich_text):
             remember_session_style(
                 thread_id,
                 style_retrieval_query=style_retrieval_query,
@@ -681,12 +683,13 @@ def search_style(
                 ),
             )
 
-        update_session_semantics(
-            thread_id=thread_id,
-            explicit_style_name=style_name or None,
-            style_retrieval_query=style_retrieval_query or None,
-            style_rich_text=style_rich_text or None,
-        )
+        if should_auto_ground:
+            update_session_semantics(
+                thread_id=thread_id,
+                explicit_style_name=style_name or None,
+                style_retrieval_query=style_retrieval_query or None,
+                style_rich_text=style_rich_text or None,
+            )
         _persist_runtime_semantics(config=config, thread_id=thread_id)
     elif payload.get("status") == "not_found":
         try:
@@ -971,7 +974,9 @@ def add_filter(
     test_filters = session["filters"] + [entry]
     test_session = dict(session)
     test_session["filters"] = test_filters
-    count = count_session(client, test_session, cancel_check=cancel_check)
+    count = count_session(client, test_session, cancel_check=cancel_check, exact=False)
+    if count <= 0:
+        count = count_session(client, test_session, cancel_check=cancel_check, exact=True)
 
     if count > 0:
         clear_invalid_filter_attempt(
@@ -1043,7 +1048,7 @@ def remove_filter(
     session["filters"] = new_filters
     set_session(config, session)
     _persist_agent_runtime_state(config=config, thread_id=get_thread_id(config), session=session)
-    count = count_session(client, session, cancel_check=cancel_check)
+    count = count_session(client, session, cancel_check=cancel_check, exact=False)
 
     return json.dumps({
         "action": "filter_removed",
@@ -1159,6 +1164,7 @@ def show_collection(
         "action": "show_collection",
         "search_request_id": search_request_id,
         "total": count,
+        "query": str(session.get("query", "") or ""),
         "filters_applied": filter_summary,
         "message": f"Showing {count} matching images in paginated results. Filters applied: {len(filter_summary)}.",
         "sample_images": sample_images,

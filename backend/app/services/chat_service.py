@@ -779,6 +779,36 @@ def touch_session(session_id: str):
         conn.commit()
 
 
+def reset_session_runtime_checkpoint(session_id: str) -> int | None:
+    """Bump thread_version and clear volatile agent runtime after checkpoint corruption.
+
+    This keeps persisted messages/session metadata intact while forcing LangGraph
+    to resume on a fresh checkpoint thread.
+    """
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            "SELECT model_config FROM chat_sessions WHERE id = %s",
+            (_uuid(session_id),),
+        ).fetchone()
+        if not row:
+            return None
+
+        next_config = _reset_runtime_after_preference_change(
+            dict(row[0]) if row[0] else {}
+        )
+        compaction = _session_compaction_state(next_config)
+        conn.execute(
+            """
+            UPDATE chat_sessions
+            SET model_config = %s, updated_at = NOW()
+            WHERE id = %s
+            """,
+            (psycopg.types.json.Json(next_config), _uuid(session_id)),
+        )
+        conn.commit()
+        return int(compaction.get("thread_version", 1) or 1)
+
+
 def set_session_execution_status(
     session_id: str,
     *,

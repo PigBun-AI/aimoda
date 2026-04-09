@@ -1,4 +1,6 @@
 // Chat feature type definitions
+export type { MessageAnnotation, MessageRefTarget } from './message-refs'
+import type { MessageAnnotation } from './message-refs'
 
 export interface ChatSession {
   id: string
@@ -58,7 +60,7 @@ export type DocumentSource = DocumentSourceFile | DocumentSourceUrl
 
 // ContentBlock — Claude Code style inline blocks
 export type ContentBlock =
-  | { type: 'text'; text: string }
+  | { type: 'text'; text: string; annotations?: MessageAnnotation[] }
   | { type: 'reasoning'; text: string }
   | { type: 'image'; source: ImageSource; mime_type?: string; file_name?: string; alt_text?: string }
   | { type: 'document'; source: DocumentSource; mime_type?: string; file_name?: string; title?: string }
@@ -72,7 +74,25 @@ export interface SearchResultData {
   filters_applied: string[]
   message: string
   search_request_id: string
+  query?: string
   sample_images?: ImageResult[]
+}
+
+export interface BundleResultGroup {
+  group_id: string
+  label: string
+  search_request_id: string
+  query?: string
+  filters_applied?: string[]
+  total?: number
+}
+
+export interface ChatArtifact {
+  id: string
+  artifact_type: string
+  session_id: string
+  metadata: Record<string, unknown>
+  content?: string | null
 }
 
 export interface FashionVisionAnalysis {
@@ -129,6 +149,9 @@ export interface StyleKnowledgeResultData {
   query: string
   message?: string
   search_stage?: string
+  match_confidence?: 'confirmed' | 'candidate' | 'fallback' | string
+  requires_agent_validation?: boolean
+  agent_hint?: string
   rich_text?: string
   rich_text_summary?: string
   primary_style?: StyleKnowledgePrimaryStyle
@@ -144,6 +167,7 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: ContentBlock[]  // replaces string + steps approach
+  metadata?: Record<string, unknown>
 }
 
 // SSE event types — upgraded to two-layer block streaming format
@@ -155,6 +179,7 @@ export type SSEEvent =
   | { type: 'content_block_delta'; index: number; delta: string | Record<string, unknown> }
   | { type: 'content_block_stop'; index: number }
   | { type: 'message_stop'; stop_reason: string }
+  | { type: 'message_finalized'; content: ContentBlock[] }
   | { type: 'error'; message: string }
 
 /** @deprecated use ContentBlock instead */

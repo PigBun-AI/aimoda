@@ -21,7 +21,7 @@ class ActiveChatRun:
 
 
 class ChatRunRegistry:
-    """Track active chat runs so explicit stop requests can cancel them safely."""
+    """Track active chat runs and stop them cooperatively at safe boundaries."""
 
     def __init__(self) -> None:
         self._by_session: dict[str, ActiveChatRun] = {}
@@ -40,7 +40,6 @@ class ChatRunRegistry:
             previous = self._by_session.get(session_id)
             if previous and previous.task is not task and not previous.task.done():
                 previous.stop_requested = True
-                previous.task.cancel()
                 self._by_run.pop(previous.run_id, None)
 
             active = ActiveChatRun(
@@ -73,7 +72,6 @@ class ChatRunRegistry:
         if task.done():
             return False
 
-        task.cancel()
         return True
 
     async def get_session_run(self, session_id: str) -> ActiveChatRun | None:

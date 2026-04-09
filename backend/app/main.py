@@ -59,7 +59,7 @@ def _init_pg_chat_schema():
                 ADD CONSTRAINT artifacts_artifact_type_check
                 CHECK (artifact_type IN (
                     'image', 'report', 'table', 'code', 'color_analysis',
-                    'trend_chart', 'collection_result', 'vision_analysis', 'other'
+                    'trend_chart', 'collection_result', 'bundle_result', 'vision_analysis', 'other'
                 ))
             """)
             conn.commit()
@@ -78,7 +78,7 @@ def _init_pg_chat_schema():
                     ADD CONSTRAINT artifacts_artifact_type_check
                     CHECK (artifact_type IN (
                         'image', 'report', 'table', 'code', 'color_analysis',
-                        'trend_chart', 'collection_result', 'vision_analysis', 'other'
+                        'trend_chart', 'collection_result', 'bundle_result', 'vision_analysis', 'other'
                     ))
                 """)
                 conn.commit()

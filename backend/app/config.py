@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     LLM_TEMPERATURE: float = 0.1
     LLM_MAX_TOKENS: int = 32768
+    LLM_THINKING_ENABLED: bool = False
     AGENT_RUNTIME_HARNESS_ENABLED: bool = True
     AGENT_RUNTIME_HARNESS_MAX_SAME_ERROR_RETRIES: int = 1
     FALLBACK_LLM_ENABLED: bool = True
@@ -41,6 +42,7 @@ class Settings(BaseSettings):
     FALLBACK_LLM_MODEL: str = "MiniMax-M2.7-highspeed"
     FALLBACK_LLM_API_KEY: str = ""
     FALLBACK_LLM_BASE_URL: str = "https://api.minimaxi.com/anthropic"
+    FALLBACK_LLM_THINKING_ENABLED: bool = False
 
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -48,6 +50,7 @@ class Settings(BaseSettings):
     VLM_TEMPERATURE: float = 0.1
     VLM_MAX_TOKENS: int = 1200
     VLM_TIMEOUT_SECONDS: float = 45.0
+    REF_ENRICHMENT_TIMEOUT_SECONDS: float = 300.0
 
     EMBEDDING_URL: str = "http://183.62.232.22:18730"
     EMBEDDING_MODEL: str = "Marqo/marqo-fashionSigLIP"

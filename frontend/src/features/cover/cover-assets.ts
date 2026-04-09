@@ -25,11 +25,12 @@ function buildRemoteAssetUrl(filename: string): string {
 }
 
 function buildLocalOriginalUrl(filename: string): string {
-  return `/cover/${filename}`
+  return `/cover/${encodeFilename(filename)}`
 }
 
 function buildLocalOptimizedUrl(filename: string): string {
-  return `/cover/optimized/${filename.replace(/\.[^.]+$/, '.webp')}`
+  const optimizedFilename = filename.replace(/\.[^.]+$/, '.webp')
+  return `/cover/optimized/${encodeFilename(optimizedFilename)}`
 }
 
 function buildWebpUrl(filename: string, width: number): string {

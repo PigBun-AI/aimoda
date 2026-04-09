@@ -112,12 +112,12 @@ def build_session_filter(session):
     return qdrant_filter
 
 
-def count_session(client, session, *, cancel_check: CancelCheck = None) -> int:
+def count_session(client, session, *, cancel_check: CancelCheck = None, exact: bool = True) -> int:
     """Count matching images using Qdrant count() — fast, no payload transfer."""
     collection = get_collection()
     qdrant_filter = build_session_filter(session)
     _call_cancel_check(cancel_check)
-    result = client.count(collection_name=collection, count_filter=qdrant_filter, exact=True)
+    result = client.count(collection_name=collection, count_filter=qdrant_filter, exact=exact)
     _call_cancel_check(cancel_check)
     return result.count
 

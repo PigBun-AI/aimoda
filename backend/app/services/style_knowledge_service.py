@@ -190,6 +190,40 @@ def build_style_retrieval_plan(style: dict[str, Any], *, user_query: str) -> dic
     }
 
 
+def build_fallback_style_retrieval_plan(user_query: str) -> dict[str, Any]:
+    normalized_query = " ".join(str(user_query or "").strip().split())
+    semantic_query = normalized_query
+    if semantic_query:
+        semantic_query = (
+            f"{semantic_query}, fashion editorial, silhouette, fabric, palette, styling details"
+        )
+
+    return {
+        "retrieval_query_en": semantic_query,
+        "style_rich_text": (
+            "Use the user's style phrase as a soft aesthetic anchor. Expand it into visual cues such as silhouette, "
+            "fabric, palette, proportion, and styling details instead of treating the phrase as a hard label."
+        ),
+        "semantic_boost_terms": [normalized_query] if normalized_query else [],
+        "suggested_filters": {},
+        "soft_constraints": {
+            "palette": [],
+            "details": [],
+            "reference_brands": [],
+        },
+        "agent_guidance": {
+            "recommended_next_step": "start_collection",
+            "recommended_strategy": (
+                "No exact style knowledge matched. Treat the user's phrase as an inspiration anchor, expand it into "
+                "visual semantics, and retrieve broadly before adding only high-confidence concrete filters."
+            ),
+            "avoid_as_hard_filters": ["style_name", "palette", "reference_brands"],
+            "category_required_filter_dimensions": ["color", "fabric", "pattern", "silhouette", "collar", "sleeve_length"],
+            "query_context": normalized_query,
+        },
+    }
+
+
 def _point_to_slim(point: Any, *, match_type: str, score: float | None = None) -> dict[str, Any]:
     payload = getattr(point, "payload", {}) or {}
     result = {
@@ -245,11 +279,19 @@ def _search_semantic(query: str, limit: int) -> list[Any]:
 
 def _build_search_response(*, query: str, search_stage: str, match_type: str, primary: Any, alternatives: list[Any]) -> dict[str, Any]:
     primary_payload = getattr(primary, "payload", {}) or {}
+    is_candidate = search_stage == "semantic"
     return {
         "status": "ok",
         "query": query,
         "search_stage": search_stage,
-        "message": f'Found {1 + len(alternatives)} {search_stage} style match(es) for "{query}".',
+        "match_confidence": "candidate" if is_candidate else "confirmed",
+        "requires_agent_validation": is_candidate,
+        "message": (
+            f'Found {1 + len(alternatives)} {search_stage} style match(es) for "{query}". '
+            "This style-library result may be inaccurate and should be treated as a reference anchor."
+            if is_candidate
+            else f'Found {1 + len(alternatives)} {search_stage} style match(es) for "{query}".'
+        ),
         "primary_style": _point_to_slim(primary, match_type=match_type, score=getattr(primary, "score", None) if match_type == "semantic" else None),
         "alternatives": [
             _point_to_slim(point, match_type=match_type, score=getattr(point, "score", None) if match_type == "semantic" else None)
@@ -260,6 +302,12 @@ def _build_search_response(*, query: str, search_stage: str, match_type: str, pr
         "style_features": _style_features(primary_payload),
         "retrieval_plan": build_style_retrieval_plan(primary_payload, user_query=query),
         "fallback_suggestion": None,
+        "agent_hint": (
+            "The returned style is only a nearby semantic reference, not a confirmed label. "
+            "You must judge whether it truly matches the user's intent before using it as retrieval grounding."
+            if is_candidate
+            else "This style match is stable enough to use as retrieval grounding, but still verify against the user's wording."
+        ),
     }
 
 
@@ -314,8 +362,19 @@ def search_style_knowledge(query: str, *, limit: int = 5) -> dict[str, Any]:
         "status": "not_found",
         "query": normalized_query,
         "search_stage": "not_found",
+        "match_confidence": "fallback",
+        "requires_agent_validation": True,
         "message": f'No style knowledge matched "{normalized_query}".',
         "results": [],
+        "retrieval_plan": build_fallback_style_retrieval_plan(normalized_query),
+        "rich_text": (
+            "Use the user's phrase as a soft aesthetic anchor and expand it into silhouette, palette, fabric, and styling "
+            "details for semantic retrieval."
+        ),
+        "agent_hint": (
+            "The style library has no reliable match. Do not force any returned style label. "
+            "Use the user's own wording plus the fallback semantic template to build retrieval."
+        ),
         "fallback_suggestion": (
             "Try a broader style phrase, or describe garments, palette, silhouette, and fabric directly."
         ),

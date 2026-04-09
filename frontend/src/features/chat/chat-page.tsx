@@ -6,10 +6,12 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ChatInput } from './chat-input'
+import { getChatArtifact, resolveSearchPlanRef } from './chat-api'
 import { ImageDrawer } from './image-drawer'
 import { MessageBubble } from './message-bubble'
 import { ChatPreferencesBar } from './chat-preferences-bar'
 import type { ChatComposerInput, ChatSessionPreferences } from './chat-types'
+import type { MessageRefTarget } from './message-refs'
 import { useChat } from './chat-hooks'
 import { useChatLayoutStore } from './chat-layout-store'
 import { deriveSessionTitleFromBlocks } from './session-title'
@@ -445,6 +447,45 @@ export function ChatPage() {
 
   const hasPendingPreferenceChanges = !areChatPreferencesEqual(draftPreferences, preferenceEditor)
 
+  const handleMessageRefClick = useCallback((target: MessageRefTarget) => {
+    if (target.kind === 'search_request') {
+      void openDrawerFromSearchRequestId(target.search_request_id)
+      return
+    }
+
+    if (target.kind === 'bundle_group') {
+      void getChatArtifact(target.artifact_id)
+        .then((artifact) => {
+          const groups = Array.isArray(artifact.metadata?.groups)
+            ? artifact.metadata.groups as Array<Record<string, unknown>>
+            : []
+          const matched = groups.find(group => String(group.group_id ?? '') === target.group_id)
+          const searchRequestId = typeof matched?.search_request_id === 'string' ? matched.search_request_id : null
+          if (searchRequestId) {
+            return openDrawerFromSearchRequestId(searchRequestId)
+          }
+          return undefined
+        })
+        .catch((error) => {
+          console.error('Failed to resolve bundle group ref', error)
+        })
+      return
+    }
+
+    if (target.kind === 'search_plan') {
+      void resolveSearchPlanRef(target, activeSessionId)
+        .then((payload) => {
+          if (payload.search_request_id) {
+            return openDrawerFromSearchRequestId(payload.search_request_id)
+          }
+          return undefined
+        })
+        .catch((error) => {
+          console.error('Failed to resolve search plan ref', error)
+        })
+    }
+  }, [activeSessionId, openDrawerFromSearchRequestId])
+
   const preferenceActionBar = (
     <Button
       type="button"
@@ -484,7 +525,12 @@ export function ChatPage() {
             ) : (
               <div className="mx-auto w-full max-w-3xl border-t border-border/80 pt-6 sm:pt-8">
                 {messages.map((msg) => (
-                  <MessageBubble key={msg.id} msg={msg} onOpenDrawer={openDrawerFromSearchRequestId} />
+                  <MessageBubble
+                    key={msg.id}
+                    msg={msg}
+                    onOpenDrawer={openDrawerFromSearchRequestId}
+                    onMessageRefClick={handleMessageRefClick}
+                  />
                 ))}
                 {isLoading && <LoadingIndicator />}
                 <div ref={scrollRef} />

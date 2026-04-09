@@ -16,6 +16,8 @@ import {
   useChatMessageStore,
 } from './chat-message-store'
 
+const TERMINAL_REF_ENRICHMENT_STATES = new Set(['completed', 'skipped', 'error', 'timeout'])
+
 function toolResultLooksLikeError(content: string): boolean {
   try {
     const data = JSON.parse(content)
@@ -44,35 +46,74 @@ export function useChat(
   const activeAbortControllerRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(activeSession?.current_run_id ?? null)
   const stopRequestedRef = useRef(false)
+  const postRunHydrationTokenRef = useRef(0)
   const [isStopping, setIsStopping] = useState(false)
 
   useEffect(() => {
     setDrawerOpen(false)
     setDrawerData(null)
+    postRunHydrationTokenRef.current += 1
   }, [sessionId])
 
-  const hydrateSessionMessages = useCallback((targetSessionId: string) => {
+  const hydrateSessionMessages = useCallback(async (targetSessionId: string): Promise<ChatMessage[]> => {
     const { requestId, baseRevision } = requestSessionHydration(targetSessionId)
 
-    getSessionMessages(targetSessionId)
-      .then(msgs => {
-        // Map backend messages to frontend ChatMessage format with ContentBlock[]
-        const mapped: ChatMessage[] = msgs.map(m => ({
-          id: m.id,
-          role: m.role as 'user' | 'assistant',
-          // Backward compatibility: content can be string (old) or ContentBlock[] (new)
-          content: normalizeContentBlocks(
-            Array.isArray(m.content)
-              ? m.content
-              : typeof m.content === 'string' && m.content
-                ? [{ type: 'text' as const, text: m.content }]
-                : [],
-          ),
-        }))
-        applyHydratedMessages(targetSessionId, requestId, baseRevision, mapped)
-      })
-      .catch(err => console.error('Failed to load session messages', err))
+    try {
+      const msgs = await getSessionMessages(targetSessionId)
+      const mapped: ChatMessage[] = msgs.map(m => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: normalizeContentBlocks(
+          Array.isArray(m.content)
+            ? m.content
+            : typeof m.content === 'string' && m.content
+              ? [{ type: 'text' as const, text: m.content }]
+              : [],
+        ),
+        metadata: typeof m.metadata === 'object' && m.metadata !== null
+          ? m.metadata as Record<string, unknown>
+          : undefined,
+      }))
+      applyHydratedMessages(targetSessionId, requestId, baseRevision, mapped)
+      return mapped
+    } catch (err) {
+      console.error('Failed to load session messages', err)
+      throw err
+    }
   }, [])
+
+  const schedulePostRunHydration = useCallback((targetSessionId: string) => {
+    const token = Date.now()
+    postRunHydrationTokenRef.current = token
+
+    const run = async () => {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        if (postRunHydrationTokenRef.current !== token) return
+
+        try {
+          const mapped = await hydrateSessionMessages(targetSessionId)
+          const latestAssistant = [...mapped].reverse().find(message => message.role === 'assistant')
+          const enrichmentStatus = typeof latestAssistant?.metadata?.ref_enrichment_status === 'string'
+            ? latestAssistant.metadata.ref_enrichment_status
+            : null
+          const hasInlineRefs = latestAssistant?.content.some(
+            block => block.type === 'text' && Array.isArray(block.annotations) && block.annotations.some(annotation => annotation?.type === 'message_ref_spans'),
+          )
+
+          if (hasInlineRefs || (enrichmentStatus && TERMINAL_REF_ENRICHMENT_STATES.has(enrichmentStatus))) {
+            break
+          }
+        } catch {
+          // Keep the short poll alive; a later attempt may succeed once the post-run write lands.
+        }
+
+        await loadSessions()
+        await new Promise(resolve => window.setTimeout(resolve, 1200))
+      }
+    }
+
+    void run()
+  }, [hydrateSessionMessages, loadSessions])
 
   // Load historical messages when switching sessions
   useEffect(() => {
@@ -80,7 +121,7 @@ export function useChat(
       return
     }
 
-    hydrateSessionMessages(sessionId)
+    void hydrateSessionMessages(sessionId)
   }, [hydrateSessionMessages, sessionId])
 
   useEffect(() => {
@@ -94,16 +135,16 @@ export function useChat(
     if (!isRemoteRunning) {
       if (wasRemoteRunningRef.current) {
         wasRemoteRunningRef.current = false
-        hydrateSessionMessages(sessionId)
+        void hydrateSessionMessages(sessionId)
       }
       return
     }
 
     wasRemoteRunningRef.current = true
-    hydrateSessionMessages(sessionId)
+    void hydrateSessionMessages(sessionId)
 
     const intervalId = window.setInterval(() => {
-      hydrateSessionMessages(sessionId)
+      void hydrateSessionMessages(sessionId)
     }, 2000)
 
     return () => window.clearInterval(intervalId)
@@ -240,6 +281,15 @@ export function useChat(
         } else if (event.type === 'message_stop') {
           // entire message done — update with accumulated blocks
           commitAssistantBlocks()
+          finishSessionStream(sid)
+          markSessionExecutionStatus(sid, streamFailedMessage ? 'error' : 'completed', streamFailedMessage, activeRunId)
+          schedulePostRunHydration(sid)
+        } else if (event.type === 'message_finalized') {
+          replaceAssistantMessage(
+            sid,
+            assistantMsg.id,
+            normalizeContentBlocks(Array.isArray(event.content) ? event.content : []),
+          )
         } else if (event.type === 'error') {
           streamFailedMessage = event.message
           replaceAssistantMessage(sid, assistantMsg.id, [{ type: 'text', text: `Error: ${event.message}` }])

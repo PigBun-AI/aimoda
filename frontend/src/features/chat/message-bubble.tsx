@@ -8,6 +8,7 @@ import type {
   ChatMessage,
   ContentBlock,
   ImageSource,
+  MessageRefTarget,
   SearchResultData,
   ImageResult,
   FashionVisionResultData,
@@ -129,13 +130,14 @@ function resolveImageSrc(source: ImageSource, thumbnailWidth?: number): string {
 interface MessageBubbleProps {
   msg: ChatMessage
   onOpenDrawer?: (searchRequestId: string) => void
+  onMessageRefClick?: (target: MessageRefTarget) => void
 }
 
 type RenderSegment =
   | { kind: 'block'; block: ContentBlock; key: string }
   | { kind: 'tool_group'; blocks: ContentBlock[]; key: string }
 
-export function MessageBubble({ msg, onOpenDrawer }: MessageBubbleProps) {
+export function MessageBubble({ msg, onOpenDrawer, onMessageRefClick }: MessageBubbleProps) {
   if (msg.role === 'user') {
     return (
       <div className="mb-8 flex justify-end animate-in fade-in slide-in-from-bottom-1 duration-normal">
@@ -156,9 +158,17 @@ export function MessageBubble({ msg, onOpenDrawer }: MessageBubbleProps) {
         {segments.map((segment) => (
           <Fragment key={segment.key}>
             {segment.kind === 'block' ? (
-              <BlockRenderer block={segment.block} onOpenDrawer={onOpenDrawer} />
+              <BlockRenderer
+                block={segment.block}
+                onOpenDrawer={onOpenDrawer}
+                onMessageRefClick={onMessageRefClick}
+              />
             ) : (
-              <ToolTraceGroup blocks={segment.blocks} onOpenDrawer={onOpenDrawer} />
+              <ToolTraceGroup
+                blocks={segment.blocks}
+                onOpenDrawer={onOpenDrawer}
+                onMessageRefClick={onMessageRefClick}
+              />
             )}
           </Fragment>
         ))}
@@ -263,12 +273,14 @@ function getToolTraceStats(blocks: ContentBlock[]) {
 function BlockRenderer({
   block,
   onOpenDrawer,
+  onMessageRefClick,
 }: {
   block: ContentBlock
   onOpenDrawer?: (searchRequestId: string) => void
+  onMessageRefClick?: (target: MessageRefTarget) => void
 }) {
   const { t } = useTranslation('common')
-  if (block.type === 'text') return <TextBlockView block={block} />
+  if (block.type === 'text') return <TextBlockView block={block} onMessageRefClick={onMessageRefClick} />
   if (block.type === 'reasoning') return <ReasoningBlockView block={block} />
   if (block.type === 'image') {
     return (
@@ -321,9 +333,11 @@ function ShowCollectionPendingCard() {
 function ToolTraceGroup({
   blocks,
   onOpenDrawer,
+  onMessageRefClick,
 }: {
   blocks: ContentBlock[]
   onOpenDrawer?: (searchRequestId: string) => void
+  onMessageRefClick?: (target: MessageRefTarget) => void
 }) {
   const { t } = useTranslation('common')
   const stats = useMemo(() => getToolTraceStats(blocks), [blocks])
@@ -369,6 +383,7 @@ function ToolTraceGroup({
                   : block
               }
               onOpenDrawer={onOpenDrawer}
+              onMessageRefClick={onMessageRefClick}
             />
           ))}
         </div>
@@ -377,11 +392,17 @@ function ToolTraceGroup({
   )
 }
 
-function TextBlockView({ block }: { block: { type: 'text'; text: string } }) {
+function TextBlockView({
+  block,
+  onMessageRefClick,
+}: {
+  block: Extract<ContentBlock, { type: 'text' }>
+  onMessageRefClick?: (target: MessageRefTarget) => void
+}) {
   if (!block.text) return null
   return (
     <div className="border border-border/80 bg-background px-4 py-3 sm:px-5 sm:py-4">
-      <ChatMarkdown content={block.text} />
+      <ChatMarkdown content={block.text} annotations={block.annotations} onMessageRefClick={onMessageRefClick} />
     </div>
   )
 }
@@ -565,6 +586,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
   const richTextSummary = data.rich_text_summary || data.rich_text
   const suggestedFilters = Object.entries(retrievalPlan?.suggested_filters ?? {})
   const alternatives = data.alternatives ?? []
+  const isCandidateMatch = data.match_confidence === 'candidate'
   const featureGroups = [
     { label: t('stylePalette'), values: styleFeatures?.palette ?? [] },
     { label: t('styleSilhouette'), values: styleFeatures?.silhouette ?? [] },
@@ -591,6 +613,12 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
 
       {data.message && <div className="type-chat-body text-foreground">{data.message}</div>}
 
+      {data.agent_hint && (
+        <div className="type-chat-body border border-dashed border-border px-3 py-2 text-muted-foreground">
+          {data.agent_hint}
+        </div>
+      )}
+
       {richTextSummary && (
         <div className="type-chat-body whitespace-pre-wrap border border-border/80 bg-muted/[0.12] px-3 py-2 text-foreground/90">
           {richTextSummary}
@@ -605,6 +633,11 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
           {primaryStyle.category && (
             <span className="type-chat-kicker inline-flex items-center border border-border/80 bg-muted/[0.1] px-2.5 py-1 text-foreground">
               {primaryStyle.category}
+            </span>
+          )}
+          {isCandidateMatch && (
+            <span className="type-chat-kicker inline-flex items-center border border-border/80 bg-muted/[0.1] px-2.5 py-1 text-muted-foreground">
+              参考候选
             </span>
           )}
           {primaryStyle.match_type && (

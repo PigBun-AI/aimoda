@@ -25,6 +25,7 @@ def _build_chat_model(
     base_url: str,
     temperature: float,
     max_tokens: int | None,
+    thinking_enabled: bool = False,
 ):
     normalized_provider = (provider or "openai").strip().lower()
     normalized_max_tokens = _normalize_max_tokens(max_tokens)
@@ -36,6 +37,8 @@ def _build_chat_model(
             "anthropic_api_key": api_key,
             "anthropic_api_url": base_url,
         }
+        if not thinking_enabled:
+            kwargs["thinking"] = {"type": "disabled"}
         if normalized_max_tokens is not None:
             kwargs["max_tokens"] = normalized_max_tokens
         return ChatAnthropic(**kwargs)
@@ -62,6 +65,7 @@ def build_llm_with_fallback(*, temperature: float, max_tokens: int | None):
         base_url=settings.LLM_BASE_URL,
         temperature=temperature,
         max_tokens=max_tokens,
+        thinking_enabled=settings.LLM_THINKING_ENABLED,
     )
 
     if not settings.FALLBACK_LLM_ENABLED:
@@ -97,5 +101,6 @@ def build_llm_with_fallback(*, temperature: float, max_tokens: int | None):
         base_url=fallback_base_url,
         temperature=temperature,
         max_tokens=max_tokens,
+        thinking_enabled=settings.FALLBACK_LLM_THINKING_ENABLED,
     )
     return primary.with_fallbacks([fallback])
