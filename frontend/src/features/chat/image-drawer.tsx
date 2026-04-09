@@ -60,6 +60,8 @@ export function ImageDrawer({
   const safeImages = data.images || []
   const displayCount = data.total || safeImages.length
   const thumbnailWidth = isFullscreen ? CHAT_THUMBNAIL_MAX_EDGE.drawerFocus : CHAT_THUMBNAIL_MAX_EDGE.drawer
+  const showLoadingState = data.isLoadingMore && safeImages.length === 0
+  const showEmptyState = !data.isLoadingMore && safeImages.length === 0
 
   useEffect(() => {
     const gridEl = gridRef.current
@@ -218,73 +220,91 @@ export function ImageDrawer({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-        <div
-          ref={gridRef}
-          className={cn(
-            'grid',
-            isFullscreen
-              ? 'gap-y-7 gap-x-4'
-              : 'gap-y-6 gap-x-3 xl:gap-x-4',
-          )}
-          style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
-        >
-          {safeImages.map((img, i) => (
-            <div key={i} className="w-full space-y-2.5">
-              <div
-                onClick={() => handleImageClick(img)}
-                className="group relative w-full cursor-pointer overflow-hidden bg-background"
-                style={{ aspectRatio: '1 / 2', width: '100%' }}
-                title={t('viewImageItem', { brand: img.brand || t('image') })}
-              >
-                <FashionImage image={img} className="w-full h-full" thumbnailWidth={thumbnailWidth} />
-                <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
-                <div className="absolute right-2 top-2 flex flex-col gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                  <button
-                    type="button"
-                    onClick={(event) => handleFavoriteOpen(event, img)}
-                    className="flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-foreground"
-                    title={t('favorite')}
-                    aria-label={t('favorite')}
-                  >
-                    <Heart
-                      size={14}
-                      fill={favoriteMap[img.image_id]?.length ? 'currentColor' : 'none'}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(event) => handleImageDownload(event, img)}
-                    className="flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-foreground"
-                    title={t('download')}
-                    aria-label={t('download')}
-                  >
-                    <Download size={14} />
-                  </button>
+        {showLoadingState ? (
+          <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 text-center">
+            <Loader2 size={18} className="animate-spin text-muted-foreground" />
+            <p className="type-chat-meta text-muted-foreground">{t('loading')}</p>
+          </div>
+        ) : showEmptyState ? (
+          <div className="flex h-full min-h-[280px] items-center justify-center">
+            <div className="flex max-w-sm flex-col items-center gap-3 border border-border/80 px-6 py-7 text-center">
+              <p className="type-chat-label text-foreground/88">{t('drawerEmptyTitle')}</p>
+              <p className="type-chat-meta leading-relaxed text-muted-foreground">
+                {data.emptyState === 'unavailable'
+                  ? t('drawerUnavailableHint')
+                  : t('drawerEmptyHint')}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div
+            ref={gridRef}
+            className={cn(
+              'grid',
+              isFullscreen
+                ? 'gap-y-7 gap-x-4'
+                : 'gap-y-6 gap-x-3 xl:gap-x-4',
+            )}
+            style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+          >
+            {safeImages.map((img, i) => (
+              <div key={i} className="w-full space-y-2.5">
+                <div
+                  onClick={() => handleImageClick(img)}
+                  className="group relative w-full cursor-pointer overflow-hidden bg-background"
+                  style={{ aspectRatio: '1 / 2', width: '100%' }}
+                  title={t('viewImageItem', { brand: img.brand || t('image') })}
+                >
+                  <FashionImage image={img} className="w-full h-full" thumbnailWidth={thumbnailWidth} />
+                  <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
+                  <div className="absolute right-2 top-2 flex flex-col gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={(event) => handleFavoriteOpen(event, img)}
+                      className="flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-foreground"
+                      title={t('favorite')}
+                      aria-label={t('favorite')}
+                    >
+                      <Heart
+                        size={14}
+                        fill={favoriteMap[img.image_id]?.length ? 'currentColor' : 'none'}
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => handleImageDownload(event, img)}
+                      className="flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-foreground"
+                      title={t('download')}
+                      aria-label={t('download')}
+                    >
+                      <Download size={14} />
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-1.5 text-left">
-                <div className="flex min-h-[0.875rem] items-center gap-2">
-                  {img.year != null && (
-                    <div className="type-chat-kicker text-muted-foreground/92">
-                      {String(img.year)}
+                <div className="space-y-1.5 text-left">
+                  <div className="flex min-h-[0.875rem] items-center gap-2">
+                    {img.year != null && (
+                      <div className="type-chat-kicker text-muted-foreground/92">
+                        {String(img.year)}
+                      </div>
+                    )}
+                  </div>
+                  {img.brand && (
+                    <div className="type-chat-body leading-[1.48] text-foreground/92">
+                      {formatBrand(img.brand)}
+                    </div>
+                  )}
+                  {img.quarter && (
+                    <div className="type-chat-meta truncate text-muted-foreground">
+                      {img.quarter}
                     </div>
                   )}
                 </div>
-                {img.brand && (
-                  <div className="type-chat-body leading-[1.48] text-foreground/92">
-                    {formatBrand(img.brand)}
-                  </div>
-                )}
-                {img.quarter && (
-                  <div className="type-chat-meta truncate text-muted-foreground">
-                    {img.quarter}
-                  </div>
-                )}
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {data.hasMore && (
           <div className="mt-8 mb-4 flex flex-col items-center justify-center gap-3">

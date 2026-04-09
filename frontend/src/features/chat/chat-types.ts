@@ -262,6 +262,7 @@ export interface DrawerData {
   hasMore: boolean
   total?: number
   isLoadingMore: boolean
+  emptyState?: 'none' | 'empty' | 'unavailable'
 }
 
 export interface ChatComposerInput {

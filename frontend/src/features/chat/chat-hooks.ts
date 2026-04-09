@@ -356,6 +356,7 @@ export function useChat(
         offset: 0,
         hasMore: true,
         isLoadingMore: true,
+        emptyState: 'none',
       })
       setDrawerOpen(true)
 
@@ -374,9 +375,19 @@ export function useChat(
           hasMore: data.has_more,
           total: data.total,
           isLoadingMore: false,
+          emptyState: (data.images || []).length > 0 ? 'none' : 'empty',
         } : null)
       } catch (e) {
         console.error('load search session error', e)
+        setDrawerData(prev => prev ? {
+          ...prev,
+          images: [],
+          offset: 0,
+          hasMore: false,
+          total: 0,
+          isLoadingMore: false,
+          emptyState: 'unavailable',
+        } : null)
       }
     } else if (hasImages) {
       setDrawerData({
@@ -388,6 +399,7 @@ export function useChat(
         offset: 0,
         hasMore: false,
         isLoadingMore: false,
+        emptyState: step.images!.length > 0 ? 'none' : 'empty',
       })
       setDrawerOpen(true)
     }
@@ -404,6 +416,7 @@ export function useChat(
       offset: 0,
       hasMore: true,
       isLoadingMore: true,
+      emptyState: 'none',
     })
     setDrawerOpen(true)
 
@@ -422,9 +435,19 @@ export function useChat(
         hasMore: data.has_more,
         total: data.total,
         isLoadingMore: false,
+        emptyState: (data.images || []).length > 0 ? 'none' : 'empty',
       } : null)
     } catch (e) {
       console.error('load search session error', e)
+      setDrawerData(prev => prev ? {
+        ...prev,
+        images: [],
+        offset: 0,
+        hasMore: false,
+        total: 0,
+        isLoadingMore: false,
+        emptyState: 'unavailable',
+      } : null)
     }
   }, [defaultTasteProfileId, defaultTasteProfileWeight])
 
@@ -446,9 +469,16 @@ export function useChat(
         offset: data.offset + data.limit,
         hasMore: data.has_more,
         isLoadingMore: false,
+        emptyState: [...prev.images, ...(data.images || [])].length > 0 ? 'none' : 'empty',
       } : null)
     } catch (e) {
       console.error(e)
+      setDrawerData(prev => prev ? {
+        ...prev,
+        hasMore: false,
+        isLoadingMore: false,
+        emptyState: prev.images.length > 0 ? 'none' : 'unavailable',
+      } : null)
     }
   }, [drawerData])
 
@@ -472,6 +502,7 @@ export function useChat(
       tasteProfileWeight: nextWeight,
       hasMore: true,
       isLoadingMore: true,
+      emptyState: 'none',
     } : null)
 
     try {
@@ -491,10 +522,18 @@ export function useChat(
         isLoadingMore: false,
         tasteProfileId,
         tasteProfileWeight: nextWeight,
+        emptyState: (data.images || []).length > 0 ? 'none' : 'empty',
       } : null)
     } catch (error) {
       console.error(error)
-      setDrawerData(prev => prev ? { ...prev, isLoadingMore: false, tasteProfileId, tasteProfileWeight: nextWeight } : null)
+      setDrawerData(prev => prev ? {
+        ...prev,
+        isLoadingMore: false,
+        hasMore: false,
+        tasteProfileId,
+        tasteProfileWeight: nextWeight,
+        emptyState: prev.images.length > 0 ? 'none' : 'unavailable',
+      } : null)
     }
   }, [defaultTasteProfileWeight, drawerData])
 
