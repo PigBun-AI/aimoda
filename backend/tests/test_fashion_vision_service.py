@@ -74,6 +74,7 @@ def test_analyze_fashion_images_normalizes_response(monkeypatch):
 
     assert result["merged_understanding"]["retrieval_query_en"] == "minimal black tailored jacket look"
     assert result["merged_understanding"]["hard_filters"]["category"] == ["jacket"]
+    assert result["merged_understanding"]["hard_filters"]["quarter"] == []
     assert result["images"][0]["visible_garments"] == ["jacket"]
     assert result["model"] == "test-vlm"
 
@@ -92,7 +93,7 @@ def test_fashion_vision_tool_uses_session_images(monkeypatch):
                 "summary_zh": "黑色西装外套",
                 "retrieval_query_en": "black tailored blazer",
                 "style_keywords": ["minimal"],
-                "hard_filters": {"category": ["jacket"], "color": ["black"], "fabric": [], "gender": "", "season": []},
+                "hard_filters": {"category": ["jacket"], "color": ["black"], "fabric": [], "gender": "", "quarter": []},
                 "follow_up_questions_zh": [],
             },
         }
@@ -109,3 +110,4 @@ def test_fashion_vision_tool_uses_session_images(monkeypatch):
     assert payload["artifact_id"] == "artifact-1"
     assert payload["analysis"]["retrieval_query_en"] == "black tailored blazer"
     assert payload["analysis"]["hard_filters"]["category"] == ["jacket"]
+    assert payload["analysis"]["hard_filters"]["quarter"] == []

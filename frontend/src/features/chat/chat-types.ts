@@ -1,4 +1,6 @@
 // Chat feature type definitions
+export type { MessageAnnotation, MessageRefTarget } from './message-refs'
+import type { MessageAnnotation } from './message-refs'
 
 export interface ChatSession {
   id: string
@@ -18,8 +20,17 @@ export interface ChatSession {
   message_count?: number
   thread_version?: number
   active_summary_version?: number
+  preferences?: ChatSessionPreferences
   created_at: string
   updated_at: string
+}
+
+export interface ChatSessionPreferences {
+  gender?: 'female' | 'male' | null
+  quarter?: '早春' | '春夏' | '早秋' | '秋冬' | null
+  year?: number | null
+  taste_profile_id?: string | null
+  taste_profile_weight?: number | null
 }
 
 export interface ImageSourceBase64 {
@@ -49,7 +60,7 @@ export type DocumentSource = DocumentSourceFile | DocumentSourceUrl
 
 // ContentBlock — Claude Code style inline blocks
 export type ContentBlock =
-  | { type: 'text'; text: string }
+  | { type: 'text'; text: string; annotations?: MessageAnnotation[] }
   | { type: 'reasoning'; text: string }
   | { type: 'image'; source: ImageSource; mime_type?: string; file_name?: string; alt_text?: string }
   | { type: 'document'; source: DocumentSource; mime_type?: string; file_name?: string; title?: string }
@@ -63,7 +74,25 @@ export interface SearchResultData {
   filters_applied: string[]
   message: string
   search_request_id: string
+  query?: string
   sample_images?: ImageResult[]
+}
+
+export interface BundleResultGroup {
+  group_id: string
+  label: string
+  search_request_id: string
+  query?: string
+  filters_applied?: string[]
+  total?: number
+}
+
+export interface ChatArtifact {
+  id: string
+  artifact_type: string
+  session_id: string
+  metadata: Record<string, unknown>
+  content?: string | null
 }
 
 export interface FashionVisionAnalysis {
@@ -75,7 +104,7 @@ export interface FashionVisionAnalysis {
     color: string[]
     fabric: string[]
     gender: string
-    season: string[]
+    quarter: string[]
   }
   follow_up_questions_zh: string[]
 }
@@ -120,6 +149,9 @@ export interface StyleKnowledgeResultData {
   query: string
   message?: string
   search_stage?: string
+  match_confidence?: 'confirmed' | 'candidate' | 'fallback' | string
+  requires_agent_validation?: boolean
+  agent_hint?: string
   rich_text?: string
   rich_text_summary?: string
   primary_style?: StyleKnowledgePrimaryStyle
@@ -135,6 +167,7 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: ContentBlock[]  // replaces string + steps approach
+  metadata?: Record<string, unknown>
 }
 
 // SSE event types — upgraded to two-layer block streaming format
@@ -146,6 +179,7 @@ export type SSEEvent =
   | { type: 'content_block_delta'; index: number; delta: string | Record<string, unknown> }
   | { type: 'content_block_stop'; index: number }
   | { type: 'message_stop'; stop_reason: string }
+  | { type: 'message_finalized'; content: ContentBlock[] }
   | { type: 'error'; message: string }
 
 /** @deprecated use ContentBlock instead */
@@ -206,6 +240,8 @@ export interface ImageResult {
   colors: string[]
   style: string
   object_area?: ObjectArea | null
+  is_favorited?: boolean
+  favorite_collection_ids?: string[]
 }
 
 export interface SearchSessionState {
@@ -220,10 +256,13 @@ export interface DrawerData {
   stepLabel: string
   images: ImageResult[]
   searchRequestId: string | null
+  tasteProfileId?: string | null
+  tasteProfileWeight?: number | null
   offset: number
   hasMore: boolean
   total?: number
   isLoadingMore: boolean
+  emptyState?: 'none' | 'empty' | 'unavailable'
 }
 
 export interface ChatComposerInput {

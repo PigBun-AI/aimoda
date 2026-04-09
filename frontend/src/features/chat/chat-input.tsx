@@ -15,6 +15,7 @@ interface ChatInputProps {
   isStopping?: boolean
   infoMessage?: string
   statusBar?: ReactNode
+  actionBar?: ReactNode
 }
 
 interface PendingImage {
@@ -70,6 +71,7 @@ export function ChatInput({
   isStopping = false,
   infoMessage,
   statusBar,
+  actionBar,
 }: ChatInputProps) {
   const { t } = useTranslation("common")
   const [inputValue, setInputValue] = useState("")
@@ -225,11 +227,6 @@ export function ChatInput({
                       {infoMessage}
                     </p>
                   )}
-                  {!infoMessage && (
-                    <p className="type-chat-meta text-muted-foreground/72">
-                      {dragHint}
-                    </p>
-                  )}
                 </div>
               </div>
             )}
@@ -281,31 +278,34 @@ export function ChatInput({
                   </span>
                 </div>
 
-                {isRunning ? (
-                  <Button
-                    type="button"
-                    className={[
-                      "flex h-11 min-w-[92px] shrink-0 cursor-pointer items-center justify-center gap-2 rounded-none border border-foreground bg-background px-4 text-foreground",
-                      "hover:bg-accent disabled:cursor-not-allowed disabled:opacity-55",
-                    ].join(" ")}
-                    disabled={isStopping}
-                    onClick={onStop}
-                  >
-                    <Square size={14} fill="currentColor" />
-                    <span className="type-chat-action">{isStopping ? t("stoppingAgent") : t("stopAgent")}</span>
-                  </Button>
-                ) : (
-                  <Button
-                    className={[
-                      "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-none p-0",
-                      canSend ? "bg-foreground text-background hover:bg-foreground/88" : "bg-border text-muted-foreground",
-                    ].join(" ")}
-                    disabled={!canSend}
-                    onClick={handleSend}
-                  >
-                    <ArrowUp size={16} />
-                  </Button>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  {actionBar}
+                  {isRunning ? (
+                    <Button
+                      type="button"
+                      className={[
+                        "flex h-11 min-w-[92px] shrink-0 cursor-pointer items-center justify-center gap-2 rounded-none border border-foreground bg-background px-4 text-foreground",
+                        "hover:bg-accent disabled:cursor-not-allowed disabled:opacity-55",
+                      ].join(" ")}
+                      disabled={isStopping}
+                      onClick={onStop}
+                    >
+                      <Square size={14} fill="currentColor" />
+                      <span className="type-chat-action">{isStopping ? t("stoppingAgent") : t("stopAgent")}</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      className={[
+                        "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-none p-0",
+                        canSend ? "bg-foreground text-background hover:bg-foreground/88" : "bg-border text-muted-foreground",
+                      ].join(" ")}
+                      disabled={!canSend}
+                      onClick={handleSend}
+                    >
+                      <ArrowUp size={16} />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

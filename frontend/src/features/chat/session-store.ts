@@ -5,7 +5,7 @@
 
 import { useSyncExternalStore } from 'react'
 import i18n from '@/i18n'
-import type { ChatSession } from './chat-types'
+import type { ChatSession, ChatSessionPreferences } from './chat-types'
 import { removeSessionMessages, resetChatMessageStore } from './chat-message-store'
 import {
   listSessions as apiListSessions,
@@ -40,6 +40,11 @@ const initialStore: SessionStore = {
 }
 
 let store: SessionStore = initialStore
+const sessionPreferenceMutationSeq = new Map<string, number>()
+const pendingSessionPreferenceMutations = new Map<
+  string,
+  { seq: number; preferences: ChatSessionPreferences; updatedAt: string }
+>()
 
 const listeners = new Set<() => void>()
 
@@ -137,6 +142,31 @@ function mergeNotifications(current: SessionNotification[], incoming: SessionNot
   return nextItems.length > 0 ? [...nextItems, ...current] : current
 }
 
+function normalizePreferences(preferences: ChatSessionPreferences | null | undefined): ChatSessionPreferences {
+  return {
+    gender: preferences?.gender ?? null,
+    quarter: preferences?.quarter ?? null,
+    year: preferences?.year ?? null,
+    taste_profile_id: preferences?.taste_profile_id ?? null,
+    taste_profile_weight: preferences?.taste_profile_weight ?? 0.24,
+  }
+}
+
+function arePreferencesEqual(
+  left: ChatSessionPreferences | null | undefined,
+  right: ChatSessionPreferences | null | undefined,
+): boolean {
+  const normalizedLeft = normalizePreferences(left)
+  const normalizedRight = normalizePreferences(right)
+  return (
+    normalizedLeft.gender === normalizedRight.gender
+    && normalizedLeft.quarter === normalizedRight.quarter
+    && normalizedLeft.year === normalizedRight.year
+    && normalizedLeft.taste_profile_id === normalizedRight.taste_profile_id
+    && normalizedLeft.taste_profile_weight === normalizedRight.taste_profile_weight
+  )
+}
+
 function reconcileFetchedSession(previous: ChatSession | undefined, incoming: ChatSession): ChatSession {
   if (!previous) return incoming
 
@@ -147,6 +177,7 @@ function reconcileFetchedSession(previous: ChatSession | undefined, incoming: Ch
   const previousRunId = previous.current_run_id ?? null
   const incomingRunId = incoming.current_run_id ?? null
   const incomingLastRunId = incoming.last_run_id ?? null
+  const previousResolvedRunId = previous.current_run_id ?? previous.last_run_id ?? null
 
   let next = incoming
 
@@ -167,10 +198,38 @@ function reconcileFetchedSession(previous: ChatSession | undefined, incoming: Ch
     }
   }
 
+  const pendingPreferenceMutation = pendingSessionPreferenceMutations.get(incoming.id)
+  const shouldPreserveOptimisticPreferences = (
+    Boolean(pendingPreferenceMutation)
+    && !arePreferencesEqual(
+      previous.preferences,
+      incoming.preferences,
+    )
+  ) || (
+    previousUpdatedAt > incomingUpdatedAt
+    && !arePreferencesEqual(previous.preferences, incoming.preferences)
+  )
+
+  if (shouldPreserveOptimisticPreferences) {
+    next = {
+      ...next,
+      preferences: normalizePreferences(
+        pendingPreferenceMutation?.preferences ?? previous.preferences,
+      ),
+      updated_at: pendingPreferenceMutation?.updatedAt ?? previous.updated_at,
+    }
+  }
+
   const shouldPreserveStoppingState =
     previous.execution_status === 'stopping' &&
     next.execution_status !== 'completed' &&
     next.execution_status !== 'error'
+
+  const shouldPreserveOptimisticCompletion =
+    previous.execution_status === 'completed' &&
+    (next.execution_status === 'running' || next.execution_status === 'stopping') &&
+    Boolean(previousResolvedRunId) &&
+    (incomingRunId === previousResolvedRunId || incomingLastRunId === previousResolvedRunId)
 
   const shouldPreserveOptimisticRun =
     previous.execution_status === 'running' &&
@@ -179,7 +238,7 @@ function reconcileFetchedSession(previous: ChatSession | undefined, incoming: Ch
     incomingRunId !== previousRunId &&
     incomingLastRunId !== previousRunId
 
-  if (shouldPreserveStoppingState || shouldPreserveOptimisticRun) {
+  if (shouldPreserveStoppingState || shouldPreserveOptimisticCompletion || shouldPreserveOptimisticRun) {
     return {
       ...next,
       execution_status: previous.execution_status,
@@ -242,13 +301,15 @@ export function setActiveSessionId(id: string | null) {
 
 export function resetSessionStore() {
   store = { ...initialStore }
+  sessionPreferenceMutationSeq.clear()
+  pendingSessionPreferenceMutations.clear()
   resetChatMessageStore()
   emit()
 }
 
-export async function createNewSession(title?: string): Promise<ChatSession | null> {
+export async function createNewSession(title?: string, preferences?: ChatSessionPreferences | null): Promise<ChatSession | null> {
   try {
-    const session = await apiCreateSession(title ?? '新对话')
+    const session = await apiCreateSession(title ?? '新对话', preferences)
     const nextSessions = sortSessions([session, ...store.sessions])
     store = {
       ...store,
@@ -289,6 +350,55 @@ export async function toggleSessionPinned(id: string, pinned: boolean): Promise<
     return updated
   } catch (e) {
     console.error('Failed to update session pinned state', e)
+    return null
+  }
+}
+
+export async function updateSessionChatPreferences(
+  id: string,
+  preferences: ChatSessionPreferences,
+): Promise<ChatSession | null> {
+  const now = new Date().toISOString()
+  const normalizedPreferences = normalizePreferences(preferences)
+  const optimisticSessions = sortSessions(store.sessions.map(session => (
+    session.id === id
+      ? { ...session, preferences: normalizedPreferences, updated_at: now }
+      : session
+  )))
+  store = {
+    ...store,
+    sessions: optimisticSessions,
+  }
+  emit()
+
+  const seq = (sessionPreferenceMutationSeq.get(id) ?? 0) + 1
+  sessionPreferenceMutationSeq.set(id, seq)
+  pendingSessionPreferenceMutations.set(id, {
+    seq,
+    preferences: normalizedPreferences,
+    updatedAt: now,
+  })
+
+  try {
+    const updated = await apiUpdateSession(id, { preferences: normalizedPreferences })
+    if (sessionPreferenceMutationSeq.get(id) !== seq) {
+      return updated
+    }
+    pendingSessionPreferenceMutations.delete(id)
+    const nextSessions = sortSessions(store.sessions.map(session => (session.id === id ? updated : session)))
+    store = {
+      ...store,
+      sessions: nextSessions,
+      activeSessionId: pickNextActiveSession(nextSessions, store.activeSessionId),
+    }
+    emit()
+    return updated
+  } catch (error) {
+    if (sessionPreferenceMutationSeq.get(id) === seq) {
+      pendingSessionPreferenceMutations.delete(id)
+      void loadSessions()
+    }
+    console.error('Failed to update session preferences', error)
     return null
   }
 }
@@ -447,6 +557,7 @@ export function useSessionStore() {
     newSession: createNewSession,
     renameSession,
     toggleSessionPinned,
+    updateSessionChatPreferences,
     primeSessionForImmediateRun,
     syncSessionRunId,
     markSessionExecutionStatus,

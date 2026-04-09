@@ -13,6 +13,7 @@ from typing import Optional
 import numpy as np
 
 from .color_utils import hex_to_hsv
+from ..value_normalization import normalize_quarter_value
 
 # ── Module-level cache ──
 _color_index: Optional["ColorIndex"] = None
@@ -109,7 +110,7 @@ class ColorIndex:
         threshold: float = 75.0,
         min_percentage: float = 70.0,
         gender: str | None = None,
-        quarter: str | None = None,  # kept for API compat but not used
+        quarter: str | None = None,
         page: int = 1,
         page_size: int = 56,
     ) -> dict:
@@ -157,6 +158,8 @@ class ColorIndex:
         mask = (h_dist <= h_tol) & (s_dist <= s_tol) & (v_dist <= v_tol)
         matching_indices = np.where(mask)[0]
 
+        normalized_quarter = normalize_quarter_value(quarter)
+
         # Collect all images for matching hexes, picking the BEST relevance color per image
         image_best: dict[str, tuple[float, float, dict, float]] = {}
 
@@ -169,8 +172,11 @@ class ColorIndex:
             for image_id, pct, payload in self.hex_to_images[hex_val]:
                 if pct < min_percentage:
                     continue
-                # Apply gender hard filter (quarter intentionally not filtered)
+                # Apply hard filters before scoring.
                 if gender and payload.get("gender", "").lower() != gender.lower():
+                    continue
+                payload_quarter = normalize_quarter_value(payload.get("quarter") or payload.get("season"))
+                if normalized_quarter and payload_quarter != normalized_quarter:
                     continue
                 # Score combines color closeness AND percentage
                 score = (base_sim - 5) + (pct / 100.0) * 5

@@ -37,6 +37,22 @@ import {
   deleteGallerySchema,
   deleteGalleryTool,
 } from "./tools/delete_gallery.js";
+import {
+  batchGetGalleriesSchema,
+  batchGetGalleriesTool,
+} from "./tools/batch_get_galleries.js";
+import {
+  updateGalleryImagesSchema,
+  updateGalleryImagesTool,
+} from "./tools/update_gallery_images.js";
+import {
+  deleteGalleryImagesSchema,
+  deleteGalleryImagesTool,
+} from "./tools/delete_gallery_images.js";
+import {
+  batchDeleteGalleriesSchema,
+  batchDeleteGalleriesTool,
+} from "./tools/batch_delete_galleries.js";
 
 // ── Parse CLI args ──────────────────────────────────────────────
 const args = process.argv.slice(2);
@@ -48,7 +64,7 @@ const transportMode = transportArg?.split("=")[1] ?? "http";
 function createServer(): McpServer {
   const server = new McpServer({
     name: "aimoda-inspiration-gallery",
-    version: "1.0.0",
+    version: "1.1.0",
   });
 
   server.tool(
@@ -92,10 +108,18 @@ function createServer(): McpServer {
 
   server.tool(
     "get_gallery",
-    `获取单个图集的完整详情，包含所有图片列表。
+    `获取单个图集的完整详情，支持图片分页与按需返回图片列表。
 输入: gallery_id。`,
     getGallerySchema,
     async (args) => getGalleryTool(args as any),
+  );
+
+  server.tool(
+    "batch_get_galleries",
+    `批量获取多个图集详情，可选择带 description 和图片预览。
+输入: gallery_ids。`,
+    batchGetGalleriesSchema,
+    async (args) => batchGetGalleriesTool(args as any),
   );
 
   server.tool(
@@ -112,6 +136,27 @@ function createServer(): McpServer {
 输入: gallery_id。`,
     deleteGallerySchema,
     async (args) => deleteGalleryTool(args as any),
+  );
+
+  server.tool(
+    "update_gallery_images",
+    `批量更新图集内图片的 caption 或 sort_order。`,
+    updateGalleryImagesSchema,
+    async (args) => updateGalleryImagesTool(args as any),
+  );
+
+  server.tool(
+    "delete_gallery_images",
+    `删除图集内的单张或多张图片，并同步清理 OSS 对象。`,
+    deleteGalleryImagesSchema,
+    async (args) => deleteGalleryImagesTool(args as any),
+  );
+
+  server.tool(
+    "batch_delete_galleries",
+    `批量删除多个图集，并清理关联 OSS 数据。`,
+    batchDeleteGalleriesSchema,
+    async (args) => batchDeleteGalleriesTool(args as any),
   );
 
   return server;
@@ -144,7 +189,7 @@ async function main() {
       res.json({
         status: "ok",
         service: "inspiration-gallery-mcp",
-        version: "1.0.0",
+        version: "1.1.0",
       });
     });
 

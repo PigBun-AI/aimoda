@@ -130,7 +130,7 @@ def run_migration():
         session_id      UUID NOT NULL,
         artifact_type   TEXT NOT NULL CHECK (artifact_type IN (
                             'image', 'report', 'table', 'code', 'color_analysis',
-                            'trend_chart', 'collection_result', 'vision_analysis', 'other')),
+                            'trend_chart', 'collection_result', 'bundle_result', 'vision_analysis', 'other')),
         storage_type    TEXT NOT NULL DEFAULT 's3'
                         CHECK (storage_type IN ('s3', 'local', 'database')),
         storage_path    TEXT NOT NULL DEFAULT '',
@@ -158,7 +158,7 @@ def run_migration():
         ADD CONSTRAINT artifacts_artifact_type_check
         CHECK (artifact_type IN (
             'image', 'report', 'table', 'code', 'color_analysis',
-            'trend_chart', 'collection_result', 'vision_analysis', 'other'
+            'trend_chart', 'collection_result', 'bundle_result', 'vision_analysis', 'other'
         ));
 
     -- ── 4. session_context_summaries ──

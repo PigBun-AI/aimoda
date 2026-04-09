@@ -1,7 +1,8 @@
 // Chat API client — SSE streaming + session CRUD
 
 import { ApiError, handleUnauthorizedSession } from '@/lib/api'
-import type { ChatSession, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
+import type { ChatArtifact, ChatSession, ChatSessionPreferences, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
+import type { SearchPlanMessageRef } from './message-refs'
 
 const authTokenStorageKey = 'fashion-report-access-token'
 
@@ -123,6 +124,8 @@ export async function fetchSearchSession(
   searchReq: SearchSessionState,
   offset: number,
   limit = 20,
+  tasteProfileId?: string | null,
+  tasteProfileWeight?: number | null,
 ): Promise<{
   images: ImageResult[]
   total: number
@@ -133,7 +136,13 @@ export async function fetchSearchSession(
   const resp = await fetch('/api/chat/search_session', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ ...searchReq, offset, limit }),
+    body: JSON.stringify({
+      ...searchReq,
+      offset,
+      limit,
+      taste_profile_id: tasteProfileId ?? null,
+      taste_profile_weight: tasteProfileWeight ?? null,
+    }),
   })
   if (!resp.ok) {
     handle401(resp)
@@ -146,6 +155,8 @@ export async function fetchSearchSessionById(
   searchRequestId: string,
   offset: number,
   limit = 20,
+  tasteProfileId?: string | null,
+  tasteProfileWeight?: number | null,
 ): Promise<{
   images: ImageResult[]
   total: number
@@ -160,6 +171,8 @@ export async function fetchSearchSessionById(
       search_request_id: searchRequestId,
       offset,
       limit,
+      taste_profile_id: tasteProfileId ?? null,
+      taste_profile_weight: tasteProfileWeight ?? null,
     }),
   })
   if (!resp.ok) {
@@ -167,6 +180,56 @@ export async function fetchSearchSessionById(
     throw new Error(`HTTP ${resp.status}`)
   }
   return resp.json()
+}
+
+export async function getChatArtifact(artifactId: string): Promise<ChatArtifact> {
+  const resp = await fetch(`/api/chat/artifacts/${artifactId}`, {
+    headers: authHeaders(),
+  })
+  if (!resp.ok) {
+    handle401(resp)
+    throw new Error(`HTTP ${resp.status}`)
+  }
+  const payload = await resp.json() as { data?: ChatArtifact }
+  if (!payload.data) {
+    throw new Error('Artifact payload missing')
+  }
+  return payload.data
+}
+
+export async function resolveSearchPlanRef(
+  target: SearchPlanMessageRef,
+  currentSessionId?: string | null,
+): Promise<{
+  search_request_id: string
+  total: number
+  label?: string
+  filters_applied?: string[]
+}> {
+  const resp = await fetch('/api/chat/resolve_search_plan_ref', {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({
+      ...target,
+      current_session_id: currentSessionId ?? null,
+    }),
+  })
+  if (!resp.ok) {
+    handle401(resp)
+    throw new Error(`HTTP ${resp.status}`)
+  }
+  const payload = await resp.json() as {
+    data?: {
+      search_request_id: string
+      total: number
+      label?: string
+      filters_applied?: string[]
+    }
+  }
+  if (!payload.data?.search_request_id) {
+    throw new Error('Search plan resolve payload missing')
+  }
+  return payload.data
 }
 
 // ── Session CRUD ──
@@ -180,11 +243,14 @@ export async function listSessions(): Promise<ChatSession[]> {
   return data.data ?? []
 }
 
-export async function createSession(title = '新对话'): Promise<ChatSession> {
+export async function createSession(title = '新对话', preferences?: ChatSessionPreferences | null): Promise<ChatSession> {
   const resp = await fetch('/api/chat/sessions', {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({
+      title,
+      preferences: preferences ?? null,
+    }),
   })
   if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
@@ -193,7 +259,7 @@ export async function createSession(title = '新对话'): Promise<ChatSession> {
 
 export async function updateSession(
   sessionId: string,
-  patch: { title?: string; pinned?: boolean },
+  patch: { title?: string; pinned?: boolean; preferences?: ChatSessionPreferences | null },
 ): Promise<ChatSession> {
   const resp = await fetch(`/api/chat/sessions/${sessionId}`, {
     method: 'PATCH',
@@ -216,7 +282,12 @@ export async function deleteSessionApi(sessionId: string): Promise<void> {
 /**
  * Fetch messages for a given session
  */
-export async function getSessionMessages(sessionId: string): Promise<Array<{ id: string; role: string; content: ContentBlock[] | string }>> {
+export async function getSessionMessages(sessionId: string): Promise<Array<{
+  id: string
+  role: string
+  content: ContentBlock[] | string
+  metadata?: Record<string, unknown>
+}>> {
   const resp = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
     headers: authHeaders(),
   })
@@ -245,8 +316,11 @@ export interface SearchSimilarParams {
   image_id?: string
   top_category?: string
   gender?: string
+  quarter?: string
   page?: number
   page_size?: number
+  taste_profile_id?: string | null
+  taste_profile_weight?: number | null
 }
 
 export interface SearchByColorParams {
@@ -257,6 +331,8 @@ export interface SearchByColorParams {
   quarter?: string
   page?: number
   page_size?: number
+  taste_profile_id?: string | null
+  taste_profile_weight?: number | null
 }
 
 export interface SearchResponse {
@@ -278,8 +354,11 @@ export async function searchSimilar(params: SearchSimilarParams): Promise<Search
       image_id: params.image_id,
       top_category: params.top_category,
       gender: params.gender,
+      quarter: params.quarter,
       page: params.page ?? 1,
       page_size: params.page_size ?? 56,
+      taste_profile_id: params.taste_profile_id ?? null,
+      taste_profile_weight: params.taste_profile_weight ?? null,
     }),
   })
   if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
@@ -298,6 +377,8 @@ export async function searchByColor(params: SearchByColorParams): Promise<Search
       quarter: params.quarter,
       page: params.page ?? 1,
       page_size: params.page_size ?? 56,
+      taste_profile_id: params.taste_profile_id ?? null,
+      taste_profile_weight: params.taste_profile_weight ?? null,
     }),
   })
   if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }

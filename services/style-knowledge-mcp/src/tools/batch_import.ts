@@ -9,6 +9,10 @@
 
 import { z } from "zod";
 import { addStyle } from "./add_style.js";
+import {
+  jsonStringCompatibleArray,
+  parseStructuredArgs,
+} from "../tool_input.js";
 
 const styleItemSchema = z.object({
   style_name: z.string(),
@@ -29,20 +33,28 @@ const styleItemSchema = z.object({
   popularity_score: z.number().optional(),
 });
 
+const batchImportRuntimeSchema = z.object({
+  styles: z.array(styleItemSchema),
+});
+
 export const batchImportSchema = {
-  styles: z
-    .array(styleItemSchema)
+  styles: jsonStringCompatibleArray(styleItemSchema)
     .describe("风格条目列表（格式同 add_style 参数）"),
 };
 
 export async function batchImportStyles(args: {
   styles: Array<z.infer<typeof styleItemSchema>>;
 }) {
+  const normalizedArgs = parseStructuredArgs(
+    batchImportRuntimeSchema,
+    args,
+    "batch_import_styles arguments",
+  );
   let created = 0;
   let merged = 0;
   const errors: Array<{ style_name: string; error: string }> = [];
 
-  for (const style of args.styles) {
+  for (const style of normalizedArgs.styles) {
     try {
       const result = await addStyle(style as any);
       const parsed = JSON.parse(result.content[0].text);
@@ -61,7 +73,7 @@ export async function batchImportStyles(args: {
 
   const response = {
     status: errors.length === 0 ? "ok" : "partial",
-    total: args.styles.length,
+    total: normalizedArgs.styles.length,
     created,
     merged,
     errors,

@@ -110,6 +110,13 @@ export async function addImagesTool(args: {
       colors?: any[];
     }> = [];
     const fallbackUrls: string[] = [];
+    const imageStatuses: Array<{
+      filename: string;
+      status: "uploaded" | "fallback_url" | "skipped";
+      source: "base64" | "url" | "invalid";
+      final_url?: string;
+      warning?: string;
+    }> = [];
 
     for (let i = 0; i < args.images.length; i++) {
       const img = args.images[i];
@@ -125,6 +132,12 @@ export async function addImagesTool(args: {
           buffer,
         );
         colors = await extractColorsFromBuffer(buffer);
+        imageStatuses.push({
+          filename: img.filename,
+          status: "uploaded",
+          source: "base64",
+          final_url: imageUrl,
+        });
       } else if (img.url) {
         // Download external image and re-upload to OSS
         try {
@@ -136,14 +149,33 @@ export async function addImagesTool(args: {
             contentType,
           );
           colors = await extractColorsFromBuffer(buffer);
+          imageStatuses.push({
+            filename: img.filename,
+            status: "uploaded",
+            source: "url",
+            final_url: imageUrl,
+          });
         } catch (fetchErr) {
           console.warn(
             `[add_images] ⚠️ All retries failed for ${img.url}: ${(fetchErr as Error).message}. Using original URL as fallback.`,
           );
           imageUrl = img.url; // fallback to original URL
           fallbackUrls.push(img.url);
+          imageStatuses.push({
+            filename: img.filename,
+            status: "fallback_url",
+            source: "url",
+            final_url: imageUrl,
+            warning: (fetchErr as Error).message,
+          });
         }
       } else {
+        imageStatuses.push({
+          filename: img.filename,
+          status: "skipped",
+          source: "invalid",
+          warning: "missing both data and url",
+        });
         continue; // Skip invalid entries
       }
 
@@ -173,6 +205,7 @@ export async function addImagesTool(args: {
                 warning: `${fallbackUrls.length} image(s) used original URL (OSS upload failed after retries)`,
                 fallback_urls: fallbackUrls,
               }),
+              image_statuses: imageStatuses,
               images: dbImages.map((img) => ({
                 id: img.id,
                 url: img.image_url,

@@ -13,11 +13,28 @@ interface SearchResultCardProps {
   onOpenDrawer: (searchRequestId: string) => void
 }
 
+function normalizeQuarterLabel(value: string, t: (key: string, options?: Record<string, unknown>) => string): string {
+  const normalized = value.trim().toLowerCase().replace(/_/g, ' ').replace(/-/g, ' ')
+  if (['早春', 'resort', 'cruise', 'pre spring', 'q1'].includes(normalized)) return t('chatPreferenceQuarterResort')
+  if (['ss', 'spring summer', 'spring', 'summer'].includes(normalized)) return t('seasonSpringSummer')
+  if (['早秋', 'pre fall', 'prefall', 'pf', 'q3'].includes(normalized)) return t('chatPreferenceQuarterPreFall')
+  if (['fw', 'fall winter', 'autumn winter', 'fall', 'winter'].includes(normalized)) return t('seasonFallWinter')
+  if (['q2'].includes(normalized)) return t('seasonSpringSummer')
+  if (['q4'].includes(normalized)) return t('seasonFallWinter')
+  return value
+}
+
 /** Format filter tag for display: "category=dress" → "dress" */
-function formatFilterTag(filter: string): string {
+function formatFilterTag(filter: string, t: (key: string, options?: Record<string, unknown>) => string): string {
   const parts = filter.split('=')
   if (parts.length === 2) {
-    const [dim, val] = parts
+    let [dim, val] = parts
+    if (dim === 'season') {
+      dim = 'quarter'
+      val = normalizeQuarterLabel(val, t)
+    } else if (dim === 'quarter') {
+      val = normalizeQuarterLabel(val, t)
+    }
     // Show dimension:value for garment tags, just value for simple ones
     if (dim === 'category') return val
     return `${dim}: ${val}`
@@ -72,7 +89,7 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
                 key={i}
                 className="type-chat-kicker border border-border/70 px-2.5 py-1 text-foreground/82"
               >
-                {formatFilterTag(f)}
+                {formatFilterTag(f, t)}
               </span>
             ))}
             {data.filters_applied.length > 4 && (

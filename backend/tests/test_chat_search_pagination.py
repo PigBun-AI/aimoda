@@ -88,3 +88,34 @@ async def test_search_similar_brand_pagination_uses_scroll_page_offset(monkeypat
     assert response["total"] == 30
     assert [item["image_id"] for item in response["images"]] == [f"look-{index}" for index in range(15, 30)]
     assert response["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_search_similar_accepts_legacy_season_alias(monkeypatch):
+    client = _CursorScrollClient([{"image_id": "look-1", "brand": "akris", "year": 2026}])
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(chat_router, "get_qdrant", lambda: client)
+    monkeypatch.setattr(chat_router, "get_collection", lambda: "fashion_items")
+
+    from backend.app.agent import qdrant_utils
+
+    def _fake_build_qdrant_filter(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace()
+
+    monkeypatch.setattr(qdrant_utils, "build_qdrant_filter", _fake_build_qdrant_filter)
+    monkeypatch.setattr(qdrant_utils, "format_result", lambda payload, score=0: dict(payload))
+
+    response = await chat_router.search_similar_endpoint(
+        chat_router.SearchSimilarRequest(
+            brand="akris",
+            season="fw",
+            page=1,
+            page_size=15,
+        ),
+        user=AuthenticatedUser(id=1, role="viewer"),
+    )
+
+    assert response["total"] == 1
+    assert captured["season"] == "fw"

@@ -16,6 +16,8 @@ import {
   useChatMessageStore,
 } from './chat-message-store'
 
+const TERMINAL_REF_ENRICHMENT_STATES = new Set(['completed', 'skipped', 'error', 'timeout'])
+
 function toolResultLooksLikeError(content: string): boolean {
   try {
     const data = JSON.parse(content)
@@ -28,7 +30,11 @@ function toolResultLooksLikeError(content: string): boolean {
 /**
  * Main chat hook — manages messages, SSE streaming, and drawer state
  */
-export function useChat(sessionId: string | null) {
+export function useChat(
+  sessionId: string | null,
+  defaultTasteProfileId: string | null = null,
+  defaultTasteProfileWeight: number | null = 0.24,
+) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerData, setDrawerData] = useState<DrawerData | null>(null)
   const { messages, isLoading } = useChatMessageStore(sessionId)
@@ -40,35 +46,74 @@ export function useChat(sessionId: string | null) {
   const activeAbortControllerRef = useRef<AbortController | null>(null)
   const activeRunIdRef = useRef<string | null>(activeSession?.current_run_id ?? null)
   const stopRequestedRef = useRef(false)
+  const postRunHydrationTokenRef = useRef(0)
   const [isStopping, setIsStopping] = useState(false)
 
   useEffect(() => {
     setDrawerOpen(false)
     setDrawerData(null)
+    postRunHydrationTokenRef.current += 1
   }, [sessionId])
 
-  const hydrateSessionMessages = useCallback((targetSessionId: string) => {
+  const hydrateSessionMessages = useCallback(async (targetSessionId: string): Promise<ChatMessage[]> => {
     const { requestId, baseRevision } = requestSessionHydration(targetSessionId)
 
-    getSessionMessages(targetSessionId)
-      .then(msgs => {
-        // Map backend messages to frontend ChatMessage format with ContentBlock[]
-        const mapped: ChatMessage[] = msgs.map(m => ({
-          id: m.id,
-          role: m.role as 'user' | 'assistant',
-          // Backward compatibility: content can be string (old) or ContentBlock[] (new)
-          content: normalizeContentBlocks(
-            Array.isArray(m.content)
-              ? m.content
-              : typeof m.content === 'string' && m.content
-                ? [{ type: 'text' as const, text: m.content }]
-                : [],
-          ),
-        }))
-        applyHydratedMessages(targetSessionId, requestId, baseRevision, mapped)
-      })
-      .catch(err => console.error('Failed to load session messages', err))
+    try {
+      const msgs = await getSessionMessages(targetSessionId)
+      const mapped: ChatMessage[] = msgs.map(m => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: normalizeContentBlocks(
+          Array.isArray(m.content)
+            ? m.content
+            : typeof m.content === 'string' && m.content
+              ? [{ type: 'text' as const, text: m.content }]
+              : [],
+        ),
+        metadata: typeof m.metadata === 'object' && m.metadata !== null
+          ? m.metadata as Record<string, unknown>
+          : undefined,
+      }))
+      applyHydratedMessages(targetSessionId, requestId, baseRevision, mapped)
+      return mapped
+    } catch (err) {
+      console.error('Failed to load session messages', err)
+      throw err
+    }
   }, [])
+
+  const schedulePostRunHydration = useCallback((targetSessionId: string) => {
+    const token = Date.now()
+    postRunHydrationTokenRef.current = token
+
+    const run = async () => {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        if (postRunHydrationTokenRef.current !== token) return
+
+        try {
+          const mapped = await hydrateSessionMessages(targetSessionId)
+          const latestAssistant = [...mapped].reverse().find(message => message.role === 'assistant')
+          const enrichmentStatus = typeof latestAssistant?.metadata?.ref_enrichment_status === 'string'
+            ? latestAssistant.metadata.ref_enrichment_status
+            : null
+          const hasInlineRefs = latestAssistant?.content.some(
+            block => block.type === 'text' && Array.isArray(block.annotations) && block.annotations.some(annotation => annotation?.type === 'message_ref_spans'),
+          )
+
+          if (hasInlineRefs || (enrichmentStatus && TERMINAL_REF_ENRICHMENT_STATES.has(enrichmentStatus))) {
+            break
+          }
+        } catch {
+          // Keep the short poll alive; a later attempt may succeed once the post-run write lands.
+        }
+
+        await loadSessions()
+        await new Promise(resolve => window.setTimeout(resolve, 1200))
+      }
+    }
+
+    void run()
+  }, [hydrateSessionMessages, loadSessions])
 
   // Load historical messages when switching sessions
   useEffect(() => {
@@ -76,7 +121,7 @@ export function useChat(sessionId: string | null) {
       return
     }
 
-    hydrateSessionMessages(sessionId)
+    void hydrateSessionMessages(sessionId)
   }, [hydrateSessionMessages, sessionId])
 
   useEffect(() => {
@@ -90,16 +135,16 @@ export function useChat(sessionId: string | null) {
     if (!isRemoteRunning) {
       if (wasRemoteRunningRef.current) {
         wasRemoteRunningRef.current = false
-        hydrateSessionMessages(sessionId)
+        void hydrateSessionMessages(sessionId)
       }
       return
     }
 
     wasRemoteRunningRef.current = true
-    hydrateSessionMessages(sessionId)
+    void hydrateSessionMessages(sessionId)
 
     const intervalId = window.setInterval(() => {
-      hydrateSessionMessages(sessionId)
+      void hydrateSessionMessages(sessionId)
     }, 2000)
 
     return () => window.clearInterval(intervalId)
@@ -236,6 +281,15 @@ export function useChat(sessionId: string | null) {
         } else if (event.type === 'message_stop') {
           // entire message done — update with accumulated blocks
           commitAssistantBlocks()
+          finishSessionStream(sid)
+          markSessionExecutionStatus(sid, streamFailedMessage ? 'error' : 'completed', streamFailedMessage, activeRunId)
+          schedulePostRunHydration(sid)
+        } else if (event.type === 'message_finalized') {
+          replaceAssistantMessage(
+            sid,
+            assistantMsg.id,
+            normalizeContentBlocks(Array.isArray(event.content) ? event.content : []),
+          )
         } else if (event.type === 'error') {
           streamFailedMessage = event.message
           replaceAssistantMessage(sid, assistantMsg.id, [{ type: 'text', text: `Error: ${event.message}` }])
@@ -297,14 +351,23 @@ export function useChat(sessionId: string | null) {
         stepLabel: step.toolName,
         images: [],
         searchRequestId,
+        tasteProfileId: defaultTasteProfileId,
+        tasteProfileWeight: defaultTasteProfileWeight,
         offset: 0,
         hasMore: true,
         isLoadingMore: true,
+        emptyState: 'none',
       })
       setDrawerOpen(true)
 
       try {
-        const data = await fetchSearchSessionById(searchRequestId, 0)
+        const data = await fetchSearchSessionById(
+          searchRequestId,
+          0,
+          20,
+          defaultTasteProfileId,
+          defaultTasteProfileWeight,
+        )
         setDrawerData(prev => prev ? {
           ...prev,
           images: data.images || [],
@@ -312,22 +375,35 @@ export function useChat(sessionId: string | null) {
           hasMore: data.has_more,
           total: data.total,
           isLoadingMore: false,
+          emptyState: (data.images || []).length > 0 ? 'none' : 'empty',
         } : null)
       } catch (e) {
         console.error('load search session error', e)
+        setDrawerData(prev => prev ? {
+          ...prev,
+          images: [],
+          offset: 0,
+          hasMore: false,
+          total: 0,
+          isLoadingMore: false,
+          emptyState: 'unavailable',
+        } : null)
       }
     } else if (hasImages) {
       setDrawerData({
         stepLabel: step.toolName,
         images: step.images!,
         searchRequestId: null,
+        tasteProfileId: defaultTasteProfileId,
+        tasteProfileWeight: defaultTasteProfileWeight,
         offset: 0,
         hasMore: false,
         isLoadingMore: false,
+        emptyState: step.images!.length > 0 ? 'none' : 'empty',
       })
       setDrawerOpen(true)
     }
-  }, [])
+  }, [defaultTasteProfileId, defaultTasteProfileWeight])
 
   /** Open drawer directly from a search_request_id (used by SearchResultCard) */
   const openDrawerFromSearchRequestId = useCallback(async (searchRequestId: string) => {
@@ -335,14 +411,23 @@ export function useChat(sessionId: string | null) {
       stepLabel: 'show_collection',
       images: [],
       searchRequestId,
+      tasteProfileId: defaultTasteProfileId,
+      tasteProfileWeight: defaultTasteProfileWeight,
       offset: 0,
       hasMore: true,
       isLoadingMore: true,
+      emptyState: 'none',
     })
     setDrawerOpen(true)
 
     try {
-      const data = await fetchSearchSessionById(searchRequestId, 0)
+      const data = await fetchSearchSessionById(
+        searchRequestId,
+        0,
+        20,
+        defaultTasteProfileId,
+        defaultTasteProfileWeight,
+      )
       setDrawerData(prev => prev ? {
         ...prev,
         images: data.images || [],
@@ -350,29 +435,107 @@ export function useChat(sessionId: string | null) {
         hasMore: data.has_more,
         total: data.total,
         isLoadingMore: false,
+        emptyState: (data.images || []).length > 0 ? 'none' : 'empty',
       } : null)
     } catch (e) {
       console.error('load search session error', e)
+      setDrawerData(prev => prev ? {
+        ...prev,
+        images: [],
+        offset: 0,
+        hasMore: false,
+        total: 0,
+        isLoadingMore: false,
+        emptyState: 'unavailable',
+      } : null)
     }
-  }, [])
+  }, [defaultTasteProfileId, defaultTasteProfileWeight])
 
   const loadMoreDrawerImages = useCallback(async () => {
     if (!drawerData?.searchRequestId || !drawerData.hasMore) return
 
     setDrawerData(prev => prev ? { ...prev, isLoadingMore: true } : null)
     try {
-      const data = await fetchSearchSessionById(drawerData.searchRequestId, drawerData.offset)
+      const data = await fetchSearchSessionById(
+        drawerData.searchRequestId,
+        drawerData.offset,
+        20,
+        drawerData.tasteProfileId ?? null,
+        drawerData.tasteProfileWeight ?? null,
+      )
       setDrawerData(prev => prev ? {
         ...prev,
         images: [...prev.images, ...(data.images || [])],
         offset: data.offset + data.limit,
         hasMore: data.has_more,
         isLoadingMore: false,
+        emptyState: [...prev.images, ...(data.images || [])].length > 0 ? 'none' : 'empty',
       } : null)
     } catch (e) {
       console.error(e)
+      setDrawerData(prev => prev ? {
+        ...prev,
+        hasMore: false,
+        isLoadingMore: false,
+        emptyState: prev.images.length > 0 ? 'none' : 'unavailable',
+      } : null)
     }
   }, [drawerData])
+
+  const applyDrawerTasteProfile = useCallback(async ({
+    tasteProfileId,
+    tasteProfileWeight,
+  }: {
+    tasteProfileId: string | null
+    tasteProfileWeight?: number | null
+  }) => {
+    if (!drawerData?.searchRequestId) return
+    const nextWeight = tasteProfileId
+      ? (typeof tasteProfileWeight === 'number' ? tasteProfileWeight : (drawerData.tasteProfileWeight ?? defaultTasteProfileWeight ?? 0.24))
+      : 0.24
+
+    setDrawerData(prev => prev ? {
+      ...prev,
+      images: [],
+      offset: 0,
+      tasteProfileId,
+      tasteProfileWeight: nextWeight,
+      hasMore: true,
+      isLoadingMore: true,
+      emptyState: 'none',
+    } : null)
+
+    try {
+      const data = await fetchSearchSessionById(
+        drawerData.searchRequestId,
+        0,
+        20,
+        tasteProfileId,
+        nextWeight,
+      )
+      setDrawerData(prev => prev ? {
+        ...prev,
+        images: data.images || [],
+        offset: data.offset + data.limit,
+        hasMore: data.has_more,
+        total: data.total,
+        isLoadingMore: false,
+        tasteProfileId,
+        tasteProfileWeight: nextWeight,
+        emptyState: (data.images || []).length > 0 ? 'none' : 'empty',
+      } : null)
+    } catch (error) {
+      console.error(error)
+      setDrawerData(prev => prev ? {
+        ...prev,
+        isLoadingMore: false,
+        hasMore: false,
+        tasteProfileId,
+        tasteProfileWeight: nextWeight,
+        emptyState: prev.images.length > 0 ? 'none' : 'unavailable',
+      } : null)
+    }
+  }, [defaultTasteProfileWeight, drawerData])
 
   return {
     messages,
@@ -386,6 +549,7 @@ export function useChat(sessionId: string | null) {
     openDrawer,
     openDrawerFromSearchRequestId,
     loadMoreDrawerImages,
+    applyDrawerTasteProfile,
   }
 }
 

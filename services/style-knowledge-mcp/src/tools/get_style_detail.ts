@@ -1,47 +1,88 @@
 /**
- * Tool: get_style_detail — 按 style_name 获取单条完整风格信息
- *
- * 返回完整的 StyleKnowledge（含 visual_description、palette、fabric 等全部字段）。
- * Agent 在 search_style 得到精简结果后，按需调用此工具获取完整详情。
+ * Tool: get_style_detail — 按 style_name 获取单条或多条完整风格信息
  */
 
 import { z } from "zod";
 import { findByStyleName } from "../qdrant.js";
+import { jsonStringCompatibleArray, parseStructuredArgs } from "../tool_input.js";
+
+const getStyleDetailRuntimeSchema = z.object({
+  style_name: z.string().optional(),
+  style_names: z.array(z.string()).optional(),
+});
 
 export const getStyleDetailSchema = {
-  style_name: z
-    .string()
-    .describe("风格英文名（从 search_style 结果中获取）"),
+  style_name: z.string().optional().describe("单个风格英文名"),
+  style_names: jsonStringCompatibleArray(z.string()).optional().describe("批量风格英文名列表"),
 };
 
-export async function getStyleDetail(args: { style_name: string }) {
-  const result = await findByStyleName(args.style_name);
+function stripSearchFields(payload: any) {
+  const { style_name_text, aliases_text, style_name_norm, aliases_norm, rich_text_text, ...cleanPayload } = payload;
+  return cleanPayload;
+}
 
-  if (!result) {
+function isFoundStyle(
+  value: { input: string; style: unknown } | null,
+): value is { input: string; style: unknown } {
+  return value !== null;
+}
+
+export async function getStyleDetail(args: { style_name?: string; style_names?: string[] }) {
+  const normalizedArgs = parseStructuredArgs(getStyleDetailRuntimeSchema, args, "get_style_detail arguments");
+  const styleNames = normalizedArgs.style_names ?? (normalizedArgs.style_name ? [normalizedArgs.style_name] : []);
+
+  if (styleNames.length === 0) {
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify({
-            status: "not_found",
-            message: `style "${args.style_name}" not found`,
-          }),
+          text: JSON.stringify({ status: "error", message: "style_name or style_names is required" }),
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  const rows = await Promise.all(styleNames.map((styleName) => findByStyleName(styleName)));
+  const found = rows
+    .map((row, index) => (row ? { input: styleNames[index], style: stripSearchFields(row.payload) } : null))
+    .filter(isFoundStyle);
+  const missing = rows
+    .map((row, index) => (row ? null : styleNames[index]))
+    .filter((value): value is string => value !== null);
+
+  if (styleNames.length === 1) {
+    if (!found[0]) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({ status: "not_found", message: `style "${styleNames[0]}" not found` }),
+          },
+        ],
+      };
+    }
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ status: "ok", style: found[0].style }),
         },
       ],
     };
   }
-
-  // 返回完整 payload（排除 text 索引辅助字段）
-  const { style_name_text, aliases_text, style_name_norm, aliases_norm, rich_text_text, ...cleanPayload } =
-    result.payload as any;
 
   return {
     content: [
       {
         type: "text" as const,
         text: JSON.stringify({
-          status: "ok",
-          style: cleanPayload,
+          status: missing.length === 0 ? "ok" : "partial",
+          styles: found.map((item) => item.style),
+          missing,
+          returned: found.length,
+          requested: styleNames.length,
         }),
       },
     ],

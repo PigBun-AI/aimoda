@@ -7,6 +7,7 @@ import { ReportsPage } from '@/features/reports/reports-page'
 import { CoverPage } from '@/features/cover/cover-page'
 import { ChatPage } from '@/features/chat/chat-page'
 import { ProfilePage } from '@/features/profile/profile-page'
+import { FavoriteCollectionsPage } from '@/features/favorites/favorite-collections-page'
 import { ImageDetailPage } from '@/features/chat/image-detail-page'
 import { InspirationPage } from '@/features/inspiration/inspiration-page'
 import { GalleryDetailPage } from '@/features/inspiration/gallery-detail-page'
@@ -64,6 +65,10 @@ export const router = createBrowserRouter([
               {
                 path: '/profile',
                 element: <ProfilePage />,
+              },
+              {
+                path: '/collections',
+                element: <FavoriteCollectionsPage />,
               },
               {
                 path: '/membership',

@@ -16,7 +16,9 @@ function formatBrand(brand: string): string {
 function formatLocationInfo(image: ImageResult, t: (key: string) => string): string {
   const parts: string[] = []
   if (image.year) parts.push(String(image.year))
-  if (image.season) {
+  if (image.quarter) {
+    parts.push(String(image.quarter))
+  } else if (image.season) {
     const seasonMap: Record<string, string> = {
       spring: t("seasonSpringSummer"),
       summer: t("seasonSpringSummer"),
@@ -31,7 +33,6 @@ function formatLocationInfo(image: ImageResult, t: (key: string) => string): str
     const s = typeof image.season === "string" ? image.season.toLowerCase() : ""
     parts.push(seasonMap[s] || String(image.season))
   }
-  if (image.quarter) parts.push(String(image.quarter))
   return parts.join(" / ")
 }
 

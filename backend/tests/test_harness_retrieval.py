@@ -49,7 +49,7 @@ def test_add_filter_uses_turn_context_category_when_missing(monkeypatch):
     )
 
     monkeypatch.setattr(tools, "get_qdrant", lambda: object())
-    monkeypatch.setattr(tools, "count_session", lambda client, session: 18)
+    monkeypatch.setattr(tools, "count_session", lambda client, session, **kwargs: 18)
 
     payload = json.loads(tools.add_filter.func("collar", "peter pan collar", config=config))
     stored = session_state.get_session(config)["filters"][0]
@@ -97,6 +97,28 @@ def test_add_filter_rejects_abstract_style_dimension(monkeypatch):
     assert "richer query" in payload["error"]
 
 
+def test_add_filter_accepts_legacy_season_dimension_as_quarter(monkeypatch):
+    config = {"configurable": {"thread_id": "user-12:session-12"}}
+    session_state.set_session(config, {
+        "query": "",
+        "vector_type": "fashion_clip",
+        "q_emb": [0.1, 0.2, 0.3],
+        "filters": [],
+        "active": True,
+    })
+
+    monkeypatch.setattr(tools, "get_qdrant", lambda: object())
+    monkeypatch.setattr(tools, "count_session", lambda client, session, **kwargs: 9)
+
+    payload = json.loads(tools.add_filter.func("season", "fw", config=config))
+    stored = session_state.get_session(config)["filters"][0]
+
+    assert payload["action"] == "filter_added"
+    assert stored["type"] == "meta"
+    assert stored["key"] == "quarter"
+    assert stored["value"] == "秋冬"
+
+
 def test_search_style_tool_returns_retrieval_plan(monkeypatch):
     monkeypatch.setattr(tools, "search_style_knowledge", lambda query, limit=3: {
         "status": "ok",
@@ -125,6 +147,7 @@ def test_search_style_tool_returns_retrieval_plan(monkeypatch):
             "retrieval_query_en": "understated elegance, palette: camel",
             "semantic_boost_terms": ["soft tailoring", "wool"],
             "suggested_filters": {"fabric": ["wool"]},
+            "apply_filters_by_default": False,
             "soft_constraints": {"palette": ["camel"]},
             "agent_guidance": {"recommended_next_step": "start_collection"},
         },
@@ -136,6 +159,7 @@ def test_search_style_tool_returns_retrieval_plan(monkeypatch):
     assert payload["status"] == "ok"
     assert payload["primary_style"]["style_name"] == "quiet luxury"
     assert payload["retrieval_plan"]["retrieval_query_en"] == "understated elegance, palette: camel"
+    assert payload["retrieval_plan"]["apply_filters_by_default"] is False
 
 
 def test_search_style_tool_persists_style_session_context(monkeypatch):

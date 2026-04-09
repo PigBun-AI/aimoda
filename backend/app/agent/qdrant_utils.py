@@ -14,6 +14,8 @@ from qdrant_client.models import (
     Filter, FieldCondition, MatchValue, MatchAny, PayloadSchemaType, Range,
 )
 
+from ..value_normalization import normalize_quarter_list, normalize_quarter_value, normalize_text_value
+
 # ═══════════════════════════════════════════════════════════════
 #  Qdrant Client Singleton
 # ═══════════════════════════════════════════════════════════════
@@ -26,6 +28,7 @@ _QDRANT_PAYLOAD_INDEXES: dict[str, PayloadSchemaType] = {
     "brand": PayloadSchemaType.KEYWORD,
     "style": PayloadSchemaType.KEYWORD,
     "gender": PayloadSchemaType.KEYWORD,
+    "quarter": PayloadSchemaType.KEYWORD,
     "season": PayloadSchemaType.KEYWORD,
     "year": PayloadSchemaType.INTEGER,
     "categories": PayloadSchemaType.KEYWORD,
@@ -225,7 +228,7 @@ def apply_aesthetic_boost(v_pos: list[float]) -> list[float]:
 
 def build_qdrant_filter(
     categories=None, brand=None, gender=None, top_categories=None,
-    season=None, year_min=None, image_type=None,
+    quarter=None, season=None, year_min=None, image_type=None,
     garment_tags=None,
 ) -> Filter | None:
     """Build Qdrant filter using ALL available database indexes."""
@@ -244,9 +247,12 @@ def build_qdrant_filter(
         conditions.append(FieldCondition(
             key="top_categories", match=MatchAny(any=[tc.lower() for tc in top_categories])
         ))
-    if season:
+    normalized_quarters = normalize_quarter_list(quarter)
+    if not normalized_quarters and season:
+        normalized_quarters = normalize_quarter_list(season)
+    if normalized_quarters:
         conditions.append(FieldCondition(
-            key="season", match=MatchAny(any=[s.lower() for s in season])
+            key="quarter", match=MatchAny(any=normalized_quarters)
         ))
     if year_min:
         conditions.append(FieldCondition(key="year", range=Range(gte=year_min)))
@@ -336,11 +342,15 @@ def format_result(payload: dict, score: float = 0) -> dict:
         "image_url": payload.get("image_url", ""),
         "image_id": payload.get("image_id", ""),
         "score": round(score, 4) if score else 0,
-        "brand": payload.get("brand", ""),
+        "brand": normalize_text_value(payload.get("brand")) or "",
         "style": payload.get("style", ""),
-        "gender": payload.get("gender", ""),
-        "quarter": payload.get("quarter", ""),
-        "season": payload.get("season", ""),
+        "gender": normalize_text_value(payload.get("gender")) or "",
+        "quarter": (
+            normalize_quarter_value(payload.get("quarter"))
+            or normalize_quarter_value(payload.get("season"))
+            or ""
+        ),
+        "season": normalize_text_value(payload.get("season")) or "",
         "year": payload.get("year", 0),
         "garments": garments_summary,
         "extracted_colors": extracted_colors,

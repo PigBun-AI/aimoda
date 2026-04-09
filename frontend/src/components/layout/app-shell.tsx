@@ -23,6 +23,7 @@ import {
   Sun,
   Trash2,
   X,
+  Heart,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -124,6 +125,8 @@ export function AppShell() {
   const isFullScreenRoute =
     location.pathname === '/' ||
     location.pathname === '/chat' ||
+    location.pathname === '/collections' ||
+    location.pathname === '/profile' ||
     location.pathname.startsWith('/reports/')
   const isChatImmersive = location.pathname === '/chat' && isDrawerFullscreen
 
@@ -150,6 +153,7 @@ export function AppShell() {
       { to: '/chat', label: t('common:aiAssistant'), icon: MessageCircle },
       { to: '/reports', label: t('reports:title'), icon: LayoutDashboard },
       { to: '/inspiration', label: t('common:inspiration'), icon: Sparkles },
+      { to: '/collections', label: t('common:favoritesTab'), icon: Heart },
     ],
     [t],
   )

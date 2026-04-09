@@ -24,6 +24,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
 from ..llm_factory import build_llm_with_fallback
+from ..value_normalization import normalize_quarter_value
 
 DEFAULT_SESSION_TITLE = "新对话"
 IMAGE_SEARCH_SESSION_TITLE = "图片检索"
@@ -31,6 +32,7 @@ SESSION_TITLE_MAX_LEN = 24
 COMPACTION_MESSAGE_THRESHOLD = 18
 COMPACTION_RECENT_MESSAGE_WINDOW = 6
 TITLE_GENERATION_MAX_TOKENS = 48
+DEFAULT_TASTE_PROFILE_WEIGHT = 0.24
 
 _TITLE_PREFIX_PATTERNS = [
     re.compile(r"^(你好|您好|hi|hello|hey)[，,！!。.\s]*", re.IGNORECASE),
@@ -191,6 +193,9 @@ def _normalize_session_config(model_config: dict | None) -> dict:
     ui = dict(config.get("ui", {}) if isinstance(config.get("ui"), dict) else {})
     runtime = dict(config.get("runtime", {}) if isinstance(config.get("runtime"), dict) else {})
     compaction = dict(runtime.get("compaction", {}) if isinstance(runtime.get("compaction"), dict) else {})
+    preferences = _normalize_session_preferences(
+        config.get("preferences") if isinstance(config.get("preferences"), dict) else {}
+    )
 
     ui.setdefault("pinned", False)
     ui.setdefault("pinned_at", None)
@@ -221,7 +226,65 @@ def _normalize_session_config(model_config: dict | None) -> dict:
     runtime["compaction"] = compaction
     config["ui"] = ui
     config["runtime"] = runtime
+    config["preferences"] = preferences
     return config
+
+
+def _normalize_preference_gender(value: Any) -> str | None:
+    normalized = _compact_text(str(value or "")).lower()
+    if not normalized:
+        return None
+    if normalized in {"female", "women", "woman", "womens", "女", "女装"}:
+        return "female"
+    if normalized in {"male", "men", "man", "mens", "男", "男装"}:
+        return "male"
+    return None
+
+
+def _normalize_preference_quarter(value: Any) -> str | None:
+    return normalize_quarter_value(value)
+
+
+def _normalize_preference_year(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    return year if 1900 <= year <= 2100 else None
+
+
+def _normalize_preference_taste_profile_id(value: Any) -> str | None:
+    normalized = _compact_text(str(value or ""))
+    if not normalized:
+        return None
+    try:
+        return _uuid(normalized)
+    except Exception:
+        return None
+
+
+def _normalize_preference_taste_weight(value: Any) -> float:
+    if value in (None, ""):
+        return DEFAULT_TASTE_PROFILE_WEIGHT
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return DEFAULT_TASTE_PROFILE_WEIGHT
+    return max(0.0, min(1.0, numeric))
+
+
+def _normalize_session_preferences(preferences: dict | None) -> dict[str, Any]:
+    payload = dict(preferences or {})
+    taste_profile_id = _normalize_preference_taste_profile_id(payload.get("taste_profile_id"))
+    return {
+        "gender": _normalize_preference_gender(payload.get("gender")),
+        "quarter": _normalize_preference_quarter(payload.get("quarter")),
+        "year": _normalize_preference_year(payload.get("year")),
+        "taste_profile_id": taste_profile_id,
+        "taste_profile_weight": _normalize_preference_taste_weight(payload.get("taste_profile_weight")),
+    }
 
 
 def _session_ui_state(model_config: dict | None) -> dict:
@@ -259,6 +322,7 @@ def _session_ui_state(model_config: dict | None) -> dict:
                 or 0
             ),
         ),
+        "preferences": dict(config.get("preferences", {}) if isinstance(config.get("preferences"), dict) else {}),
     }
 
 
@@ -269,10 +333,14 @@ def _merge_session_state(
     execution_status: str | None = None,
     run_id: str | None = None,
     error_message: str | None = None,
+    preferences: dict[str, Any] | None = None,
 ) -> dict:
     config = _normalize_session_config(model_config)
     ui = dict(config.get("ui", {}) if isinstance(config.get("ui"), dict) else {})
     runtime = dict(config.get("runtime", {}) if isinstance(config.get("runtime"), dict) else {})
+    current_preferences = dict(
+        config.get("preferences", {}) if isinstance(config.get("preferences"), dict) else {}
+    )
 
     if pinned is not None:
         ui["pinned"] = pinned
@@ -308,7 +376,34 @@ def _merge_session_state(
 
     config["ui"] = ui
     config["runtime"] = runtime
+    if preferences is not None:
+        current_preferences.update(preferences)
+    config["preferences"] = _normalize_session_preferences(current_preferences)
     return config
+
+
+def _did_retrieval_preferences_change(
+    previous_config: dict | None,
+    next_config: dict | None,
+) -> bool:
+    previous = _normalize_session_config(previous_config).get("preferences", {})
+    current = _normalize_session_config(next_config).get("preferences", {})
+    previous_payload = _normalize_session_preferences(previous if isinstance(previous, dict) else {})
+    current_payload = _normalize_session_preferences(current if isinstance(current, dict) else {})
+    return previous_payload != current_payload
+
+
+def _reset_runtime_after_preference_change(config: dict | None) -> dict:
+    next_config = _normalize_session_config(config)
+    runtime = dict(next_config.get("runtime", {}) if isinstance(next_config.get("runtime"), dict) else {})
+    compaction = dict(runtime.get("compaction", {}) if isinstance(runtime.get("compaction"), dict) else {})
+    current_thread_version = max(1, int(compaction.get("thread_version", 1) or 1))
+    compaction["thread_version"] = current_thread_version + 1
+    compaction["pending_bootstrap_thread_version"] = None
+    runtime["compaction"] = compaction
+    runtime["agent_state"] = {}
+    next_config["runtime"] = runtime
+    return next_config
 
 
 def _session_compaction_state(model_config: dict | None) -> dict[str, Any]:
@@ -505,6 +600,7 @@ def create_session(
     user_id: int,
     title: str = DEFAULT_SESSION_TITLE,
     model_config: dict | None = None,
+    preferences: dict[str, Any] | None = None,
 ) -> dict:
     """Create a new chat session for a user."""
     session_id = str(uuid.uuid4())
@@ -512,6 +608,8 @@ def create_session(
     config = _normalize_session_config(
         model_config or {"model": settings.LLM_MODEL, "temperature": settings.LLM_TEMPERATURE}
     )
+    if preferences is not None:
+        config = _merge_session_state(config, preferences=preferences)
 
     with _get_pg_conn() as conn:
         conn.execute(
@@ -623,6 +721,7 @@ def update_session_preferences(
     *,
     title: str | None = None,
     pinned: bool | None = None,
+    preferences: dict[str, Any] | None = None,
 ) -> dict | None:
     """Update mutable session preferences and return the updated session."""
     with _get_pg_conn() as conn:
@@ -642,7 +741,10 @@ def update_session_preferences(
         next_config = _merge_session_state(
             current_config,
             pinned=pinned,
+            preferences=preferences,
         )
+        if preferences is not None and _did_retrieval_preferences_change(current_config, next_config):
+            next_config = _reset_runtime_after_preference_change(next_config)
         if title is not None:
             ui = dict(next_config.get("ui", {}) if isinstance(next_config.get("ui"), dict) else {})
             ui["title_source"] = "manual"
@@ -675,6 +777,36 @@ def touch_session(session_id: str):
             (_uuid(session_id),),
         )
         conn.commit()
+
+
+def reset_session_runtime_checkpoint(session_id: str) -> int | None:
+    """Bump thread_version and clear volatile agent runtime after checkpoint corruption.
+
+    This keeps persisted messages/session metadata intact while forcing LangGraph
+    to resume on a fresh checkpoint thread.
+    """
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            "SELECT model_config FROM chat_sessions WHERE id = %s",
+            (_uuid(session_id),),
+        ).fetchone()
+        if not row:
+            return None
+
+        next_config = _reset_runtime_after_preference_change(
+            dict(row[0]) if row[0] else {}
+        )
+        compaction = _session_compaction_state(next_config)
+        conn.execute(
+            """
+            UPDATE chat_sessions
+            SET model_config = %s, updated_at = NOW()
+            WHERE id = %s
+            """,
+            (psycopg.types.json.Json(next_config), _uuid(session_id)),
+        )
+        conn.commit()
+        return int(compaction.get("thread_version", 1) or 1)
 
 
 def set_session_execution_status(

@@ -53,6 +53,7 @@ from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registr
 from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
 from ..services.style_knowledge_service import search_style_knowledge
 from ..services.style_feedback_service import record_style_gap_feedback
+from ..value_normalization import normalize_quarter_list, normalize_quarter_value, normalize_string_list_value
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
 from .query_context import remember_session_style, set_query_context, merge_query_contexts
 from ..config import settings
@@ -272,7 +273,8 @@ _TREND_FACET_KEYS = {
     "category": "categories",
     "style": "style",
     "gender": "gender",
-    "season": "season",
+    "quarter": "quarter",
+    "season": "quarter",
     "year": "year",
 }
 
@@ -283,7 +285,8 @@ _trend_cache: dict[str, tuple[float, str]] = {}
 _TREND_PAYLOAD_SELECTORS = {
     "style": ["style"],
     "gender": ["gender"],
-    "season": ["season"],
+    "quarter": ["quarter"],
+    "season": ["quarter"],
     "year": ["year"],
     "color": ["garments"],
     "fabric": ["garments"],
@@ -302,6 +305,30 @@ def _normalize_trend_value(value: object) -> str | None:
     return normalized or None
 
 
+def _canonicalize_temporal_dimension(value: str | None) -> str:
+    normalized = (_normalize_optional_tool_string(value) or "").lower()
+    if normalized == "season":
+        return "quarter"
+    return normalized
+
+
+def _format_filter_entry(filter_item: dict) -> str:
+    if filter_item["type"] == "category":
+        return f"category={filter_item['value']}"
+    if filter_item["type"] == "garment_tag":
+        return f"{filter_item['key']}={filter_item['value'].split(':')[1]}"
+
+    key = str(filter_item.get("key", "")).strip()
+    value = filter_item.get("value", "")
+    if key == "season":
+        key = "quarter"
+    if key == "quarter":
+        normalized = normalize_quarter_value(value)
+        if normalized:
+            value = normalized
+    return f"{key}={value}"
+
+
 def _build_trend_cache_key(
     *,
     dimension: str,
@@ -311,7 +338,7 @@ def _build_trend_cache_key(
     pattern: Optional[str],
     silhouette: Optional[str],
     brand: Optional[str],
-    season: Optional[list[str]],
+    quarter: Optional[list[str]],
     year_min: Optional[int],
     top_n: int,
     search: Optional[str],
@@ -324,7 +351,7 @@ def _build_trend_cache_key(
         "pattern": (pattern or "").lower(),
         "silhouette": (silhouette or "").lower(),
         "brand": (brand or "").lower(),
-        "season": sorted([s.lower() for s in (season or [])]),
+        "quarter": normalize_quarter_list(quarter),
         "year_min": year_min,
         "top_n": top_n,
         "search": (search or "").lower(),
@@ -373,16 +400,10 @@ def _count_trend_values_from_payload(
                 counter[value] = counter.get(value, 0) + 1
         return
 
-    if dimension == "season":
-        seasons = payload.get("season", [])
-        if isinstance(seasons, list):
-            season_values = seasons
-        else:
-            season_values = [seasons]
-        for season_value in season_values:
-            value = _normalize_trend_value(season_value)
-            if value:
-                counter[value] = counter.get(value, 0) + 1
+    if dimension in {"season", "quarter"}:
+        quarter_value = normalize_quarter_value(payload.get("quarter") or payload.get("season"))
+        if quarter_value:
+            counter[quarter_value] = counter.get(quarter_value, 0) + 1
         return
 
     if dimension == "year":
@@ -511,7 +532,7 @@ def _compact_fashion_vision_result(analysis: dict) -> dict:
             "color": hard_filters.get("color", []),
             "fabric": hard_filters.get("fabric", []),
             "gender": hard_filters.get("gender", ""),
-            "season": hard_filters.get("season", []),
+            "quarter": hard_filters.get("quarter", []),
         },
         "follow_up_questions_zh": merged.get("follow_up_questions_zh", []),
     }
@@ -608,12 +629,13 @@ def search_style(
     - canonical style match
     - compact style features
     - retrieval_query_en for semantic search
-    - suggested concrete filters with lower failure risk
+    - optional concrete filters with lower failure risk
 
     Typical next step:
     1. call search_style(query)
     2. use retrieval_plan.retrieval_query_en to call start_collection(...)
-    3. only then add high-confidence concrete filters if needed
+    3. inspect/show the style-grounded pool first
+    4. only then add high-confidence concrete filters if needed
     """
     _ensure_run_active(config, stage="search_style:start")
     try:
@@ -640,8 +662,10 @@ def search_style(
         style_retrieval_query = str(retrieval_plan.get("retrieval_query_en", "")).strip()
         style_rich_text = str(payload.get("rich_text", "")).strip() or str(retrieval_plan.get("style_rich_text", "")).strip()
         style_name = str(primary_style.get("style_name", "")).strip()
+        match_confidence = str(payload.get("match_confidence", "") or "").strip().lower()
+        should_auto_ground = match_confidence != "candidate"
 
-        if style_retrieval_query or style_rich_text:
+        if should_auto_ground and (style_retrieval_query or style_rich_text):
             remember_session_style(
                 thread_id,
                 style_retrieval_query=style_retrieval_query,
@@ -660,12 +684,13 @@ def search_style(
                 ),
             )
 
-        update_session_semantics(
-            thread_id=thread_id,
-            explicit_style_name=style_name or None,
-            style_retrieval_query=style_retrieval_query or None,
-            style_rich_text=style_rich_text or None,
-        )
+        if should_auto_ground:
+            update_session_semantics(
+                thread_id=thread_id,
+                explicit_style_name=style_name or None,
+                style_retrieval_query=style_retrieval_query or None,
+                style_rich_text=style_rich_text or None,
+            )
         _persist_runtime_semantics(config=config, thread_id=thread_id)
     elif payload.get("status") == "not_found":
         try:
@@ -758,11 +783,11 @@ def start_collection(
                 f"Collection started with {count} images using {len(image_vectors)} uploaded image(s). Use add_filter to narrow down."
                 if image_vectors and not style_retrieval_query
                 else (
-                    f"Collection started with {count} images using style knowledge grounding. Use add_filter to narrow down."
+                    f"Collection started with {count} images using style knowledge grounding. Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
                     if style_retrieval_query and not image_vectors
                     else (
                         f"Collection started with {count} images using {len(image_vectors)} uploaded image(s) and style knowledge grounding. "
-                        "Use add_filter to narrow down."
+                        "Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
                     )
                 )
             )
@@ -789,7 +814,7 @@ def add_filter(
       you normally MUST pass the `category` argument.
     - Runtime harness exception: if the current turn or session already implies exactly one category,
       the system may auto-bind the garment attribute to that category.
-    - If dimension is an image attribute (brand, gender, season, year_min, image_type), DO NOT pass `category`.
+    - If dimension is an image attribute (brand, gender, quarter, year_min, image_type), DO NOT pass `category`.
 
     Returns: remaining count. If 0, suggests available values — DO NOT add this filter.
     """
@@ -802,7 +827,7 @@ def add_filter(
     thread_id = get_thread_id(config)
     cancel_check = _cancel_check_from_config(config, stage="add_filter:compute")
 
-    dimension = (_normalize_optional_tool_string(dimension) or "").lower()
+    dimension = _canonicalize_temporal_dimension(dimension)
     value = _normalize_optional_tool_string(value)
     if not dimension and _should_autobind_brand_dimension(thread_id, value=value):
         dimension = "brand"
@@ -820,10 +845,18 @@ def add_filter(
         )
     if category:
         category = (_normalize_optional_tool_string(category) or "").lower() or None
+    if dimension == "quarter":
+        value = normalize_quarter_value(value)
+        if value is None:
+            return _structured_argument_error(
+                dimension="quarter",
+                value="",
+                reason='Filter "quarter" requires a valid quarter value such as 早春 / 春夏 / 早秋 / 秋冬 / Resort / SS / FW.',
+            )
 
     GARMENT_TAG_DIMS = {"color", "fabric", "pattern", "silhouette"}
     GARMENT_NESTED_DIMS = {"sleeve_length", "sleeve", "garment_length", "length", "collar"}
-    meta_dims = {"brand", "gender", "season", "year_min", "image_type"}
+    meta_dims = {"brand", "gender", "quarter", "year_min", "image_type"}
     abstract_style_dims = {"style", "mood", "vibe"}
 
     DIM_TO_FIELD = {"sleeve_length": "sleeve", "sleeve": "sleeve",
@@ -942,7 +975,10 @@ def add_filter(
     test_filters = session["filters"] + [entry]
     test_session = dict(session)
     test_session["filters"] = test_filters
-    count = count_session(client, test_session, cancel_check=cancel_check)
+    # Validation must use an exact count. Qdrant's approximate count is fast, but
+    # it can over-report matches for nested garment filters and falsely accept
+    # impossible add_filter requests.
+    count = count_session(client, test_session, cancel_check=cancel_check, exact=True)
 
     if count > 0:
         clear_invalid_filter_attempt(
@@ -954,14 +990,7 @@ def add_filter(
         session["filters"].append(entry)
         set_session(config, session)
         _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
-        filter_summary = []
-        for f in session["filters"]:
-            if f["type"] == "category":
-                filter_summary.append(f"category={f['value']}")
-            elif f["type"] == "garment_tag":
-                filter_summary.append(f"{f['key']}={f['value'].split(':')[1]}")
-            else:
-                filter_summary.append(f"{f['key']}={f['value']}")
+        filter_summary = [_format_filter_entry(f) for f in session["filters"]]
 
         return json.dumps({
             "action": "filter_added",
@@ -1021,7 +1050,7 @@ def remove_filter(
     session["filters"] = new_filters
     set_session(config, session)
     _persist_agent_runtime_state(config=config, thread_id=get_thread_id(config), session=session)
-    count = count_session(client, session, cancel_check=cancel_check)
+    count = count_session(client, session, cancel_check=cancel_check, exact=False)
 
     return json.dumps({
         "action": "filter_removed",
@@ -1074,7 +1103,7 @@ def peek_collection(
         peek_results.append({
             "brand": p.payload.get("brand", "Unknown"),
             "style": p.payload.get("style", ""),
-            "season": p.payload.get("season", ""),
+            "quarter": normalize_quarter_value(p.payload.get("quarter") or p.payload.get("season")) or "",
             "year": p.payload.get("year", 0),
             "garments": ", ".join(garment_details),
         })
@@ -1106,14 +1135,7 @@ def show_collection(
     cancel_check = _cancel_check_from_config(config, stage="show_collection:compute")
     count = count_session(client, session, cancel_check=cancel_check)
 
-    filter_summary = []
-    for f in session["filters"]:
-        if f["type"] == "category":
-            filter_summary.append(f"category={f['value']}")
-        elif f["type"] == "garment_tag":
-            filter_summary.append(f"{f['key']}={f['value'].split(':')[1]}")
-        else:
-            filter_summary.append(f"{f['key']}={f['value']}")
+    filter_summary = [_format_filter_entry(f) for f in session["filters"]]
 
     serializable_session = _serialize_search_session(session)
 
@@ -1144,6 +1166,7 @@ def show_collection(
         "action": "show_collection",
         "search_request_id": search_request_id,
         "total": count,
+        "query": str(session.get("query", "") or ""),
         "filters_applied": filter_summary,
         "message": f"Showing {count} matching images in paginated results. Filters applied: {len(filter_summary)}.",
         "sample_images": sample_images,
@@ -1157,7 +1180,7 @@ def show_collection(
 @tool
 def explore_colors(
     color: str,
-    categories: Optional[list[str]] = None,
+    categories: Optional[list[str] | str] = None,
     brand: Optional[str] = None,
     config: Annotated[RunnableConfig, InjectedToolArg] = None,
 ) -> str:
@@ -1172,7 +1195,8 @@ def explore_colors(
     collection = get_collection()
     client = get_qdrant()
     cancel_check = _cancel_check_from_config(config, stage="explore_colors:compute")
-    qdrant_filter = build_qdrant_filter(categories=categories, brand=brand)
+    normalized_categories = [item.lower() for item in normalize_string_list_value(categories)]
+    qdrant_filter = build_qdrant_filter(categories=normalized_categories, brand=brand)
     pts = scroll_all(client, collection, scroll_filter=qdrant_filter, cancel_check=cancel_check)
 
     refs = COLOR_KEYWORDS.get(color.lower())
@@ -1226,13 +1250,13 @@ def explore_colors(
 @tool
 def analyze_trends(
     dimension: Optional[str],
-    categories: Optional[list[str]] = None,
+    categories: Optional[list[str] | str] = None,
     fabric: Optional[str] = None,
     color: Optional[str] = None,
     pattern: Optional[str] = None,
     silhouette: Optional[str] = None,
     brand: Optional[str] = None,
-    season: Optional[list[str]] = None,
+    quarter: Optional[list[str] | str] = None,
     year_min: Optional[int] = None,
     top_n: int = 30,
     search: Optional[str] = None,
@@ -1244,8 +1268,8 @@ def analyze_trends(
         dimension: Which attribute to analyze. Supported values:
             Garment-level: "color", "fabric", "pattern", "silhouette",
                           "sleeve_length", "garment_length", "collar"
-            Image-level:   "brand", "style", "category", "season", "year", "gender"
-        categories, fabric, color, pattern, silhouette, brand, season, year_min: Optional filters
+            Image-level:   "brand", "style", "category", "quarter", "year", "gender"
+        categories, fabric, color, pattern, silhouette, brand, quarter, year_min: Optional filters
         top_n: How many top values to return (default 30, increase for rare labels)
         search: Optional fuzzy search term — only show values containing this text.
             Example: search="hound" will match "houndstooth", "hound's tooth", etc.
@@ -1253,9 +1277,11 @@ def analyze_trends(
     _ensure_run_active(config, stage="analyze_trends:start")
     thread_id = get_thread_id(config) if config else ""
     cancel_check = _cancel_check_from_config(config, stage="analyze_trends:compute")
-    dimension = (_normalize_optional_tool_string(dimension) or "").lower()
+    dimension = _canonicalize_temporal_dimension(dimension)
+    normalized_categories = [item.lower() for item in normalize_string_list_value(categories)]
     brand = _normalize_optional_tool_string(brand)
     search = _normalize_optional_tool_string(search)
+    normalized_quarters = normalize_quarter_list(quarter)
 
     if not dimension and thread_id and _should_autobind_brand_dimension(thread_id, value=search, brand=brand):
         dimension = "brand"
@@ -1269,13 +1295,13 @@ def analyze_trends(
 
     cache_key = _build_trend_cache_key(
         dimension=dimension,
-        categories=categories,
+        categories=normalized_categories,
         fabric=fabric,
         color=color,
         pattern=pattern,
         silhouette=silhouette,
         brand=brand,
-        season=season,
+        quarter=normalized_quarters,
         year_min=year_min,
         top_n=top_n,
         search=search,
@@ -1287,11 +1313,16 @@ def analyze_trends(
     collection = get_collection()
     client = get_qdrant()
 
-    qdrant_filter = build_qdrant_filter(categories=categories, brand=brand, season=season, year_min=year_min)
+    qdrant_filter = build_qdrant_filter(
+        categories=normalized_categories,
+        brand=brand,
+        quarter=normalized_quarters,
+        year_min=year_min,
+    )
 
     tag_conditions = []
-    if categories:
-        for cat in categories:
+    if normalized_categories:
+        for cat in normalized_categories:
             cat = cat.lower()
             if fabric:
                 tag_conditions.append(f"{cat}:{fabric.lower()}")
