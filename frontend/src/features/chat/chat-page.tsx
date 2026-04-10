@@ -179,8 +179,10 @@ export function ChatPage() {
     applyDrawerTasteProfile,
   } = useChat(
     activeSessionId,
-    draftPreferences.taste_profile_id ?? null,
-    draftPreferences.taste_profile_weight ?? 0.24,
+    {
+      taste_profile_id: draftPreferences.taste_profile_id ?? null,
+      taste_profile_weight: draftPreferences.taste_profile_weight ?? 0.24,
+    },
   )
   const isSessionRunning = activeSession?.execution_status === 'running'
   const isSessionStopping = activeSession?.execution_status === 'stopping'
@@ -530,6 +532,7 @@ export function ChatPage() {
                     msg={msg}
                     onOpenDrawer={openDrawerFromSearchRequestId}
                     onMessageRefClick={handleMessageRefClick}
+                    retrievalPreferences={draftPreferences}
                   />
                 ))}
                 {isLoading && <LoadingIndicator />}

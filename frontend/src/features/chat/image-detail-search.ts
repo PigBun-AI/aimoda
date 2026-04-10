@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 
 import { searchByColor, searchSimilar } from './chat-api'
+import { DEFAULT_IMAGE_SEARCH_PAGE_SIZE } from './chat-api'
 import type { SearchByColorParams, SearchResponse, SearchSimilarParams } from './chat-api'
+import { scrollPageAnchorIntoView } from '@/lib/page-scroll'
 
 export type DetailSearchTarget =
   | { type: 'brand'; key: string }
@@ -52,15 +54,6 @@ function getViewportWidth() {
   return typeof window === 'undefined' ? 1280 : window.innerWidth
 }
 
-function scrollResultsIntoView(target: HTMLElement | null) {
-  if (!target || typeof window === 'undefined') return
-  const rect = target.getBoundingClientRect()
-  const stickyHeader = document.querySelector<HTMLElement>('[data-image-detail-header="true"]')
-  const stickyHeaderOffset = stickyHeader ? stickyHeader.getBoundingClientRect().height + 24 : 88
-  const top = Math.max(window.scrollY + rect.top - stickyHeaderOffset, 0)
-  window.scrollTo({ top, behavior: 'smooth' })
-}
-
 export function getImageDetailGridColumns(viewportWidth: number) {
   if (viewportWidth >= 1536) return 5
   if (viewportWidth >= 1280) return 4
@@ -69,7 +62,8 @@ export function getImageDetailGridColumns(viewportWidth: number) {
 }
 
 export function getImageDetailSearchPageSize(viewportWidth: number) {
-  return getImageDetailGridColumns(viewportWidth) * 3
+  void viewportWidth
+  return DEFAULT_IMAGE_SEARCH_PAGE_SIZE
 }
 
 function getTargetFromQuery(query: DetailSearchQuery): DetailSearchTarget {
@@ -164,7 +158,7 @@ export function useImageDetailSearch(scrollTargetRef: RefObject<HTMLElement>) {
 
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
-          scrollResultsIntoView(scrollTargetRef.current)
+          scrollPageAnchorIntoView(scrollTargetRef.current)
         })
       })
     } catch (error) {

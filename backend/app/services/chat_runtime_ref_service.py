@@ -64,18 +64,31 @@ def _grounded_brand_candidates(
     *,
     blocks: list[dict[str, Any]],
     collection_payload: dict[str, Any] | None,
+    session_id: str,
 ) -> list[str]:
     brands: list[str] = []
 
     if collection_payload:
-        sample_images = collection_payload.get("sample_images")
-        if isinstance(sample_images, list):
-            for item in sample_images:
-                if not isinstance(item, dict):
-                    continue
-                brand = str(item.get("brand", "") or "").strip()
-                if brand:
-                    brands.append(brand)
+        search_request_id = str(collection_payload.get("search_request_id", "") or "").strip()
+        if search_request_id:
+            try:
+                from ..agent.qdrant_utils import get_qdrant
+                from ..agent.session_state import get_session_page
+                from ..services.chat_service import get_artifact
+
+                artifact = get_artifact(search_request_id, session_id=session_id, artifact_type="collection_result")
+                search_session = artifact.get("metadata", {}).get("search_session") if artifact else None
+                if isinstance(search_session, dict):
+                    client = get_qdrant()
+                    for point in get_session_page(client, dict(search_session), offset=0, limit=8):
+                        payload = getattr(point, "payload", None)
+                        if not isinstance(payload, dict):
+                            continue
+                        brand = str(payload.get("brand", "") or "").strip()
+                        if brand:
+                            brands.append(brand)
+            except Exception:
+                pass
 
     style_payload = _extract_latest_style_payload(blocks)
     if style_payload:
@@ -173,7 +186,11 @@ def attach_runtime_brand_refs(
 
     collection_payloads = extract_collection_result_payloads(blocks)
     collection_payload = collection_payloads[-1] if collection_payloads else None
-    grounded_brands = _grounded_brand_candidates(blocks=blocks, collection_payload=collection_payload)
+    grounded_brands = _grounded_brand_candidates(
+        blocks=blocks,
+        collection_payload=collection_payload,
+        session_id=session_id,
+    )
 
     filter_map = _parse_filter_map(collection_payload or {})
     current_brand = str(filter_map.get("brand", "") or "").strip()

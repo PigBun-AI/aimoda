@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -13,6 +13,15 @@ interface SearchResultsGridProps {
   isLoading: boolean
 }
 
+function formatBrand(brand: string): string {
+  if (!brand) return ''
+  return brand
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
 export function SearchResultsGrid({
   searchResults,
   labelName,
@@ -21,9 +30,33 @@ export function SearchResultsGrid({
 }: SearchResultsGridProps) {
   const { t } = useTranslation('common')
   const gridRef = useRef<HTMLDivElement>(null)
+  const [columnCount, setColumnCount] = useState(4)
 
   const { images, total, page, page_size } = searchResults
   const totalPages = Math.ceil(total / page_size)
+
+  useEffect(() => {
+    const gridEl = gridRef.current
+    if (!gridEl) return
+
+    const updateColumns = () => {
+      const width = gridEl.clientWidth
+      const minCardWidth = 150
+      const gap = 16
+      const maxColumns = 7
+      const minColumns = width < 360 ? 2 : 3
+      const next = Math.floor((width + gap) / (minCardWidth + gap))
+      setColumnCount(Math.max(minColumns, Math.min(maxColumns, next || minColumns)))
+    }
+
+    updateColumns()
+    if (typeof ResizeObserver === 'undefined') {
+      return
+    }
+    const observer = new ResizeObserver(updateColumns)
+    observer.observe(gridEl)
+    return () => observer.disconnect()
+  }, [])
 
   const handleImageClick = useCallback((image: ImageResult) => {
     window.open(`/image/${image.image_id}`, '_blank', 'noopener')
@@ -31,40 +64,45 @@ export function SearchResultsGrid({
 
   if (images.length === 0 && !isLoading) {
     return (
-      <div className="mb-6 mt-6 w-full border border-border px-4 py-12 text-center sm:px-6">
-        <p className="type-chat-label text-muted-foreground">{t('noRelatedImages')}</p>
-      </div>
+      <section className="border-t border-border/80 pt-6">
+        <div className="flex min-h-[280px] items-center justify-center">
+          <div className="flex max-w-sm flex-col items-center gap-3 border border-border/80 px-6 py-7 text-center">
+            <p className="type-chat-label text-foreground/88">{t('noRelatedImages')}</p>
+            <p className="type-chat-meta leading-relaxed text-muted-foreground">{t('drawerEmptyHint')}</p>
+          </div>
+        </div>
+      </section>
     )
   }
 
   return (
-    <div ref={gridRef} className="mb-6 mt-6 w-full border border-border/80 bg-background">
-      <div className="grid gap-4 border-b border-border px-4 py-4 sm:px-6 sm:py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <h3 className="type-ed-title-sm truncate text-foreground">
+    <section className="border-t border-border/80 pt-6">
+      <div className="flex flex-col gap-3 pb-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <h3 className="type-chat-title max-w-[42ch] text-balance text-foreground/92 sm:max-w-[52ch]">
             {labelName}
           </h3>
-          <p className="type-chat-kicker text-muted-foreground">
-            {t('imageCountSummary', { count: total })}
+          <p className="type-chat-meta whitespace-nowrap text-muted-foreground">
+            {total} {t('imageUnit')}
           </p>
         </div>
 
         {totalPages > 1 && (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1 self-start sm:mt-0.5">
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page <= 1 || isLoading}
-              className="control-icon-sm flex items-center justify-center border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+              className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="type-chat-kicker min-w-[72px] text-center text-muted-foreground">
+            <span className="type-chat-meta min-w-[76px] text-center text-muted-foreground">
               {page} / {totalPages}
             </span>
             <button
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages || isLoading}
-              className="control-icon-sm flex items-center justify-center border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+              className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
             >
               <ChevronRight size={16} />
             </button>
@@ -72,66 +110,51 @@ export function SearchResultsGrid({
         )}
       </div>
 
-      {isLoading && (
-        <div className="flex items-center justify-center gap-2 px-4 py-16 sm:px-6">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          <span className="type-chat-kicker text-muted-foreground">{t('searching')}</span>
+      {isLoading ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center">
+          <Loader2 size={18} className="animate-spin text-muted-foreground" />
+          <p className="type-chat-meta text-muted-foreground">{t('searching')}</p>
         </div>
-      )}
-
-      {!isLoading && (
-        <div className="grid grid-cols-2 gap-px bg-border md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+      ) : (
+        <div
+          ref={gridRef}
+          className="grid gap-y-7 gap-x-4"
+          style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+        >
           {images.map(image => (
-            <div
-              key={image.image_id}
-              className="group relative cursor-pointer overflow-hidden bg-background"
-              style={{ aspectRatio: '1 / 2' }}
-              onClick={() => handleImageClick(image)}
-            >
-              <FashionImage image={image} className="h-full w-full" thumbnailWidth={1280} />
-              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
-              {(image.brand || image.year) && (
-                <div className="absolute inset-x-0 bottom-0 border-t border-white/15 bg-gradient-to-t from-black/72 to-transparent p-3 opacity-0 transition-opacity group-hover:opacity-100">
-                  <div className="space-y-1 text-white">
-                    {image.brand && (
-                      <div className="type-chat-kicker truncate">
-                        {image.brand}
-                      </div>
-                    )}
-                    {image.year && (
-                      <div className="type-chat-meta text-white/75">{image.year}</div>
-                    )}
-                  </div>
+            <div key={image.image_id} className="w-full space-y-2.5">
+              <div
+                className="group relative w-full cursor-pointer overflow-hidden bg-background"
+                style={{ aspectRatio: '1 / 2' }}
+                onClick={() => handleImageClick(image)}
+              >
+                <FashionImage image={image} className="h-full w-full" thumbnailWidth={1280} />
+                <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
+              </div>
+
+              <div className="space-y-1.5 text-left">
+                <div className="flex min-h-[0.875rem] items-center gap-2">
+                  {image.year != null && (
+                    <div className="type-chat-kicker text-muted-foreground/92">
+                      {String(image.year)}
+                    </div>
+                  )}
                 </div>
-              )}
+                {image.brand && (
+                  <div className="type-chat-body leading-[1.48] text-foreground/92">
+                    {formatBrand(image.brand)}
+                  </div>
+                )}
+                {image.quarter && (
+                  <div className="type-chat-meta truncate text-muted-foreground">
+                    {image.quarter}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>
       )}
-
-      {totalPages > 1 && !isLoading && (
-        <div className="flex flex-wrap items-center justify-center gap-2 border-t border-border px-4 py-4 sm:px-6">
-          <button
-            onClick={() => onPageChange(page - 1)}
-            disabled={page <= 1}
-            className="type-chat-action control-pill-sm flex items-center gap-1 border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-          >
-            <ChevronLeft size={14} />
-            {t('previous')}
-          </button>
-          <span className="type-chat-kicker min-w-[72px] text-center text-muted-foreground">
-            {page} / {totalPages}
-          </span>
-          <button
-            onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages || isLoading}
-            className="type-chat-action control-pill-sm flex items-center gap-1 border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
-          >
-            {t('next')}
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      )}
-    </div>
+    </section>
   )
 }

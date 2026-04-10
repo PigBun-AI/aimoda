@@ -1,7 +1,8 @@
 import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse
 
 from ..dependencies import get_current_user, extract_device_context
 from ..models import (
@@ -13,14 +14,38 @@ from ..models import (
     SmsRegisterRequest,
     SmsSendCodeRequest,
 )
+from ..config import settings
 from ..services import auth_service
+from ..services.auth_token import get_refresh_token_ttl_seconds
 from ..services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    response.set_cookie(
+        key=settings.AUTH_REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        max_age=get_refresh_token_ttl_seconds(),
+        httponly=True,
+        secure=settings.ENV == "production",
+        samesite="lax",
+        path="/api",
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=settings.AUTH_REFRESH_COOKIE_NAME,
+        path="/api",
+        httponly=True,
+        secure=settings.ENV == "production",
+        samesite="lax",
+    )
+
+
 @router.post("/login")
-async def login(body: LoginRequest, request: Request):
+async def login(body: LoginRequest, request: Request, response: Response):
     ctx = extract_device_context(request)
     result = auth_service.login(
         email=body.email,
@@ -33,7 +58,7 @@ async def login(body: LoginRequest, request: Request):
         result.get("revoked_session_ids", []),
     )
 
-    response: dict = {
+    payload = {
         "success": True,
         "data": {
             "user": result["user"].model_dump(by_alias=True),
@@ -42,13 +67,14 @@ async def login(body: LoginRequest, request: Request):
     }
 
     if result["kicked_other_devices"]:
-        response["message"] = "您已在其他设备登出"
+        payload["message"] = "您已在其他设备登出"
 
-    return response
+    _set_refresh_cookie(response, result["tokens"].refreshToken)
+    return payload
 
 
 @router.post("/register", status_code=201)
-def register(body: RegisterRequest, request: Request):
+def register(body: RegisterRequest, request: Request, response: Response):
     ctx = extract_device_context(request)
     result = auth_service.register(
         email=body.email,
@@ -57,13 +83,15 @@ def register(body: RegisterRequest, request: Request):
         ip_address=ctx["ip_address"],
     )
 
-    return {
+    payload = {
         "success": True,
         "data": {
             "user": result["user"].model_dump(by_alias=True),
             "tokens": result["tokens"].model_dump(by_alias=True),
         },
     }
+    _set_refresh_cookie(response, result["tokens"].refreshToken)
+    return payload
 
 
 @router.post("/sms/send-code")
@@ -78,7 +106,7 @@ def send_sms_code(body: SmsSendCodeRequest, request: Request):
 
 
 @router.post("/sms/login")
-async def sms_login(body: SmsLoginRequest, request: Request):
+async def sms_login(body: SmsLoginRequest, request: Request, response: Response):
     ctx = extract_device_context(request)
     result = auth_service.login_or_register_by_phone(
         phone=body.phone,
@@ -91,7 +119,7 @@ async def sms_login(body: SmsLoginRequest, request: Request):
         result.get("revoked_session_ids", []),
     )
 
-    response: dict = {
+    payload = {
         "success": True,
         "data": {
             "user": result["user"].model_dump(by_alias=True),
@@ -100,13 +128,14 @@ async def sms_login(body: SmsLoginRequest, request: Request):
     }
 
     if result["kicked_other_devices"]:
-        response["message"] = "您已在其他设备登出"
+        payload["message"] = "您已在其他设备登出"
 
-    return response
+    _set_refresh_cookie(response, result["tokens"].refreshToken)
+    return payload
 
 
 @router.post("/sms/register", status_code=201)
-def sms_register(body: SmsRegisterRequest, request: Request):
+def sms_register(body: SmsRegisterRequest, request: Request, response: Response):
     ctx = extract_device_context(request)
     result = auth_service.register_by_phone(
         phone=body.phone,
@@ -115,6 +144,25 @@ def sms_register(body: SmsRegisterRequest, request: Request):
         ip_address=ctx["ip_address"],
     )
 
+    payload = {
+        "success": True,
+        "data": {
+            "user": result["user"].model_dump(by_alias=True),
+            "tokens": result["tokens"].model_dump(by_alias=True),
+        },
+    }
+    _set_refresh_cookie(response, result["tokens"].refreshToken)
+    return payload
+
+
+@router.post("/refresh")
+def refresh_session(request: Request, response: Response):
+    refresh_token = request.cookies.get(settings.AUTH_REFRESH_COOKIE_NAME)
+    if not refresh_token:
+        return JSONResponse(status_code=401, content={"success": False, "error": "缺少刷新会话"})
+
+    result = auth_service.refresh_session(refresh_token)
+    _set_refresh_cookie(response, result["tokens"].refreshToken)
     return {
         "success": True,
         "data": {
@@ -135,10 +183,14 @@ def get_me(user: Annotated[AuthenticatedUser, Depends(get_current_user)]):
 @router.post("/logout")
 def logout(
     body: LogoutRequest,
+    request: Request,
+    response: Response,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ):
-    if body.refreshToken:
-        auth_service.logout(body.refreshToken)
+    refresh_token = body.refreshToken or request.cookies.get(settings.AUTH_REFRESH_COOKIE_NAME)
+    if refresh_token:
+        auth_service.logout(refresh_token)
+    _clear_refresh_cookie(response)
     return {"success": True, "message": "已登出"}
 
 

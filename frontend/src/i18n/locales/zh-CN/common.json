@@ -131,6 +131,7 @@
   "appliedFilters": "过滤条件",
   "viewAll": "查看全部",
   "resultPreview": "结果预览",
+  "resultPreviewUnavailable": "预览暂时不可用，请打开结果集查看当前排序。",
   "topImageCount": "前 {{count}} 张",
   "galleryNotFound": "图集不存在",
   "backToInspiration": "返回灵感情报站",

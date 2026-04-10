@@ -5,16 +5,22 @@ import { searchSimilar } from './chat-api'
 import { getImageDetailGridColumns, getImageDetailSearchPageSize, useImageDetailSearch } from './image-detail-search'
 
 vi.mock('./chat-api', () => ({
+  DEFAULT_IMAGE_SEARCH_PAGE_SIZE: 50,
   searchSimilar: vi.fn(),
   searchByColor: vi.fn(),
 }))
 
 const mockedSearchSimilar = vi.mocked(searchSimilar)
+const mockedScrollIntoView = vi.fn()
 
 describe('image detail search layout helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.stubGlobal('scrollTo', vi.fn())
+    Element.prototype.scrollIntoView = mockedScrollIntoView
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0)
+      return 0
+    })
   })
 
   it('matches the responsive grid column breakpoints', () => {
@@ -25,10 +31,10 @@ describe('image detail search layout helpers', () => {
   })
 
   it('always returns a page size that fills complete rows', () => {
-    expect(getImageDetailSearchPageSize(390)).toBe(6)
-    expect(getImageDetailSearchPageSize(900)).toBe(9)
-    expect(getImageDetailSearchPageSize(1366)).toBe(12)
-    expect(getImageDetailSearchPageSize(1600)).toBe(15)
+    expect(getImageDetailSearchPageSize(390)).toBe(50)
+    expect(getImageDetailSearchPageSize(900)).toBe(50)
+    expect(getImageDetailSearchPageSize(1366)).toBe(50)
+    expect(getImageDetailSearchPageSize(1600)).toBe(50)
   })
 
   it('reuses the responsive page size when paginating brand results', async () => {
@@ -42,8 +48,8 @@ describe('image detail search layout helpers', () => {
     document.body.appendChild(scrollTarget)
 
     mockedSearchSimilar
-      .mockResolvedValueOnce({ images: [], total: 24, page: 1, page_size: 12, has_more: true })
-      .mockResolvedValueOnce({ images: [], total: 24, page: 2, page_size: 12, has_more: false })
+      .mockResolvedValueOnce({ images: [], total: 24, page: 1, page_size: 50, has_more: true })
+      .mockResolvedValueOnce({ images: [], total: 24, page: 2, page_size: 50, has_more: false })
 
     const { result } = renderHook(() => useImageDetailSearch({ current: scrollTarget }))
 
@@ -63,13 +69,15 @@ describe('image detail search layout helpers', () => {
       expect(mockedSearchSimilar).toHaveBeenNthCalledWith(1, {
         brand: 'balenciaga',
         page: 1,
-        page_size: 12,
+        page_size: 50,
       })
       expect(mockedSearchSimilar).toHaveBeenNthCalledWith(2, {
         brand: 'balenciaga',
         page: 2,
-        page_size: 12,
+        page_size: 50,
       })
     })
+
+    expect(mockedScrollIntoView).toHaveBeenCalled()
   })
 })

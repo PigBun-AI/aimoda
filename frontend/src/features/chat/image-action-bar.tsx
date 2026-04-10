@@ -40,7 +40,7 @@ export function ImageActionBar({ image }: ImageActionBarProps) {
 
   return (
     <>
-      <div className="flex w-full shrink-0 flex-row items-stretch justify-between gap-0 xl:h-full xl:w-[88px] xl:flex-col">
+      <div className="flex w-full shrink-0 flex-row items-stretch justify-between gap-0 lg:h-full lg:w-[80px] lg:flex-col xl:w-[88px]">
         <ActionButton
           icon={<Link2 className="h-[18px] w-[18px]" strokeWidth={1.5} />}
           label={t('copyLink')}
@@ -85,7 +85,7 @@ function ActionButton({ icon, label, onClick }: ActionButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-[64px] flex-1 flex-col items-center justify-center gap-2 border-t border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground first:border-t-0 sm:min-h-[72px] xl:min-h-0 xl:border-b xl:border-t-0"
+      className="flex min-h-[64px] flex-1 flex-col items-center justify-center gap-2 border-t border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground first:border-t-0 sm:min-h-[72px] lg:min-h-0 lg:border-b lg:border-t-0 lg:first:border-b lg:last:border-b-0"
       title={label}
       aria-label={label}
     >

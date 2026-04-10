@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     DATABASE_PATH: str = "/data/fashion-report.db"
     ACCESS_TOKEN_EXPIRES_IN: str = "2h"
     REFRESH_TOKEN_EXPIRES_IN: str = "7d"
+    AUTH_REFRESH_COOKIE_NAME: str = "aimoda_refresh_token"
     UPLOAD_TMP_DIR: str = "/tmp/fashion-report-uploads"
     REPORT_MCP_INTERNAL_TOKEN: str = "aimoda-report-mcp-internal-token"
     REPORT_MCP_SERVICE_USER_ID: int = 1

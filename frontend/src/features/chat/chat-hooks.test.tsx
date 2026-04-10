@@ -5,10 +5,11 @@ import { resetChatMessageStore } from './chat-message-store'
 import { useChat } from './chat-hooks'
 
 vi.mock('./chat-api', () => ({
+  DEFAULT_DRAWER_PAGE_SIZE: 50,
   sendChatSSE: vi.fn(),
   stopChatRun: vi.fn(),
   ChatStreamAbortedError: class ChatStreamAbortedError extends Error {},
-  fetchSearchSessionById: vi.fn(),
+  fetchCachedSearchSessionById: vi.fn(),
   listSessions: vi.fn(),
   createSession: vi.fn(),
   deleteSessionApi: vi.fn(),
@@ -27,9 +28,10 @@ vi.mock('./session-store', () => ({
   useSessionStore: () => sessionStoreMock,
 }))
 
-import { ChatStreamAbortedError, getSessionMessages, sendChatSSE, stopChatRun } from './chat-api'
+import { ChatStreamAbortedError, DEFAULT_DRAWER_PAGE_SIZE, fetchCachedSearchSessionById, getSessionMessages, sendChatSSE, stopChatRun } from './chat-api'
 
 const mockedGetSessionMessages = vi.mocked(getSessionMessages)
+const mockedFetchCachedSearchSessionById = vi.mocked(fetchCachedSearchSessionById)
 const mockedSendChatSSE = vi.mocked(sendChatSSE)
 const mockedStopChatRun = vi.mocked(stopChatRun)
 
@@ -182,6 +184,33 @@ describe('useChat', () => {
     expect(result.current.messages[0]).toMatchObject({
       role: 'user',
       content: [{ type: 'text', text: '帮我找最新秀场外套' }],
+    })
+  })
+
+  it('uses the current session retrieval preferences when opening a drawer artifact', async () => {
+    mockedGetSessionMessages.mockResolvedValueOnce([])
+    mockedFetchCachedSearchSessionById.mockResolvedValueOnce({
+      images: [],
+      total: 0,
+      offset: 0,
+      limit: DEFAULT_DRAWER_PAGE_SIZE,
+      has_more: false,
+    })
+
+    const { result } = renderHook(() => useChat('session-1', {
+      taste_profile_id: 'dna-1',
+      taste_profile_weight: 0.4,
+    }))
+
+    await act(async () => {
+      await result.current.openDrawerFromSearchRequestId('artifact-1')
+    })
+
+    expect(mockedFetchCachedSearchSessionById).toHaveBeenCalledWith('artifact-1', 0, DEFAULT_DRAWER_PAGE_SIZE, 'dna-1', 0.4)
+    expect(result.current.drawerData).toMatchObject({
+      searchRequestId: 'artifact-1',
+      tasteProfileId: 'dna-1',
+      tasteProfileWeight: 0.4,
     })
   })
 })

@@ -75,7 +75,6 @@ export interface SearchResultData {
   message: string
   search_request_id: string
   query?: string
-  sample_images?: ImageResult[]
 }
 
 export interface BundleResultGroup {
