@@ -112,7 +112,7 @@ class ColorIndex:
         gender: str | None = None,
         quarter: str | None = None,
         page: int = 1,
-        page_size: int = 56,
+        page_size: int = 50,
     ) -> dict:
         """Find images with colors similar to target_hex, sorted by score.
 

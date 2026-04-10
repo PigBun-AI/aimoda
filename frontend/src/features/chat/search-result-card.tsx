@@ -1,16 +1,19 @@
 // SearchResultCard — show_collection tool result rendered as a rich card
-// Displays result count, filters, preview thumbnails, and triggers drawer
+// Preview images are hydrated from the same paginated search source as the drawer,
+// so the inline preview and the expanded result set always stay in sync.
 
+import { useEffect, useMemo, useState } from 'react'
 import { Filter, ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { SearchResultData, ImageResult } from './chat-types'
+import { DEFAULT_DRAWER_PAGE_SIZE, fetchCachedSearchSessionById, peekCachedSearchSessionById } from './chat-api'
+import type { SearchResultData, ImageResult, ChatSessionPreferences } from './chat-types'
 import { FashionImage } from './fashion-image'
 import { CHAT_THUMBNAIL_MAX_EDGE } from './oss-image'
 
 interface SearchResultCardProps {
   data: SearchResultData
-  images?: ImageResult[]
   onOpenDrawer: (searchRequestId: string) => void
+  retrievalPreferences?: ChatSessionPreferences | null
 }
 
 function normalizeQuarterLabel(value: string, t: (key: string, options?: Record<string, unknown>) => string): string {
@@ -42,14 +45,85 @@ function formatFilterTag(filter: string, t: (key: string, options?: Record<strin
   return filter
 }
 
-export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCardProps) {
+export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: SearchResultCardProps) {
   const { t } = useTranslation('common')
-  const previewImages = (images?.length ? images : data.sample_images)?.slice(0, 4) ?? []
+  const tasteProfileId = retrievalPreferences?.taste_profile_id ?? null
+  const tasteProfileWeight = retrievalPreferences?.taste_profile_weight ?? 0.24
+  const cachedPreview = useMemo(
+    () => peekCachedSearchSessionById(
+      data.search_request_id,
+      0,
+      DEFAULT_DRAWER_PAGE_SIZE,
+      tasteProfileId,
+      tasteProfileWeight,
+    ),
+    [data.search_request_id, tasteProfileId, tasteProfileWeight],
+  )
+  const [previewImages, setPreviewImages] = useState<ImageResult[]>(() => (cachedPreview?.images ?? []).slice(0, 4))
+  const [previewState, setPreviewState] = useState<'loading' | 'ready' | 'empty' | 'error'>(() => {
+    if (data.total <= 0) return 'empty'
+    if ((cachedPreview?.images ?? []).length > 0) return 'ready'
+    return 'loading'
+  })
   const hasFilters = data.filters_applied.length > 0
   const filterCount = data.filters_applied.length
   const summary = hasFilters
     ? t('searchResultSummaryWithFilters', { count: data.total, filters: filterCount })
     : t('searchResultSummary', { count: data.total })
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!data.search_request_id || data.total <= 0) {
+      setPreviewImages([])
+      setPreviewState('empty')
+      return () => {
+        cancelled = true
+      }
+    }
+
+    const immediate = peekCachedSearchSessionById(
+      data.search_request_id,
+      0,
+      DEFAULT_DRAWER_PAGE_SIZE,
+      tasteProfileId,
+      tasteProfileWeight,
+    )
+    if (immediate) {
+      setPreviewImages((immediate.images ?? []).slice(0, 4))
+      setPreviewState((immediate.images ?? []).length > 0 ? 'ready' : 'empty')
+      return () => {
+        cancelled = true
+      }
+    }
+
+    setPreviewImages([])
+    setPreviewState('loading')
+
+    void fetchCachedSearchSessionById(
+      data.search_request_id,
+      0,
+      DEFAULT_DRAWER_PAGE_SIZE,
+      tasteProfileId,
+      tasteProfileWeight,
+    )
+      .then((response) => {
+        if (cancelled) return
+        const nextImages = (response.images ?? []).slice(0, 4)
+        setPreviewImages(nextImages)
+        setPreviewState(nextImages.length > 0 ? 'ready' : 'empty')
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.error('Failed to hydrate search preview', error)
+        setPreviewImages([])
+        setPreviewState('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [data.search_request_id, data.total, tasteProfileId, tasteProfileWeight])
 
   return (
     <div className="overflow-hidden border border-border/80 bg-background animate-in fade-in slide-in-from-bottom-1 duration-normal">
@@ -114,6 +188,29 @@ export function SearchResultCard({ data, images, onOpenDrawer }: SearchResultCar
                 <PreviewThumbnail key={i} img={img} />
               ))}
             </div>
+          </div>
+        )}
+
+        {previewState === 'loading' && data.search_request_id && data.total > 0 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="type-chat-kicker text-muted-foreground">{t('resultPreview')}</span>
+              <span className="type-chat-meta text-muted-foreground">{t('generatingResults')}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="min-w-0 space-y-1.5">
+                  <div className="animate-pulse bg-muted/70" style={{ aspectRatio: '1 / 2' }} />
+                  <div className="h-3 w-2/3 animate-pulse bg-muted/70" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {previewState === 'error' && data.search_request_id && data.total > 0 && (
+          <div className="type-chat-meta text-muted-foreground">
+            {t('resultPreviewUnavailable')}
           </div>
         )}
       </div>

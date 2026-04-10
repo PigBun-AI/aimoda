@@ -131,6 +131,7 @@
   "appliedFilters": "Applied filters",
   "viewAll": "View all",
   "resultPreview": "Preview",
+  "resultPreviewUnavailable": "Preview is temporarily unavailable. Open the result set to load the current ordering.",
   "topImageCount": "Top {{count}}",
   "galleryNotFound": "Gallery not found",
   "backToInspiration": "Back to Inspiration",

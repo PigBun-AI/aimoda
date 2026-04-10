@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Languages, Moon, Sun, X } from 'lucide-react
 import { useTranslation } from 'react-i18next'
 
 import { useTheme } from '@/components/theme-toggle'
+import { usePageStickyAnchorOffset } from '@/lib/page-scroll'
 
 import { getImageListContext } from './image-context'
 import { ImageInfoPanel } from './image-info-panel'
@@ -56,7 +57,8 @@ export function ImageDetailPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const contextId = searchParams.get('contextId')
-  const searchResultsRef = useRef<HTMLDivElement>(null)
+  const searchResultsAnchorRef = useRef<HTMLDivElement>(null)
+  const pageAnchorOffset = usePageStickyAnchorOffset({ gap: 0 })
 
   const [fetchedImage, setFetchedImage] = useState<ImageResult | null>(null)
   const [isFetching, setIsFetching] = useState(false)
@@ -95,7 +97,7 @@ export function ImageDetailPage() {
     searchByLabel,
     changePage,
     resetSearch,
-  } = useImageDetailSearch(searchResultsRef)
+  } = useImageDetailSearch(searchResultsAnchorRef)
 
   useEffect(() => {
     resetSearch()
@@ -157,7 +159,11 @@ export function ImageDetailPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header data-image-detail-header="true" className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-md">
+      <header
+        data-image-detail-header="true"
+        data-page-sticky-header="true"
+        className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-md"
+      >
         <div className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <Link to="/" className="shrink-0 transition-opacity hover:opacity-70">
@@ -254,8 +260,8 @@ export function ImageDetailPage() {
           <section
             className="overflow-hidden border border-border/80 bg-background lg:h-[calc(100dvh-64px-40px)] xl:h-[calc(100dvh-64px-48px)]"
           >
-            <div className="flex min-h-0 flex-col lg:grid lg:h-full lg:grid-cols-[minmax(280px,320px)_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_88px]">
-              <div className="order-3 min-h-0 border-t border-border lg:order-1 lg:border-r lg:border-t-0 xl:border-b-0">
+            <div className="flex min-h-0 flex-col lg:grid lg:h-full lg:grid-cols-[minmax(280px,320px)_minmax(0,1fr)_80px] xl:grid-cols-[320px_minmax(0,1fr)_88px]">
+              <div className="order-3 min-h-0 border-t border-border lg:order-1 lg:border-r lg:border-t-0">
                 <ImageInfoPanel
                   image={currentImage}
                   activeSearchTarget={activeSearchTarget}
@@ -272,21 +278,28 @@ export function ImageDetailPage() {
                 />
               </div>
 
-              <div className="order-2 min-h-0 border-b border-border bg-background lg:order-3 lg:col-span-2 lg:border-b-0 lg:border-t xl:col-span-1 xl:border-l xl:border-t-0">
+              <div className="order-2 min-h-0 border-b border-border bg-background lg:order-3 lg:border-b-0 lg:border-l lg:border-t-0">
                 <ImageActionBar image={currentImage} />
               </div>
             </div>
           </section>
 
           {searchResults && (
-            <div ref={searchResultsRef} className="mt-8">
-              <SearchResultsGrid
-                searchResults={searchResults}
-                labelName={searchLabel}
-                onPageChange={changePage}
-                isLoading={isSearchLoading}
+            <>
+              <div
+                ref={searchResultsAnchorRef}
+                aria-hidden="true"
+                style={{ scrollMarginTop: `${pageAnchorOffset}px` }}
               />
-            </div>
+              <section className="pt-6">
+                <SearchResultsGrid
+                  searchResults={searchResults}
+                  labelName={searchLabel}
+                  onPageChange={changePage}
+                  isLoading={isSearchLoading}
+                />
+              </section>
+            </>
           )}
         </div>
       )}

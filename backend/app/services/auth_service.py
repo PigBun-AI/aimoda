@@ -17,7 +17,7 @@ from ..repositories.sms_verification_repo import (
 from ..repositories.user_repo import find_user_by_email, find_user_by_id, find_user_by_phone, create_user
 from ..repositories.activity_repo import log_activity
 from ..repositories.session_repo import invalidate_session_by_id, invalidate_session_by_token
-from .session_service import login_with_session, get_user_sessions
+from .session_service import login_with_session, get_user_sessions, refresh_session as refresh_session_with_token
 from .sms_gateway_service import SmsGatewayError, send_verification_sms
 from ..config import settings
 
@@ -156,6 +156,13 @@ def logout(refresh_token: str) -> bool:
 def logout_all(user_id: int) -> int:
     from .session_service import logout_all_devices
     return logout_all_devices(user_id)
+
+
+def refresh_session(refresh_token: str) -> dict:
+    result = refresh_session_with_token(refresh_token)
+    if not result:
+        raise AppError("认证会话已失效，请重新登录", 401)
+    return result
 
 
 def get_sessions(user_id: int) -> list[SessionRecord]:

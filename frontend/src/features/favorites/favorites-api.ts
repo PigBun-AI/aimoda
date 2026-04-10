@@ -1,34 +1,10 @@
-import { handleUnauthorizedSession } from '@/lib/api'
+import { fetchWithAuth } from '@/lib/api'
 
-const authTokenStorageKey = 'fashion-report-access-token'
 const UPLOAD_CONCURRENCY = 3
 const MAX_UPLOAD_FILES_PER_JOB = 40
 
-function getToken(): string | null {
-  return window.localStorage.getItem(authTokenStorageKey)
-}
-
-function authHeaders(contentType: 'json' | 'none' = 'json'): Record<string, string> {
-  const headers: Record<string, string> = {}
-  if (contentType === 'json') {
-    headers['Content-Type'] = 'application/json'
-  }
-  const token = getToken()
-  if (token) {
-    headers.Authorization = 'Bearer ' + token
-  }
-  return headers
-}
-
-function handle401(response: Response) {
-  if (response.status === 401) {
-    handleUnauthorizedSession()
-  }
-}
-
 async function unwrap<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    handle401(response)
     const payload = await response.json().catch(() => null) as {
       error?: string
       detail?: string | Array<{ msg?: string }>
@@ -212,44 +188,33 @@ async function runWithConcurrency<T>(items: T[], limit: number, worker: (item: T
 }
 
 export async function listFavoriteCollections(): Promise<FavoriteCollection[]> {
-  const response = await fetch('/api/favorites/collections', {
-    headers: authHeaders(),
-  })
+  const response = await fetchWithAuth('/api/favorites/collections')
   return unwrap<FavoriteCollection[]>(response)
 }
 
 export async function lookupFavoriteCollections(imageId: string): Promise<FavoriteCollection[]> {
-  const response = await fetch('/api/favorites/collections/lookup?image_id=' + encodeURIComponent(imageId), {
-    headers: authHeaders(),
-  })
+  const response = await fetchWithAuth('/api/favorites/collections/lookup?image_id=' + encodeURIComponent(imageId))
   return unwrap<FavoriteCollection[]>(response)
 }
 
 export async function getFavoriteCollection(collectionId: string, offset = 0, limit = 48): Promise<FavoriteCollectionDetail> {
-  const response = await fetch('/api/favorites/collections/' + collectionId + '?offset=' + offset + '&limit=' + limit, {
-    headers: authHeaders(),
-  })
+  const response = await fetchWithAuth('/api/favorites/collections/' + collectionId + '?offset=' + offset + '&limit=' + limit)
   return unwrap<FavoriteCollectionDetail>(response)
 }
 
 export async function getActiveFavoriteCollectionUploadJob(collectionId: string): Promise<FavoriteCollectionUploadJob | null> {
-  const response = await fetch('/api/favorites/collections/' + collectionId + '/upload-jobs/active', {
-    headers: authHeaders(),
-  })
+  const response = await fetchWithAuth('/api/favorites/collections/' + collectionId + '/upload-jobs/active')
   return unwrap<FavoriteCollectionUploadJob | null>(response)
 }
 
 export async function getFavoriteCollectionUploadJob(jobId: string): Promise<FavoriteCollectionUploadJob> {
-  const response = await fetch('/api/favorites/upload-jobs/' + jobId, {
-    headers: authHeaders(),
-  })
+  const response = await fetchWithAuth('/api/favorites/upload-jobs/' + jobId)
   return unwrap<FavoriteCollectionUploadJob>(response)
 }
 
 export async function createFavoriteCollection(payload: { name: string; description?: string }): Promise<FavoriteCollection> {
-  const response = await fetch('/api/favorites/collections', {
+  const response = await fetchWithAuth('/api/favorites/collections', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       name: payload.name,
       description: payload.description ?? '',
@@ -262,18 +227,16 @@ export async function updateFavoriteCollection(
   collectionId: string,
   payload: { name?: string; description?: string },
 ): Promise<FavoriteCollection> {
-  const response = await fetch('/api/favorites/collections/' + collectionId, {
+  const response = await fetchWithAuth('/api/favorites/collections/' + collectionId, {
     method: 'PATCH',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   })
   return unwrap<FavoriteCollection>(response)
 }
 
 export async function deleteFavoriteCollection(collectionId: string): Promise<void> {
-  const response = await fetch('/api/favorites/collections/' + collectionId, {
+  const response = await fetchWithAuth('/api/favorites/collections/' + collectionId, {
     method: 'DELETE',
-    headers: authHeaders(),
   })
   await unwrap<{ deleted: boolean }>(response)
 }
@@ -282,9 +245,8 @@ export async function addImageToFavoriteCollection(
   collectionId: string,
   payload: AddFavoriteItemPayload,
 ): Promise<FavoriteCollectionDetail> {
-  const response = await fetch('/api/favorites/collections/' + collectionId + '/items', {
+  const response = await fetchWithAuth('/api/favorites/collections/' + collectionId + '/items', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify(payload),
   })
   return unwrap<FavoriteCollectionDetail>(response)
@@ -294,9 +256,8 @@ export async function prepareFavoriteCollectionUploadJob(
   collectionId: string,
   files: PrepareFavoriteUploadFilePayload[],
 ): Promise<FavoriteCollectionUploadJob> {
-  const response = await fetch('/api/favorites/collections/' + collectionId + '/upload-jobs/prepare', {
+  const response = await fetchWithAuth('/api/favorites/collections/' + collectionId + '/upload-jobs/prepare', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ files }),
   })
   return unwrap<FavoriteCollectionUploadJob>(response)
@@ -307,9 +268,8 @@ export async function markFavoriteCollectionUploadItemUploaded(
   itemId: string,
   objectKey?: string,
 ): Promise<FavoriteCollectionUploadJob> {
-  const response = await fetch('/api/favorites/upload-jobs/' + jobId + '/items/' + itemId + '/uploaded', {
+  const response = await fetchWithAuth('/api/favorites/upload-jobs/' + jobId + '/items/' + itemId + '/uploaded', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ object_key: objectKey ?? null }),
   })
   return unwrap<FavoriteCollectionUploadJob>(response)
@@ -320,18 +280,16 @@ export async function markFavoriteCollectionUploadItemFailed(
   itemId: string,
   errorMessage: string,
 ): Promise<FavoriteCollectionUploadJob> {
-  const response = await fetch('/api/favorites/upload-jobs/' + jobId + '/items/' + itemId + '/failed', {
+  const response = await fetchWithAuth('/api/favorites/upload-jobs/' + jobId + '/items/' + itemId + '/failed', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ error_message: errorMessage }),
   })
   return unwrap<FavoriteCollectionUploadJob>(response)
 }
 
 export async function completeFavoriteCollectionUploadJob(jobId: string): Promise<FavoriteCollectionUploadJob> {
-  const response = await fetch('/api/favorites/upload-jobs/' + jobId + '/complete', {
+  const response = await fetchWithAuth('/api/favorites/upload-jobs/' + jobId + '/complete', {
     method: 'POST',
-    headers: authHeaders('none'),
   })
   return unwrap<FavoriteCollectionUploadJob>(response)
 }
@@ -443,9 +401,8 @@ export async function uploadImagesToFavoriteCollection(
   for (const file of files) {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await fetch('/api/favorites/collections/' + collectionId + '/uploads', {
+    const response = await fetchWithAuth('/api/favorites/collections/' + collectionId + '/uploads', {
       method: 'POST',
-      headers: authHeaders('none'),
       body: formData,
     })
     lastDetail = await unwrap<FavoriteCollectionDetail>(response)
@@ -461,9 +418,8 @@ export async function removeImageFromFavoriteCollection(
   collectionId: string,
   imageId: string,
 ): Promise<FavoriteCollectionDetail> {
-  const response = await fetch('/api/favorites/collections/' + collectionId + '/items/' + encodeURIComponent(imageId), {
+  const response = await fetchWithAuth('/api/favorites/collections/' + collectionId + '/items/' + encodeURIComponent(imageId), {
     method: 'DELETE',
-    headers: authHeaders(),
   })
   return unwrap<FavoriteCollectionDetail>(response)
 }
@@ -473,9 +429,8 @@ export async function removeImagesFromFavoriteCollection(
   imageIds: string[],
 ): Promise<FavoriteCollectionDetail> {
   const normalizedIds = imageIds.map(id => id.trim()).filter(Boolean)
-  const response = await fetch('/api/favorites/collections/' + collectionId + '/items/bulk-delete', {
+  const response = await fetchWithAuth('/api/favorites/collections/' + collectionId + '/items/bulk-delete', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ image_ids: normalizedIds }),
   })
   return unwrap<FavoriteCollectionDetail>(response)

@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..agent.harness import infer_categories_from_text
-from ..agent.qdrant_utils import format_result, get_qdrant
-from ..agent.session_state import count_session, get_session_page
+from ..agent.qdrant_utils import get_qdrant
+from ..agent.session_state import count_session
 from .chat_reference_service import build_bundle_group_metadata, build_bundle_result_metadata
 from .chat_service import create_artifact, get_artifact
 
@@ -145,11 +145,6 @@ def _materialize_collection_artifact(
     total = count_session(client, search_session)
     filter_summary = [_format_filter_entry(item) for item in search_session.get("filters", []) if isinstance(item, dict)]
 
-    sample_images: list[dict[str, Any]] = []
-    for point in get_session_page(client, search_session, offset=0, limit=8):
-        item = format_result(point.payload, getattr(point, "score", 0))
-        sample_images.append(item)
-
     artifact = create_artifact(
         session_id=session_id,
         message_id=message_id,
@@ -174,7 +169,6 @@ def _materialize_collection_artifact(
             filters_applied=filter_summary,
             total=total,
         ),
-        "sample_images": sample_images,
     }
 
 

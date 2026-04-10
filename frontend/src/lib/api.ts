@@ -55,6 +55,12 @@ const devDemoMode = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_MOCK
 
 const authTokenStorageKey = 'fashion-report-access-token'
 const authSessionStorageKey = 'fashion-report-session'
+const refreshableAuthPaths = new Set([
+  '/api/auth/me',
+  '/api/auth/logout',
+  '/api/auth/logout-all',
+])
+let refreshPromise: Promise<boolean> | null = null
 
 const rolePermissions: Record<AuthUser['role'], string[]> = {
   admin: ['reports:read', 'reports:write', 'users:manage'],
@@ -122,15 +128,23 @@ export function clearClientAuthState() {
   window.localStorage.removeItem(authSessionStorageKey)
 }
 
+export function persistAuthUser(user: AuthUser) {
+  window.localStorage.setItem(authSessionStorageKey, JSON.stringify(user))
+}
+
 export function handleUnauthorizedSession() {
   clearClientAuthState()
   window.location.reload()
 }
 
-function createHeaders(initHeaders?: HeadersInit) {
+export function createAuthHeaders(initHeaders?: HeadersInit, body?: BodyInit | null) {
   const headers = new Headers(initHeaders)
 
-  if (!headers.has('Content-Type')) {
+  const shouldSetJsonContentType =
+    typeof body === 'string'
+    || body instanceof URLSearchParams
+
+  if (shouldSetJsonContentType && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
@@ -141,6 +155,88 @@ function createHeaders(initHeaders?: HeadersInit) {
   }
 
   return headers
+}
+
+function shouldAttemptRefresh(path: string) {
+  if (refreshableAuthPaths.has(path)) {
+    return true
+  }
+
+  return path.startsWith('/api/') && !path.startsWith('/api/auth/')
+}
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (refreshPromise) {
+    return refreshPromise
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        credentials: 'include',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      })
+
+      if (!response.ok) {
+        return false
+      }
+
+      const payload = (await response.json()) as unknown
+      const data = extractData<LoginResponse>(payload)
+      const normalizedUser = normalizeAuthUser(data.user)
+      setAccessToken(data.tokens.accessToken)
+      persistAuthUser(normalizedUser)
+      return true
+    } catch {
+      return false
+    } finally {
+      refreshPromise = null
+    }
+  })()
+
+  return refreshPromise
+}
+
+export async function fetchWithAuth(
+  path: string,
+  options?: RequestInit,
+  config?: {
+    allowRefresh?: boolean
+    suppressAutoLogout?: boolean
+  },
+): Promise<Response> {
+  const response = await fetch(path, {
+    credentials: 'include',
+    ...options,
+    headers: createAuthHeaders(options?.headers, options?.body),
+  })
+
+  if (response.status !== 401) {
+    return response
+  }
+
+  const shouldRefresh = config?.allowRefresh ?? shouldAttemptRefresh(path)
+  if (!shouldRefresh || path === '/api/auth/refresh') {
+    if (!config?.suppressAutoLogout) {
+      handleUnauthorizedSession()
+    }
+    return response
+  }
+
+  const refreshed = await refreshAccessToken()
+  if (!refreshed) {
+    if (!config?.suppressAutoLogout) {
+      handleUnauthorizedSession()
+    }
+    return response
+  }
+
+  return fetch(path, {
+    credentials: 'include',
+    ...options,
+    headers: createAuthHeaders(options?.headers, options?.body),
+  })
 }
 
 function extractData<T>(payload: unknown): T {
@@ -172,24 +268,19 @@ function normalizeAuthUser(input: LoginResponse['user']): AuthUser {
 
 async function request<T>(path: string, options?: RequestInit, demoFallback?: T): Promise<T> {
   try {
-    const response = await fetch(path, {
-      credentials: 'include',
-      ...options,
-      headers: createHeaders(options?.headers),
+    const shouldSuppressAutoLogout =
+      path === '/api/auth/login'
+      || path === '/api/auth/register'
+      || path === '/api/auth/sms/login'
+      || path === '/api/auth/sms/register'
+      || path === '/api/auth/sms/send-code'
+
+    const response = await fetchWithAuth(path, options, {
+      allowRefresh: !shouldSuppressAutoLogout,
+      suppressAutoLogout: shouldSuppressAutoLogout,
     })
 
     if (!response.ok) {
-      // Auto-logout on 401: clear stale token/session and reload to trigger login
-      const shouldSuppressAutoLogout =
-        path === '/api/auth/login'
-        || path === '/api/auth/register'
-        || path === '/api/auth/sms/login'
-        || path === '/api/auth/sms/register'
-        || path === '/api/auth/sms/send-code'
-
-      if (response.status === 401 && !shouldSuppressAutoLogout) {
-        handleUnauthorizedSession()
-      }
       let payload: ApiResponse<unknown> | null = null
       try {
         payload = (await response.json()) as ApiResponse<unknown>
@@ -240,8 +331,10 @@ export async function login(payload: { email: string; password: string }): Promi
     }
   )
 
+  const normalizedUser = normalizeAuthUser(data.user)
   setAccessToken(data.tokens.accessToken)
-  return normalizeAuthUser(data.user)
+  persistAuthUser(normalizedUser)
+  return normalizedUser
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {
@@ -253,7 +346,9 @@ export async function getCurrentUser(): Promise<AuthUser> {
     updatedAt: '2026-03-12T16:20:00.000Z',
   })
 
-  return normalizeAuthUser(data)
+  const normalizedUser = normalizeAuthUser(data)
+  persistAuthUser(normalizedUser)
+  return normalizedUser
 }
 
 export async function sendSmsCode(payload: { phone: string; purpose: 'login' | 'register' }): Promise<void> {
@@ -268,8 +363,10 @@ export async function loginWithSms(payload: { phone: string; code: string }): Pr
     method: 'POST',
     body: JSON.stringify(payload),
   })
+  const normalizedUser = normalizeAuthUser(data.user)
   setAccessToken(data.tokens.accessToken)
-  return normalizeAuthUser(data.user)
+  persistAuthUser(normalizedUser)
+  return normalizedUser
 }
 
 export async function register(payload: { email: string; password: string }): Promise<AuthUser> {
@@ -277,8 +374,10 @@ export async function register(payload: { email: string; password: string }): Pr
     method: 'POST',
     body: JSON.stringify(payload),
   })
+  const normalizedUser = normalizeAuthUser(data.user)
   setAccessToken(data.tokens.accessToken)
-  return normalizeAuthUser(data.user)
+  persistAuthUser(normalizedUser)
+  return normalizedUser
 }
 
 export async function registerWithSms(payload: { phone: string; code: string }): Promise<AuthUser> {
@@ -286,8 +385,10 @@ export async function registerWithSms(payload: { phone: string; code: string }):
     method: 'POST',
     body: JSON.stringify(payload),
   })
+  const normalizedUser = normalizeAuthUser(data.user)
   setAccessToken(data.tokens.accessToken)
-  return normalizeAuthUser(data.user)
+  persistAuthUser(normalizedUser)
+  return normalizedUser
 }
 
 export interface PaginatedReports {
@@ -299,10 +400,7 @@ export interface PaginatedReports {
 }
 
 export async function getReports(page = 1, limit = 12): Promise<PaginatedReports> {
-  const response = await fetch(`/api/reports?page=${page}&limit=${limit}`, {
-    credentials: 'include',
-    headers: createHeaders(),
-  })
+  const response = await fetchWithAuth(`/api/reports?page=${page}&limit=${limit}`)
 
   if (!response.ok) {
     let payload: ApiResponse<unknown> | null = null

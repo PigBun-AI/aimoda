@@ -1,9 +1,10 @@
 import re
 import uuid
 
-from ..models import SafeUser, AuthTokens, SessionRecord, DeviceInfo
+from ..models import SafeUser, SessionRecord, DeviceInfo
 from ..repositories.session_repo import (
     create_session,
+    find_session_by_refresh_token,
     find_active_sessions_by_user_id,
     invalidate_other_sessions,
     invalidate_session_by_token,
@@ -11,7 +12,8 @@ from ..repositories.session_repo import (
     update_session_last_active,
     update_session_token,
 )
-from .auth_token import issue_tokens, get_refresh_token_expiry
+from ..repositories.user_repo import find_user_by_id
+from .auth_token import issue_tokens, get_refresh_token_expiry, verify_refresh_token
 
 
 def parse_device_info(user_agent: str) -> DeviceInfo:
@@ -101,3 +103,39 @@ def logout_all_devices(user_id: int) -> int:
 
 def get_user_sessions(user_id: int) -> list[SessionRecord]:
     return find_active_sessions_by_user_id(user_id)
+
+
+def refresh_session(refresh_token: str) -> dict | None:
+    session = find_session_by_refresh_token(refresh_token)
+    if not session:
+        return None
+
+    try:
+        token_user = verify_refresh_token(refresh_token)
+    except ValueError:
+        return None
+
+    if token_user.id != session.user_id:
+        return None
+
+    user = find_user_by_id(session.user_id)
+    if not user:
+        return None
+
+    safe_user = SafeUser(
+        id=user.id,
+        email=user.email,
+        phone=user.phone,
+        role=user.role,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+    )
+    tokens = issue_tokens(safe_user, session.id)
+    update_session_token(session.id, tokens.refreshToken)
+    update_session_last_active(session.id)
+
+    return {
+        "user": safe_user,
+        "tokens": tokens,
+        "session": session,
+    }

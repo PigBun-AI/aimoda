@@ -1138,16 +1138,9 @@ def show_collection(
     filter_summary = [_format_filter_entry(f) for f in session["filters"]]
 
     serializable_session = _serialize_search_session(session)
-
-    sample_images = []
-    for index, point in enumerate(get_session_page(client, session, offset=0, limit=8, cancel_check=cancel_check)):
-        if index % 4 == 0:
-            cancel_check()
-        item = format_result(point.payload, getattr(point, "score", 0))
-        sample_images.append(item)
+    session_id = _session_id_from_config(config)
 
     search_request_id = None
-    session_id = _session_id_from_config(config)
     if session_id:
         artifact = create_artifact(
             session_id=session_id,
@@ -1169,7 +1162,6 @@ def show_collection(
         "query": str(session.get("query", "") or ""),
         "filters_applied": filter_summary,
         "message": f"Showing {count} matching images in paginated results. Filters applied: {len(filter_summary)}.",
-        "sample_images": sample_images,
     }, ensure_ascii=False)
 
 

@@ -1,31 +1,37 @@
 // Chat API client — SSE streaming + session CRUD
 
-import { ApiError, handleUnauthorizedSession } from '@/lib/api'
+import { ApiError, fetchWithAuth } from '@/lib/api'
 import type { ChatArtifact, ChatSession, ChatSessionPreferences, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
 import type { SearchPlanMessageRef } from './message-refs'
 
-const authTokenStorageKey = 'fashion-report-access-token'
+export const DEFAULT_DRAWER_PAGE_SIZE = 50
+export const DEFAULT_IMAGE_SEARCH_PAGE_SIZE = 50
 
-function getToken(): string | null {
-  return window.localStorage.getItem(authTokenStorageKey)
+interface SearchSessionPageResponse {
+  images: ImageResult[]
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
 }
 
-function authHeaders(extra?: Record<string, string>): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...extra,
-  }
-  const token = getToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-  return headers
-}
+const searchSessionByIdCache = new Map<string, SearchSessionPageResponse>()
+const searchSessionByIdInFlight = new Map<string, Promise<SearchSessionPageResponse>>()
 
-function handle401(resp: Response) {
-  if (resp.status === 401) {
-    handleUnauthorizedSession()
-  }
+function buildSearchSessionByIdCacheKey(
+  searchRequestId: string,
+  offset: number,
+  limit: number,
+  tasteProfileId?: string | null,
+  tasteProfileWeight?: number | null,
+): string {
+  return JSON.stringify([
+    searchRequestId,
+    offset,
+    limit,
+    tasteProfileId ?? null,
+    typeof tasteProfileWeight === 'number' ? Number(tasteProfileWeight.toFixed(4)) : null,
+  ])
 }
 
 export class ChatStreamAbortedError extends Error {
@@ -47,15 +53,13 @@ export async function sendChatSSE(
   options?: { signal?: AbortSignal },
 ): Promise<void> {
   try {
-    const resp = await fetch('/api/chat', {
+    const resp = await fetchWithAuth('/api/chat', {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({ content, session_id: sessionId, history }),
       signal: options?.signal,
     })
 
     if (!resp.ok) {
-      handle401(resp)
       let payload: { error?: string; data?: unknown } | null = null
       try {
         payload = await resp.json() as { error?: string; data?: unknown }
@@ -102,14 +106,12 @@ export async function sendChatSSE(
 }
 
 export async function stopChatRun(sessionId: string, runId?: string | null): Promise<boolean> {
-  const resp = await fetch(`/api/chat/sessions/${sessionId}/stop`, {
+  const resp = await fetchWithAuth(`/api/chat/sessions/${sessionId}/stop`, {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({ run_id: runId ?? null }),
   })
 
   if (!resp.ok) {
-    handle401(resp)
     throw new Error(`HTTP ${resp.status}`)
   }
 
@@ -123,29 +125,21 @@ export async function stopChatRun(sessionId: string, runId?: string | null): Pro
 export async function fetchSearchSession(
   searchReq: SearchSessionState,
   offset: number,
-  limit = 20,
+  limit = DEFAULT_DRAWER_PAGE_SIZE,
   tasteProfileId?: string | null,
   tasteProfileWeight?: number | null,
-): Promise<{
-  images: ImageResult[]
-  total: number
-  offset: number
-  limit: number
-  has_more: boolean
-}> {
-  const resp = await fetch('/api/chat/search_session', {
+): Promise<SearchSessionPageResponse> {
+  const resp = await fetchWithAuth('/api/chat/search_session', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       ...searchReq,
       offset,
       limit,
-      taste_profile_id: tasteProfileId ?? null,
-      taste_profile_weight: tasteProfileWeight ?? null,
+      ...(typeof tasteProfileId !== 'undefined' ? { taste_profile_id: tasteProfileId } : {}),
+      ...(typeof tasteProfileWeight !== 'undefined' ? { taste_profile_weight: tasteProfileWeight } : {}),
     }),
   })
   if (!resp.ok) {
-    handle401(resp)
     throw new Error(`HTTP ${resp.status}`)
   }
   return resp.json()
@@ -154,40 +148,87 @@ export async function fetchSearchSession(
 export async function fetchSearchSessionById(
   searchRequestId: string,
   offset: number,
-  limit = 20,
+  limit = DEFAULT_DRAWER_PAGE_SIZE,
   tasteProfileId?: string | null,
   tasteProfileWeight?: number | null,
-): Promise<{
-  images: ImageResult[]
-  total: number
-  offset: number
-  limit: number
-  has_more: boolean
-}> {
-  const resp = await fetch('/api/chat/search_session_by_id', {
+): Promise<SearchSessionPageResponse> {
+  const resp = await fetchWithAuth('/api/chat/search_session_by_id', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       search_request_id: searchRequestId,
       offset,
       limit,
-      taste_profile_id: tasteProfileId ?? null,
-      taste_profile_weight: tasteProfileWeight ?? null,
+      ...(typeof tasteProfileId !== 'undefined' ? { taste_profile_id: tasteProfileId } : {}),
+      ...(typeof tasteProfileWeight !== 'undefined' ? { taste_profile_weight: tasteProfileWeight } : {}),
     }),
   })
   if (!resp.ok) {
-    handle401(resp)
     throw new Error(`HTTP ${resp.status}`)
   }
   return resp.json()
 }
 
+export function peekCachedSearchSessionById(
+  searchRequestId: string,
+  offset: number,
+  limit = DEFAULT_DRAWER_PAGE_SIZE,
+  tasteProfileId?: string | null,
+  tasteProfileWeight?: number | null,
+): SearchSessionPageResponse | null {
+  const cacheKey = buildSearchSessionByIdCacheKey(
+    searchRequestId,
+    offset,
+    limit,
+    tasteProfileId,
+    tasteProfileWeight,
+  )
+  return searchSessionByIdCache.get(cacheKey) ?? null
+}
+
+export async function fetchCachedSearchSessionById(
+  searchRequestId: string,
+  offset: number,
+  limit = DEFAULT_DRAWER_PAGE_SIZE,
+  tasteProfileId?: string | null,
+  tasteProfileWeight?: number | null,
+): Promise<SearchSessionPageResponse> {
+  const cacheKey = buildSearchSessionByIdCacheKey(
+    searchRequestId,
+    offset,
+    limit,
+    tasteProfileId,
+    tasteProfileWeight,
+  )
+  const cached = searchSessionByIdCache.get(cacheKey)
+  if (cached) return cached
+
+  const inFlight = searchSessionByIdInFlight.get(cacheKey)
+  if (inFlight) return inFlight
+
+  const request = fetchSearchSessionById(
+    searchRequestId,
+    offset,
+    limit,
+    tasteProfileId,
+    tasteProfileWeight,
+  )
+    .then((response) => {
+      searchSessionByIdCache.set(cacheKey, response)
+      searchSessionByIdInFlight.delete(cacheKey)
+      return response
+    })
+    .catch((error) => {
+      searchSessionByIdInFlight.delete(cacheKey)
+      throw error
+    })
+
+  searchSessionByIdInFlight.set(cacheKey, request)
+  return request
+}
+
 export async function getChatArtifact(artifactId: string): Promise<ChatArtifact> {
-  const resp = await fetch(`/api/chat/artifacts/${artifactId}`, {
-    headers: authHeaders(),
-  })
+  const resp = await fetchWithAuth(`/api/chat/artifacts/${artifactId}`)
   if (!resp.ok) {
-    handle401(resp)
     throw new Error(`HTTP ${resp.status}`)
   }
   const payload = await resp.json() as { data?: ChatArtifact }
@@ -206,16 +247,14 @@ export async function resolveSearchPlanRef(
   label?: string
   filters_applied?: string[]
 }> {
-  const resp = await fetch('/api/chat/resolve_search_plan_ref', {
+  const resp = await fetchWithAuth('/api/chat/resolve_search_plan_ref', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       ...target,
       current_session_id: currentSessionId ?? null,
     }),
   })
   if (!resp.ok) {
-    handle401(resp)
     throw new Error(`HTTP ${resp.status}`)
   }
   const payload = await resp.json() as {
@@ -235,24 +274,21 @@ export async function resolveSearchPlanRef(
 // ── Session CRUD ──
 
 export async function listSessions(): Promise<ChatSession[]> {
-  const resp = await fetch('/api/chat/sessions', {
-    headers: authHeaders(),
-  })
-  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  const resp = await fetchWithAuth('/api/chat/sessions')
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data ?? []
 }
 
 export async function createSession(title = '新对话', preferences?: ChatSessionPreferences | null): Promise<ChatSession> {
-  const resp = await fetch('/api/chat/sessions', {
+  const resp = await fetchWithAuth('/api/chat/sessions', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       title,
       preferences: preferences ?? null,
     }),
   })
-  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data
 }
@@ -261,22 +297,20 @@ export async function updateSession(
   sessionId: string,
   patch: { title?: string; pinned?: boolean; preferences?: ChatSessionPreferences | null },
 ): Promise<ChatSession> {
-  const resp = await fetch(`/api/chat/sessions/${sessionId}`, {
+  const resp = await fetchWithAuth(`/api/chat/sessions/${sessionId}`, {
     method: 'PATCH',
-    headers: authHeaders(),
     body: JSON.stringify(patch),
   })
-  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data
 }
 
 export async function deleteSessionApi(sessionId: string): Promise<void> {
-  const resp = await fetch(`/api/chat/sessions/${sessionId}`, {
+  const resp = await fetchWithAuth(`/api/chat/sessions/${sessionId}`, {
     method: 'DELETE',
-    headers: authHeaders(),
   })
-  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
 }
 
 /**
@@ -288,10 +322,8 @@ export async function getSessionMessages(sessionId: string): Promise<Array<{
   content: ContentBlock[] | string
   metadata?: Record<string, unknown>
 }>> {
-  const resp = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
-    headers: authHeaders(),
-  })
-  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  const resp = await fetchWithAuth(`/api/chat/sessions/${sessionId}/messages`)
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data ?? []
 }
@@ -299,10 +331,8 @@ export async function getSessionMessages(sessionId: string): Promise<Array<{
 // ── Single image detail ──
 
 export async function fetchImageDetail(imageId: string): Promise<ImageResult> {
-  const resp = await fetch(`/api/chat/image/${imageId}`, {
-    headers: authHeaders(),
-  })
-  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  const resp = await fetchWithAuth(`/api/chat/image/${imageId}`)
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   return resp.json()
 }
 
@@ -344,9 +374,8 @@ export interface SearchResponse {
 }
 
 export async function searchSimilar(params: SearchSimilarParams): Promise<SearchResponse> {
-  const resp = await fetch('/api/chat/search_similar', {
+  const resp = await fetchWithAuth('/api/chat/search_similar', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       brand: params.brand,
       categories: params.categories,
@@ -356,19 +385,18 @@ export async function searchSimilar(params: SearchSimilarParams): Promise<Search
       gender: params.gender,
       quarter: params.quarter,
       page: params.page ?? 1,
-      page_size: params.page_size ?? 56,
-      taste_profile_id: params.taste_profile_id ?? null,
-      taste_profile_weight: params.taste_profile_weight ?? null,
+      page_size: params.page_size ?? DEFAULT_IMAGE_SEARCH_PAGE_SIZE,
+      ...(typeof params.taste_profile_id !== 'undefined' ? { taste_profile_id: params.taste_profile_id } : {}),
+      ...(typeof params.taste_profile_weight !== 'undefined' ? { taste_profile_weight: params.taste_profile_weight } : {}),
     }),
   })
-  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   return resp.json()
 }
 
 export async function searchByColor(params: SearchByColorParams): Promise<SearchResponse> {
-  const resp = await fetch('/api/chat/search_by_color', {
+  const resp = await fetchWithAuth('/api/chat/search_by_color', {
     method: 'POST',
-    headers: authHeaders(),
     body: JSON.stringify({
       hex: params.hex,
       color_name: params.color_name ?? '',
@@ -376,11 +404,11 @@ export async function searchByColor(params: SearchByColorParams): Promise<Search
       gender: params.gender,
       quarter: params.quarter,
       page: params.page ?? 1,
-      page_size: params.page_size ?? 56,
-      taste_profile_id: params.taste_profile_id ?? null,
-      taste_profile_weight: params.taste_profile_weight ?? null,
+      page_size: params.page_size ?? DEFAULT_IMAGE_SEARCH_PAGE_SIZE,
+      ...(typeof params.taste_profile_id !== 'undefined' ? { taste_profile_id: params.taste_profile_id } : {}),
+      ...(typeof params.taste_profile_weight !== 'undefined' ? { taste_profile_weight: params.taste_profile_weight } : {}),
     }),
   })
-  if (!resp.ok) { handle401(resp); throw new Error(`HTTP ${resp.status}`) }
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   return resp.json()
 }

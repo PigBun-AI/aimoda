@@ -88,6 +88,24 @@ def verify_access_token(token: str) -> AuthenticatedUser:
     )
 
 
+def verify_refresh_token(token: str) -> AuthenticatedUser:
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+    except jwt.PyJWTError as e:
+        raise ValueError(f"Invalid token: {e}") from e
+
+    if payload.get("type") != "refresh":
+        raise ValueError("Invalid token type")
+
+    return AuthenticatedUser(
+        id=int(payload["sub"]),
+        email=payload["email"],
+        phone=payload.get("phone"),
+        role=payload["role"],
+        session_id=None,
+    )
+
+
 def verify_report_preview_token(token: str) -> AuthenticatedUser:
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
@@ -110,3 +128,7 @@ def get_refresh_token_expiry() -> str:
     seconds = _parse_expires_in(settings.REFRESH_TOKEN_EXPIRES_IN)
     expiry = datetime.now(timezone.utc) + timedelta(seconds=seconds)
     return expiry.isoformat()
+
+
+def get_refresh_token_ttl_seconds() -> int:
+    return _parse_expires_in(settings.REFRESH_TOKEN_EXPIRES_IN)

@@ -6,6 +6,7 @@ import { Search, Filter, X, Eye, Images, Palette, BarChart3, Info, Loader2, Chec
 import { useTranslation } from 'react-i18next'
 import type {
   ChatMessage,
+  ChatSessionPreferences,
   ContentBlock,
   ImageSource,
   MessageRefTarget,
@@ -131,13 +132,14 @@ interface MessageBubbleProps {
   msg: ChatMessage
   onOpenDrawer?: (searchRequestId: string) => void
   onMessageRefClick?: (target: MessageRefTarget) => void
+  retrievalPreferences?: ChatSessionPreferences | null
 }
 
 type RenderSegment =
   | { kind: 'block'; block: ContentBlock; key: string }
   | { kind: 'tool_group'; blocks: ContentBlock[]; key: string }
 
-export function MessageBubble({ msg, onOpenDrawer, onMessageRefClick }: MessageBubbleProps) {
+export function MessageBubble({ msg, onOpenDrawer, onMessageRefClick, retrievalPreferences }: MessageBubbleProps) {
   if (msg.role === 'user') {
     return (
       <div className="mb-8 flex justify-end animate-in fade-in slide-in-from-bottom-1 duration-normal">
@@ -162,12 +164,14 @@ export function MessageBubble({ msg, onOpenDrawer, onMessageRefClick }: MessageB
                 block={segment.block}
                 onOpenDrawer={onOpenDrawer}
                 onMessageRefClick={onMessageRefClick}
+                retrievalPreferences={retrievalPreferences}
               />
             ) : (
               <ToolTraceGroup
                 blocks={segment.blocks}
                 onOpenDrawer={onOpenDrawer}
                 onMessageRefClick={onMessageRefClick}
+                retrievalPreferences={retrievalPreferences}
               />
             )}
           </Fragment>
@@ -274,10 +278,12 @@ function BlockRenderer({
   block,
   onOpenDrawer,
   onMessageRefClick,
+  retrievalPreferences,
 }: {
   block: ContentBlock
   onOpenDrawer?: (searchRequestId: string) => void
   onMessageRefClick?: (target: MessageRefTarget) => void
+  retrievalPreferences?: ChatSessionPreferences | null
 }) {
   const { t } = useTranslation('common')
   if (block.type === 'text') return <TextBlockView block={block} onMessageRefClick={onMessageRefClick} />
@@ -302,7 +308,7 @@ function BlockRenderer({
     if (block.name === 'show_collection') return <ShowCollectionPendingCard />
     return <ToolCallCard block={block} />
   }
-  if (block.type === 'tool_result') return <ToolResultView block={block} onOpenDrawer={onOpenDrawer} />
+  if (block.type === 'tool_result') return <ToolResultView block={block} onOpenDrawer={onOpenDrawer} retrievalPreferences={retrievalPreferences} />
   return null
 }
 
@@ -334,10 +340,12 @@ function ToolTraceGroup({
   blocks,
   onOpenDrawer,
   onMessageRefClick,
+  retrievalPreferences,
 }: {
   blocks: ContentBlock[]
   onOpenDrawer?: (searchRequestId: string) => void
   onMessageRefClick?: (target: MessageRefTarget) => void
+  retrievalPreferences?: ChatSessionPreferences | null
 }) {
   const { t } = useTranslation('common')
   const stats = useMemo(() => getToolTraceStats(blocks), [blocks])
@@ -384,6 +392,7 @@ function ToolTraceGroup({
               }
               onOpenDrawer={onOpenDrawer}
               onMessageRefClick={onMessageRefClick}
+              retrievalPreferences={retrievalPreferences}
             />
           ))}
         </div>
@@ -466,9 +475,11 @@ function ToolCallCard({ block }: { block: { type: 'tool_use'; id: string; name: 
 function ToolResultView({
   block,
   onOpenDrawer,
+  retrievalPreferences,
 }: {
   block: { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean; images?: ImageResult[]; metadata?: Record<string, unknown> }
   onOpenDrawer?: (searchRequestId: string) => void
+  retrievalPreferences?: ChatSessionPreferences | null
 }) {
   const { t } = useTranslation('common')
   const showCollectionData = useMemo(() => parseShowCollectionResult(block.content), [block.content])
@@ -477,7 +488,7 @@ function ToolResultView({
   const isError = block.is_error ?? hasToolResultError(block.content)
 
   if (showCollectionData && onOpenDrawer) {
-    return <SearchResultCard data={showCollectionData} images={block.images} onOpenDrawer={onOpenDrawer} />
+    return <SearchResultCard data={showCollectionData} onOpenDrawer={onOpenDrawer} retrievalPreferences={retrievalPreferences} />
   }
 
   if (fashionVisionData) {

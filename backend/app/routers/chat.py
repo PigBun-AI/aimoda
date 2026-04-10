@@ -145,7 +145,7 @@ class SearchSessionRequest(BaseModel):
     """Direct search API using the Agent's internal session state."""
     search_request_id: str
     offset: int = 0
-    limit: int = 20
+    limit: int = 50
     taste_profile_id: str | None = None
     taste_profile_weight: float | None = None
 
@@ -1518,7 +1518,7 @@ class SearchSimilarRequest(BaseModel):
     quarter: str | None = None
     season: str | None = None
     page: int = 1
-    page_size: int = 56
+    page_size: int = 50
     taste_profile_id: str | None = None
     taste_profile_weight: float | None = None
 
@@ -1533,7 +1533,7 @@ class SearchByColorRequest(BaseModel):
     quarter: str | None = None
     season: str | None = None
     page: int = 1
-    page_size: int = 56
+    page_size: int = 50
     taste_profile_id: str | None = None
     taste_profile_weight: float | None = None
 
