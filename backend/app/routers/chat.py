@@ -26,8 +26,9 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 
 from ..config import settings
-from ..dependencies import get_current_user
+from ..dependencies import get_current_user, require_role
 from ..models import AuthenticatedUser
+from ..services import catalog_image_service
 from ..services.feature_access_service import consume_feature_access, get_feature_access_status
 from ..services.favorite_service import annotate_catalog_image_results
 from ..services.chat_reference_service import (
@@ -1496,6 +1497,23 @@ async def get_image_detail(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve image: {e}")
+
+
+@router.delete("/image/{image_id}")
+async def delete_image_detail(
+    image_id: str,
+    _admin: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    """Delete a catalog image from Qdrant and clean up favorite references."""
+    try:
+        deleted = await asyncio.to_thread(catalog_image_service.delete_catalog_image, image_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete image: {e}") from e
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    return {"success": True, "data": deleted}
 
 
 # ── Image detail inline search endpoints ──

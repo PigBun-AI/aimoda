@@ -38,6 +38,8 @@ export function ImageActionBar({ image }: ImageActionBarProps) {
       .catch(() => setFavoriteCollectionIds([]))
   }, [image.favorite_collection_ids, image.image_id, image.is_favorited])
 
+  const dnaActionLabel = favoriteCollectionIds.length > 0 ? t('favoriteSaved') : t('favorite')
+
   return (
     <>
       <div className="flex w-full shrink-0 flex-row items-stretch justify-between gap-0 lg:h-full lg:w-[80px] lg:flex-col xl:w-[88px]">
@@ -59,7 +61,7 @@ export function ImageActionBar({ image }: ImageActionBarProps) {
               fill={favoriteCollectionIds.length > 0 ? 'currentColor' : 'none'}
             />
           )}
-          label={t('favorite')}
+          label={dnaActionLabel}
           onClick={() => setIsFavoriteDialogOpen(true)}
         />
       </div>

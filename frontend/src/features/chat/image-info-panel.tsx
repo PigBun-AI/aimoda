@@ -102,7 +102,7 @@ export function ImageInfoPanel({
                   <span className="type-ed-title-sm block truncate text-foreground transition-colors group-hover:text-muted-foreground">
                     {formatBrand(image.brand)}
                   </span>
-                  <span className="type-chat-kicker mt-2 inline-flex items-center gap-1 border border-border px-2 py-1 text-muted-foreground transition-colors group-hover:border-foreground/30 group-hover:text-foreground">
+                  <span className="type-chat-kicker mt-2 inline-flex items-center gap-1 border border-border px-2 py-1 text-muted-foreground transition-colors group-hover:border-foreground/30 group-hover:bg-accent/20 group-hover:text-foreground">
                     {t("searchAction")}
                     {isSearchingBrand ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
                   </span>
@@ -133,7 +133,7 @@ export function ImageInfoPanel({
                     <button
                       key={index}
                       type="button"
-                      className="flex w-full items-center justify-between border-b border-black/10 px-3 py-2 text-left transition-opacity last:border-b-0 hover:opacity-90"
+                      className="flex w-full items-center justify-between border-b border-black/10 px-3 py-2 text-left transition-opacity last:border-b-0 hover:opacity-92"
                       style={{ backgroundColor: color.hex, minHeight: `${height}px` }}
                       title={t("searchColorSwatch", { color: color.color_name, hex: color.hex, percentage: color.percentage })}
                       onClick={() => void onColorSearch?.(color)}
@@ -156,7 +156,7 @@ export function ImageInfoPanel({
               </div>
 
               {isSearchingColor && (
-                <div className="absolute inset-0 flex items-center justify-center bg-background/70">
+                <div className="absolute inset-0 flex items-center justify-center bg-background/88">
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 </div>
               )}

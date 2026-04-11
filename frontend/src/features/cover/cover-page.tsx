@@ -79,7 +79,7 @@ export function CoverPage() {
   const heroImage = getCoverImageSources(heroAsset.filename, heroAsset.preferredWidth, [800, 1200])
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-background">
+    <div className="relative h-full w-full overflow-hidden bg-background">
       <div className="absolute left-1/2 top-[45%] -translate-x-1/2 -translate-y-1/2 z-sticky animate-cover-scale">
         <picture>
           <source srcSet={heroImage.srcSet ?? heroImage.webpSrc} sizes={heroAsset.sizes} type="image/webp" />
@@ -94,22 +94,25 @@ export function CoverPage() {
             className="w-full max-w-[1000px] h-auto"
           />
         </picture>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/20 to-black/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/58 via-black/22 to-black/36" />
       </div>
 
       {showDecorations ? decorativeAssets.map((asset) => <DecorativeImage key={asset.alt} asset={asset} />) : null}
 
-      <div className="absolute top-[45%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-full flex flex-col items-center z-overlay px-4">
-        <h1 className="text-white text-xl md:text-3xl lg:text-4xl mb-8 text-center animate-cover-slide-up drop-shadow-lg" style={{ animationDelay: '0.5s' }}>
+      <div className="absolute left-1/2 top-[45%] z-overlay flex w-full -translate-x-1/2 -translate-y-1/2 flex-col items-center px-4">
+        <h1 className="font-role-editorial text-center text-[clamp(2rem,1.25rem+2vw,4.4rem)] leading-[0.86] tracking-[-0.04em] text-white animate-cover-slide-up drop-shadow-lg" style={{ animationDelay: '0.5s' }}>
           {t('globalOneStopAI')}
         </h1>
-        <p className="text-white text-base md:text-xl lg:text-3xl mb-4 text-center animate-cover-slide-up drop-shadow-md" style={{ animationDelay: '0.8s' }}>
+        <p className="mt-6 max-w-[24ch] text-center text-sm uppercase tracking-[0.3em] text-white/74 animate-cover-slide-up drop-shadow-md md:text-base" style={{ animationDelay: '0.7s' }}>
+          Aimoda Intelligence
+        </p>
+        <p className="mb-4 mt-4 max-w-[24ch] text-center text-base text-white/88 animate-cover-slide-up drop-shadow-md md:text-xl lg:text-[1.75rem] lg:leading-[1.25]" style={{ animationDelay: '0.9s' }}>
           {t('searchDesignMarketing')}
         </p>
         <div className="animate-cover-slide-up" style={{ animationDelay: '1.1s' }}>
           <Button
             variant="ghostGlass"
-            className="w-auto h-10 mt-10"
+            className="mt-8 h-11 w-auto px-6 text-white border-white/20 bg-white/8 hover:border-white/35 hover:bg-white/14 hover:text-white"
             onClick={() => {
               if (!currentUser) {
                 openLogin()
@@ -129,7 +132,7 @@ export function CoverPage() {
           href="https://beian.miit.gov.cn/"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs transition-colors text-muted-foreground hover:text-foreground"
+          className="text-xs text-white/55 transition-colors hover:text-white/85"
         >
           {t('filingNumber')}
         </a>

@@ -4,6 +4,8 @@ import { ChevronLeft, ChevronRight, Languages, Moon, Sun, X } from 'lucide-react
 import { useTranslation } from 'react-i18next'
 
 import { useTheme } from '@/components/theme-toggle'
+import { Button } from '@/components/ui/button'
+import { isCatalogImageDeleted, useCatalogImageLifecycleVersion } from '@/features/images/image-lifecycle'
 import { usePageStickyAnchorOffset } from '@/lib/page-scroll'
 
 import { getImageListContext } from './image-context'
@@ -59,6 +61,7 @@ export function ImageDetailPage() {
   const contextId = searchParams.get('contextId')
   const searchResultsAnchorRef = useRef<HTMLDivElement>(null)
   const pageAnchorOffset = usePageStickyAnchorOffset({ gap: 0 })
+  const imageLifecycleVersion = useCatalogImageLifecycleVersion()
 
   const [fetchedImage, setFetchedImage] = useState<ImageResult | null>(null)
   const [isFetching, setIsFetching] = useState(false)
@@ -66,9 +69,12 @@ export function ImageDetailPage() {
   const context = useMemo(() => {
     if (!contextId) return null
     return getImageListContext(contextId)
-  }, [contextId])
+  }, [contextId, imageLifecycleVersion])
 
-  const images = context?.images ?? []
+  const images = useMemo(
+    () => (context?.images ?? []).filter(image => !isCatalogImageDeleted(image.image_id)),
+    [context?.images, imageLifecycleVersion],
+  )
 
   const currentIndex = useMemo(() => {
     if (!imageId) return -1
@@ -85,7 +91,23 @@ export function ImageDetailPage() {
       .finally(() => setIsFetching(false))
   }, [imageId, context])
 
-  const currentImage = currentIndex >= 0 ? images[currentIndex] : fetchedImage
+  const isCurrentImageDeleted = Boolean(imageId && isCatalogImageDeleted(imageId))
+
+  useEffect(() => {
+    if (!imageId || !isCurrentImageDeleted) return
+
+    if (images.length > 0) {
+      const fallbackImage = images[0]
+      if (fallbackImage && fallbackImage.image_id !== imageId) {
+        navigate(`/image/${fallbackImage.image_id}${contextId ? `?contextId=${contextId}` : ''}`, { replace: true })
+        return
+      }
+    }
+
+    setFetchedImage(null)
+  }, [contextId, imageId, images, isCurrentImageDeleted, navigate])
+
+  const currentImage = isCurrentImageDeleted ? null : (currentIndex >= 0 ? images[currentIndex] : fetchedImage)
   const hasMultiple = images.length > 1
   const {
     searchResults,
@@ -147,7 +169,7 @@ export function ImageDetailPage() {
     })
   }, [currentImage, searchByLabel])
 
-  const isLoading = !currentImage && (isFetching || context !== null)
+  const isLoading = !currentImage && !isCurrentImageDeleted && (isFetching || context !== null)
   const titleBrand = currentImage?.brand ? formatBrand(currentImage.brand) : t('image')
   const imageMeta = currentImage ? formatSeasonLabel(currentImage, t) : ''
   const currentLanguageLabel = i18n.language === 'zh-CN' ? 'EN' : '中'
@@ -162,7 +184,7 @@ export function ImageDetailPage() {
       <header
         data-image-detail-header="true"
         data-page-sticky-header="true"
-        className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-md"
+        className="sticky top-0 z-30 border-b border-border bg-background"
       >
         <div className="flex min-h-16 w-full items-center justify-between gap-4 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
@@ -189,7 +211,7 @@ export function ImageDetailPage() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent/30 hover:text-foreground"
               aria-label={theme === 'dark' ? t('switchLight') : t('switchDark')}
               title={theme === 'dark' ? t('switchLight') : t('switchDark')}
             >
@@ -198,7 +220,7 @@ export function ImageDetailPage() {
             <button
               type="button"
               onClick={toggleLanguage}
-              className="type-chat-action control-pill-sm flex min-w-[56px] items-center justify-center gap-1 border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              className="type-chat-action control-pill-sm flex min-w-[56px] items-center justify-center gap-1 border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent/30 hover:text-foreground"
               aria-label={i18n.language === 'zh-CN' ? t('switchToEn') : t('switchToZh')}
               title={i18n.language === 'zh-CN' ? t('switchToEn') : t('switchToZh')}
             >
@@ -208,7 +230,7 @@ export function ImageDetailPage() {
             {hasMultiple && currentIndex > 0 && (
               <button
                 onClick={goPrev}
-                className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent/30 hover:text-foreground"
                 aria-label={t('previousImage')}
               >
                 <ChevronLeft size={16} />
@@ -222,7 +244,7 @@ export function ImageDetailPage() {
             {hasMultiple && currentIndex < images.length - 1 && (
               <button
                 onClick={goNext}
-                className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent/30 hover:text-foreground"
                 aria-label={t('nextImage')}
               >
                 <ChevronRight size={16} />
@@ -231,7 +253,7 @@ export function ImageDetailPage() {
             <button
               type="button"
               onClick={handleClose}
-              className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              className="control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent/30 hover:text-foreground"
               aria-label={t('close')}
             >
               <X size={16} />
@@ -255,10 +277,31 @@ export function ImageDetailPage() {
         </div>
       )}
 
+      {!isLoading && !currentImage && (
+        <div className="flex items-center justify-center px-4 py-10" style={{ minHeight: 'calc(100vh - 64px)' }}>
+          <div className="flex min-w-[280px] max-w-full flex-col items-center gap-4 border border-border px-8 py-10 text-center">
+            <p className="type-chat-title text-foreground">
+              {isCurrentImageDeleted ? t('deletedImageUnavailableTitle') : t('imageUnavailableTitle')}
+            </p>
+            <p className="type-chat-meta max-w-[32ch] text-muted-foreground">
+              {isCurrentImageDeleted ? t('deletedImageUnavailableHint') : t('drawerEmptyHint')}
+            </p>
+            {isCurrentImageDeleted && (
+              <p className="type-chat-kicker text-muted-foreground">
+                {imageId}
+              </p>
+            )}
+            <Button type="button" variant="outline" className="rounded-none" onClick={handleClose}>
+              {t('back')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {currentImage && (
         <div className="w-full px-3 py-3 sm:px-4 sm:py-4 lg:px-5 lg:py-5 xl:px-6 xl:py-6">
           <section
-            className="overflow-hidden border border-border/80 bg-background lg:h-[calc(100dvh-64px-40px)] xl:h-[calc(100dvh-64px-48px)]"
+            className="overflow-hidden border border-border bg-background lg:h-[calc(100dvh-64px-40px)] xl:h-[calc(100dvh-64px-48px)]"
           >
             <div className="flex min-h-0 flex-col lg:grid lg:h-full lg:grid-cols-[minmax(280px,320px)_minmax(0,1fr)_80px] xl:grid-cols-[320px_minmax(0,1fr)_88px]">
               <div className="order-3 min-h-0 border-t border-border lg:order-1 lg:border-r lg:border-t-0">

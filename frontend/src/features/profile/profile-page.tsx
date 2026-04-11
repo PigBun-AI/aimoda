@@ -83,21 +83,21 @@ export function ProfilePage() {
 
   return (
     <PageFrame fullHeight>
-      <header className="shrink-0 border-t border-border/80 px-0 py-5">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(260px,0.75fr)] xl:gap-8">
+      <header className="shrink-0 border-t border-border/70 px-0 py-6">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.75fr)] xl:gap-10">
           <div className="space-y-3">
             <p className="type-chat-kicker text-muted-foreground">
               {currentUser?.role ?? 'guest'}
             </p>
-            <h1 className="type-page-title max-w-[12ch] text-foreground">
+            <h1 className="type-page-title max-w-[10ch] text-balance text-foreground">
               {currentUser?.name ?? t('profileTab')}
             </h1>
           </div>
-          <div className="flex flex-col justify-between gap-4 border-t border-border/80 pt-4 xl:border-l xl:border-t-0 xl:pl-6 xl:pt-0">
+          <div className="flex flex-col justify-between gap-4 border border-border/60 bg-card px-5 py-5 shadow-token-sm">
             <p className="type-meta max-w-[32ch] break-all text-muted-foreground">
               {currentUser?.email ?? currentUser?.phone ?? t('notSet')}
             </p>
-            <div className="type-meta flex items-center justify-between border-t border-border/80 pt-3 text-muted-foreground">
+            <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
               <span>{t('profile.accountLabel')}</span>
               <span>{String(visibleTabs.length).padStart(2, '0')}</span>
             </div>
@@ -105,8 +105,8 @@ export function ProfilePage() {
         </div>
       </header>
 
-      <div className="relative shrink-0 border-b border-border/80 px-0">
-        <div className="scrollbar-hide flex items-center gap-5 overflow-x-auto sm:gap-6">
+      <div className="relative shrink-0 border-b border-border/60 px-0 pb-2">
+        <div className="scrollbar-hide flex items-center gap-3 overflow-x-auto sm:gap-4">
           {visibleTabs.map(tab => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
@@ -124,8 +124,8 @@ export function ProfilePage() {
                   setSearchParams(nextParams, { replace: true })
                 }}
                 className={cn(
-                  'type-chat-kicker relative flex items-center gap-2 whitespace-nowrap border-b py-4 transition-colors duration-fast cursor-pointer',
-                  isActive ? 'border-foreground text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+                  'type-chat-kicker relative flex items-center gap-2 whitespace-nowrap rounded-none border px-4 py-3 transition-[background-color,border-color,color,transform] duration-fast cursor-pointer',
+                  isActive ? 'border-border bg-card text-foreground shadow-token-sm' : 'border-transparent text-muted-foreground hover:-translate-y-px hover:border-border/60 hover:bg-card/72 hover:text-foreground',
                 )}
               >
                 <Icon size={14} />
@@ -146,7 +146,7 @@ export function ProfilePage() {
 
 function WorkbenchScrollArea({ children }: { children: ReactNode }) {
   return (
-    <div className="h-full overflow-y-auto px-5 py-5 sm:px-6">
+    <div className="h-full overflow-y-auto px-5 py-6 sm:px-6">
       {children}
     </div>
   )
@@ -174,10 +174,10 @@ function ProfileContent() {
   }, [i18n.language, t])
 
   return (
-    <div className="grid h-full min-h-0 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
-      <section className="min-h-0 overflow-y-auto border-r border-border/80 px-5 py-5 sm:px-6">
-        <div className="grid gap-5 border border-border/80 bg-background">
-          <div className="grid gap-5 border-b border-border/80 px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.5fr)]">
+    <div className="grid h-full min-h-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+      <section className="min-h-0 overflow-y-auto px-0 py-1 sm:px-0">
+        <div className="grid gap-5 border border-border/70 bg-card shadow-token-md">
+          <div className="grid gap-5 border-b border-border/60 px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.5fr)]">
             <div className="space-y-2">
               <p className="type-chat-kicker text-muted-foreground">
                 {t('profile.accountEyebrow')}
@@ -187,11 +187,11 @@ function ProfileContent() {
               </h2>
             </div>
 
-            <div className="flex flex-col justify-end gap-3 border-t border-border/80 pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+            <div className="flex flex-col justify-end gap-3 border-t border-border/60 pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
               <p className="type-meta text-muted-foreground">
                 {currentUser?.role ?? 'guest'}
               </p>
-              <div className="type-chat-kicker flex items-center justify-between border-t border-border/80 pt-3 text-muted-foreground">
+              <div className="type-chat-kicker flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
                 <span>{t('profile.fieldsLabel')}</span>
                 <span>03</span>
               </div>
@@ -199,11 +199,11 @@ function ProfileContent() {
           </div>
 
           <div className="px-5">
-            <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/80 py-4 sm:flex-row sm:items-center sm:gap-6">
+            <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/60 py-4 sm:flex-row sm:items-center sm:gap-6">
               <span className="type-meta text-muted-foreground">{t('username')}</span>
               <span className="type-label text-foreground sm:text-right">{currentUser?.name ?? t('notSet')}</span>
             </div>
-            <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/80 py-4 sm:flex-row sm:items-center sm:gap-6">
+            <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/60 py-4 sm:flex-row sm:items-center sm:gap-6">
               <span className="type-meta text-muted-foreground">{t('role')}</span>
               <span className="type-chat-kicker text-foreground sm:text-right">{currentUser?.role ?? 'guest'}</span>
             </div>
@@ -215,18 +215,18 @@ function ProfileContent() {
         </div>
       </section>
 
-      <aside className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6">
+      <aside className="min-h-0 overflow-y-auto px-0 py-1 sm:px-0">
         <div className="space-y-4">
-          <div className="border border-border/80 bg-background p-5 text-sm text-muted-foreground">
+          <div className="border border-border/70 bg-card p-5 text-sm text-muted-foreground shadow-token-md">
             <p className="type-chat-kicker text-muted-foreground">
               {t('membership.profileTitle')}
             </p>
             <div className="mt-4 space-y-3">
-              <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-3">
+              <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-3">
                 <span className="type-meta text-muted-foreground">{t('membership.currentPlan')}</span>
                 <span className="type-chat-kicker text-right text-foreground">{planLabel}</span>
               </div>
-              <div className="flex items-start justify-between gap-4 border-b border-border/80 pb-3">
+              <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-3">
                 <span className="type-meta text-muted-foreground">{t('membership.validFrom')}</span>
                 <span className="type-chat-kicker text-right text-foreground">
                   {hasSubscription ? formatDateLabel(subscriptionStartsAt) : t('membership.noMembershipPeriod')}
@@ -243,7 +243,7 @@ function ProfileContent() {
 
           <Button
             variant="outline"
-            className="type-chat-action w-full justify-between gap-2 rounded-none"
+            className="type-chat-action w-full justify-between gap-2"
             onClick={handleLogout}
           >
             <span>{t('common:logout')}</span>

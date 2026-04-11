@@ -4,20 +4,20 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
-  'type-action-label inline-flex items-center justify-center gap-2 border rounded-none transition-all duration-fast focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 cursor-pointer select-none',
+  'type-action-label inline-flex items-center justify-center gap-2 border rounded-none transition-[background-color,border-color,color,box-shadow,transform] duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 cursor-pointer select-none active:scale-[0.99]',
   {
     variants: {
       variant: {
-        default: 'border-primary bg-primary text-primary-foreground hover:bg-primary/88',
-        secondary: 'border-border bg-secondary text-secondary-foreground hover:border-foreground/55 hover:bg-background',
-        outline: 'border-border bg-transparent text-foreground hover:border-foreground hover:bg-accent',
-        ghost: 'border-transparent bg-transparent text-muted-foreground hover:text-foreground hover:border-border',
-        destructive: 'border-foreground bg-transparent text-foreground hover:bg-foreground hover:text-background',
-        ghostGlass: 'border-border bg-background/80 text-foreground hover:border-foreground hover:bg-background',
+        default: 'border-primary/90 bg-primary text-primary-foreground shadow-token-md hover:-translate-y-px hover:bg-primary/92 hover:shadow-token-lg',
+        secondary: 'border-border/80 bg-secondary/80 text-secondary-foreground hover:border-border hover:bg-card',
+        outline: 'border-border/80 bg-background text-foreground hover:border-foreground/30 hover:bg-card',
+        ghost: 'border-transparent bg-transparent text-muted-foreground hover:border-border/70 hover:bg-accent/60 hover:text-foreground',
+        destructive: 'border-transparent bg-[var(--destructive)] text-primary-foreground hover:-translate-y-px hover:opacity-94',
+        ghostGlass: 'border-border/70 bg-background text-foreground hover:border-foreground/20 hover:bg-card',
       },
       size: {
-        default: 'min-h-11 px-4 py-3',
-        sm: 'min-h-9 px-3',
+        default: 'min-h-11 px-5 py-3',
+        sm: 'min-h-10 px-4',
         lg: 'min-h-12 px-6',
         icon: 'h-11 w-11 px-0',
       },

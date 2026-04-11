@@ -509,6 +509,36 @@ def remove_items(user_id: int, collection_id: str, image_ids: list[str]) -> int:
     return removed_count
 
 
+def remove_catalog_items_by_source_ref(image_id: str) -> list[str]:
+    normalized_image_id = str(image_id).strip()
+    if not normalized_image_id:
+        return []
+
+    with pg_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                DELETE FROM favorite_collection_items
+                WHERE source_type = 'catalog'
+                  AND source_ref_id = %s
+                RETURNING collection_id
+                """,
+                [normalized_image_id],
+            )
+            rows = cur.fetchall()
+            conn.commit()
+
+    collection_ids: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        collection_id = str(row.get("collection_id") or "").strip()
+        if not collection_id or collection_id in seen:
+            continue
+        seen.add(collection_id)
+        collection_ids.append(collection_id)
+    return collection_ids
+
+
 def list_collections_for_image(user_id: int, image_id: str) -> list[dict[str, Any]]:
     with pg_connection() as conn:
         with conn.cursor() as cur:

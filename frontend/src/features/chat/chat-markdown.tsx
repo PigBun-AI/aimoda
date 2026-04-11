@@ -102,7 +102,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({ content, annotations, o
   const hasInlineRefs = segments.some(segment => segment.type === "ref")
 
   return (
-    <div className="chat-markdown type-chat-body text-foreground/86">
+    <div className="chat-markdown type-chat-message-body text-foreground/86">
       {hasInlineRefs
         ? <StructuredMarkdown segments={segments} onMessageRefClick={onMessageRefClick} />
         : <ExternalMarkdown content={visibleContent} />}

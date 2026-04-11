@@ -199,15 +199,16 @@ export function ImageLabels({ image, anchorBox, onLabelSearch, activeLabelKey = 
                 stroke="currentColor"
                 strokeWidth="1"
                 strokeDasharray="4 4"
-                className="text-white/90"
+                className="text-foreground/90"
               />
               <circle
                 cx={labelAnchorX}
                 cy={labelAnchorY}
                 r="4"
-                fill="white"
-                stroke="rgba(0,0,0,0.85)"
+                fill="currentColor"
+                stroke="currentColor"
                 strokeWidth="1"
+                className="text-foreground"
               />
             </g>
           )
@@ -229,7 +230,7 @@ export function ImageLabels({ image, anchorBox, onLabelSearch, activeLabelKey = 
               labelRefs.current[key] = element
             }}
             type="button"
-            className={`pointer-events-auto absolute inline-flex max-w-[min(220px,28vw)] cursor-pointer items-center gap-1.5 border border-border bg-background/96 px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground shadow-[0_8px_22px_rgba(0,0,0,0.12)] backdrop-blur-sm transition-all hover:border-foreground/25 hover:bg-background ${isSearching ? 'opacity-70' : ''}`}
+            className={`pointer-events-auto absolute inline-flex max-w-[min(220px,28vw)] cursor-pointer items-center gap-1.5 border border-border bg-background px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition-all hover:border-foreground/25 hover:bg-accent/20 ${isSearching ? 'opacity-70' : ''}`}
             style={{
               left: `${placement?.left ?? labelAnchorX}px`,
               top: `${placement?.top ?? labelAnchorY}px`,
