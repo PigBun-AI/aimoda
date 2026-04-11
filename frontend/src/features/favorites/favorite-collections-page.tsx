@@ -31,6 +31,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { subscribeToCatalogImageDeleted } from '@/features/images/image-lifecycle'
 import { cn } from '@/lib/utils'
 import {
   createFavoriteCollection,
@@ -90,6 +91,10 @@ function resolveUploadJobTone(status: string) {
   if (status === 'completed') return 'text-foreground'
   if (status === 'partial_failed' || status === 'failed') return 'text-[var(--badge-error-text)]'
   return 'text-muted-foreground'
+}
+
+function removeDeletedPreviewItems<T extends { image_id: string }>(items: T[] | undefined, imageId: string) {
+  return (items ?? []).filter(item => item.image_id !== imageId)
 }
 
 export function FavoriteCollectionsPage() {
@@ -171,6 +176,54 @@ export function FavoriteCollectionsPage() {
   useEffect(() => {
     void syncList()
   }, [])
+
+  useEffect(() => {
+    return subscribeToCatalogImageDeleted((detail) => {
+      if (detail.affectedFavoriteCollectionIds.length === 0) return
+
+      const affectedCollectionIds = new Set(detail.affectedFavoriteCollectionIds)
+      const deletedImageId = detail.imageId
+
+      setCollections(prev => prev.map((collection) => {
+        if (!affectedCollectionIds.has(collection.id)) return collection
+
+        const nextPreviewItems = removeDeletedPreviewItems(collection.preview_items, deletedImageId)
+        const coverRemoved = collection.cover_image_id === deletedImageId
+
+        return {
+          ...collection,
+          item_count: Math.max(0, collection.item_count - 1),
+          preview_items: nextPreviewItems,
+          cover_image_id: coverRemoved ? (nextPreviewItems[0]?.image_id ?? null) : collection.cover_image_id,
+          cover_image_url: coverRemoved ? (nextPreviewItems[0]?.image_url ?? null) : collection.cover_image_url,
+        }
+      }))
+
+      let nextOffsetToReload: number | null = null
+      setSelectedDetail(prev => {
+        if (!prev || !affectedCollectionIds.has(prev.id)) return prev
+        const nextItems = prev.items.filter(item => item.image_id !== deletedImageId)
+        if (nextItems.length === prev.items.length) return prev
+
+        nextOffsetToReload = nextItems.length === 0 && prev.offset > 0
+          ? Math.max(0, prev.offset - prev.limit)
+          : prev.offset
+
+        return {
+          ...prev,
+          items: nextItems,
+          item_count: Math.max(0, prev.item_count - 1),
+          offset: nextOffsetToReload,
+        }
+      })
+      setSelectedImageIds(prev => prev.filter(imageId => imageId !== deletedImageId))
+
+      void syncList(selectedId)
+      if (selectedId && affectedCollectionIds.has(selectedId)) {
+        void loadDetail(selectedId, nextOffsetToReload ?? selectedDetail?.offset ?? 0)
+      }
+    })
+  }, [loadDetail, selectedDetail?.offset, selectedId, syncList])
 
   useEffect(() => {
     if (!selectedId) {
@@ -452,6 +505,28 @@ export function FavoriteCollectionsPage() {
           <div className="space-y-3">
             <p className="type-chat-kicker text-muted-foreground">{t('favoritesTab')}</p>
             <h1 className="type-page-title max-w-[10ch] text-foreground">{t('favoriteCollectionsTitle')}</h1>
+            <div className="grid gap-4 border-t border-border/80 pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.72fr)]">
+              <div className="space-y-3">
+                <p className="type-chat-kicker text-muted-foreground">{t('dnaCollectionsHeroEyebrow')}</p>
+                <p className="type-chat-meta max-w-[44ch] text-foreground/88">
+                  {t('dnaCollectionsHeroTitle')}
+                </p>
+              </div>
+              <div className="grid gap-3 border-t border-border/80 pt-3 lg:border-l lg:border-t-0 lg:pl-4 lg:pt-0">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="type-chat-kicker text-muted-foreground">{t('dnaCollectionsStepCollect')}</span>
+                  <span className="type-chat-kicker text-foreground/88">01</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="type-chat-kicker text-muted-foreground">{t('dnaCollectionsStepDistill')}</span>
+                  <span className="type-chat-kicker text-foreground/88">02</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="type-chat-kicker text-muted-foreground">{t('dnaCollectionsStepReuse')}</span>
+                  <span className="type-chat-kicker text-foreground/88">03</span>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex flex-col justify-between gap-4 border-t border-border/80 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
             <p className="type-meta max-w-[30ch] text-muted-foreground">
@@ -466,7 +541,7 @@ export function FavoriteCollectionsPage() {
 
         <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(280px,320px)_minmax(0,1fr)]">
           <aside className="flex min-h-[18rem] max-h-[34svh] min-h-0 flex-col overflow-hidden border border-border/80 bg-background xl:max-h-none">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/80 px-4 py-4">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/80 px-4 py-4">
               <div>
                 <p className="type-chat-kicker text-muted-foreground">{t('favoriteCollectionsTitle')}</p>
                 <p className="mt-1 type-chat-meta text-muted-foreground">{t('favoriteCollectionCount', { count: collections.length })}</p>
@@ -518,8 +593,13 @@ export function FavoriteCollectionsPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0 space-y-1.5">
                               <div className="type-chat-label truncate text-foreground">{collection.name}</div>
-                              <div className="type-chat-meta text-muted-foreground">
-                                {t('favoriteCollectionCount', { count: collection.item_count })}
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <div className="type-chat-meta text-muted-foreground">
+                                  {t('favoriteCollectionCount', { count: collection.item_count })}
+                                </div>
+                                <div className="type-chat-kicker text-muted-foreground/90">
+                                  {t('dnaCollectionCardMeta')}
+                                </div>
                               </div>
                             </div>
                             {(collection.can_apply_as_dna ?? collection.can_apply_as_taste) && (

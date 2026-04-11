@@ -74,7 +74,7 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
   return (
     <div className="py-1.5 animate-in fade-in slide-in-from-bottom-1 duration-normal">
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border border-border bg-background">
           <IconComp size={15} className="text-primary" />
         </div>
         <div className="flex-1 min-w-0">
@@ -84,12 +84,12 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
               <span className="text-xs text-muted-foreground truncate max-w-[250px]">{summary}</span>
             )}
             {step.resultCount !== undefined && (
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              <span className={`border px-2 py-0.5 text-xs font-medium ${
                 step.resultCount === 0
-                  ? 'bg-destructive/20 text-destructive'
+                  ? 'border-destructive/30 bg-destructive/10 text-destructive'
                   : step.matchLevel === 'partial'
-                    ? 'bg-warning/20 text-warning dark:text-warning'
-                    : 'bg-primary/15 text-primary'
+                    ? 'border-border bg-muted/40 text-warning dark:text-warning'
+                    : 'border-border bg-background text-primary'
               }`}>
                 {t('toolResultCount', { count: step.resultCount })}
                 {step.matchLevel === 'exact' && ' ✓'}
@@ -100,7 +100,7 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
             {canShowGallery && onShowImages && (
               <button
                 onClick={() => onShowImages(step)}
-                className="inline-flex items-center gap-1 text-xs bg-primary hover:bg-primary/90 text-primary-foreground px-2.5 py-1 rounded-full transition-all font-medium shadow-sm"
+                className="inline-flex items-center gap-1 border border-primary bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90"
               >
                 <Image size={12} />
                 {t('viewAll')}
@@ -137,13 +137,13 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
 
           {/* Expanded args panel */}
           {expanded && hasArgs && (
-            <div className="mt-2 bg-muted/50 border border-border rounded-xl px-3 py-2.5 space-y-1.5 animate-in fade-in duration-fast">
+            <div className="mt-2 space-y-1.5 border border-border bg-muted/30 px-3 py-2.5 animate-in fade-in duration-fast">
               {Object.entries(args).map(([key, val]) => {
                 if (val === null || val === undefined || (Array.isArray(val) && val.length === 0)) return null
                 return (
                   <div key={key} className="flex items-start gap-2">
                     <span className="text-xs text-muted-foreground shrink-0 min-w-[80px] pt-0.5">{key}</span>
-                    <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">
+                    <span className="border border-border bg-background px-1.5 py-0.5 text-xs text-primary">
                       {typeof val === 'object' ? JSON.stringify(val) : String(val)}
                     </span>
                   </div>
@@ -177,7 +177,7 @@ function ThumbnailCard({ img }: { img: ImageResult }) {
   return (
     <div className="shrink-0 space-y-1">
       <div
-        className="w-[80px] bg-muted rounded overflow-hidden group relative"
+        className="group relative w-[80px] overflow-hidden border border-border bg-muted"
         style={{ aspectRatio: '1 / 2' }}
       >
         <div className="w-full h-full" style={bgStyle} />

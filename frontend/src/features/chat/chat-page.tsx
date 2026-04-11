@@ -102,8 +102,8 @@ function EmptyState() {
     <div className="flex min-h-full w-full items-center justify-center px-6 py-8 text-center">
       {/* Keep the empty state deliberately simple; the editorialized split layout
           pulled too much attention and made the chat entry feel heavier. */}
-      <div className="flex w-full max-w-3xl flex-col items-center border border-border px-8 py-10 sm:px-12 sm:py-14">
-        <div className="w-full max-w-xl border-b border-border pb-8">
+      <div className="flex w-full max-w-3xl flex-col items-center border border-border/60 bg-card px-8 py-12 shadow-token-lg sm:px-12 sm:py-16">
+        <div className="w-full max-w-xl border-b border-border/60 pb-8">
           <div className="flex items-center justify-center gap-4">
             <img src="/aimoda-logo.svg" alt="aimoda" className="h-8 w-auto dark:hidden" />
             <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-8 w-auto dark:block" />
@@ -394,7 +394,7 @@ export function ChatPage() {
             type="button"
             onClick={() => void handleCreateParallelSession()}
             disabled={isCreatingParallelSession}
-            className="type-chat-action control-pill-sm inline-flex items-center justify-center border border-border text-foreground transition-colors hover:border-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-45"
+            className="type-chat-action control-pill-sm inline-flex items-center justify-center rounded-none border border-border/70 bg-background px-4 text-foreground shadow-token-sm transition-[background-color,border-color,transform] hover:-translate-y-px hover:border-foreground/25 hover:bg-card disabled:cursor-not-allowed disabled:opacity-45"
           >
             {isCreatingParallelSession ? t('loading') : t('parallelSearchAction')}
           </button>
@@ -412,12 +412,12 @@ export function ChatPage() {
             </p>
           </div>
           <div className="flex items-center gap-3 sm:justify-end">
-            <span className={cn('type-chat-label control-pill-sm inline-flex items-center border border-border/70 px-3 text-muted-foreground/88', isLimitExceeded && 'border-destructive/30 text-destructive')}>
+            <span className={cn('type-chat-label control-pill-sm inline-flex items-center rounded-none border border-border/70 bg-background px-3 text-muted-foreground/88', isLimitExceeded && 'border-destructive/30 text-destructive')}>
               {aiQuotaLabel}
             </span>
             <Link
               to="/profile?tab=access"
-              className="type-chat-action control-pill-sm inline-flex items-center border border-transparent text-foreground transition-colors hover:border-border hover:text-muted-foreground"
+              className="type-chat-action control-pill-sm inline-flex items-center rounded-none border border-transparent px-1 text-foreground transition-[border-color,color] hover:border-border/70 hover:text-muted-foreground"
             >
               {t('membership.manageAction')}
             </Link>
@@ -495,7 +495,7 @@ export function ChatPage() {
       size="sm"
       onClick={handleOpenPreferencesDialog}
       className={cn(
-        'h-11 min-w-[112px] items-center justify-start gap-2 rounded-none px-3 text-left',
+        'h-11 min-w-[112px] items-center justify-start gap-2 px-4 text-left',
         hasActiveChatPreferences(draftPreferences) && 'border-foreground/55',
       )}
     >
@@ -510,7 +510,7 @@ export function ChatPage() {
   )
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-background">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-transparent">
       <div ref={mainRef} className="flex min-h-0 flex-1">
         <div
           className={cn(
@@ -521,11 +521,11 @@ export function ChatPage() {
           )}
           style={isDesktop ? { width: `${chatWidthPercent}%` } : undefined}
         >
-          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6">
+          <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-7">
             {messages.length === 0 ? (
               <EmptyState />
             ) : (
-              <div className="mx-auto w-full max-w-3xl border-t border-border/80 pt-6 sm:pt-8">
+              <div className="mx-auto w-full max-w-3xl border-t border-border/60 pt-6 sm:pt-8">
                 {messages.map((msg) => (
                   <MessageBubble
                     key={msg.id}
@@ -561,15 +561,15 @@ export function ChatPage() {
                 aria-orientation="vertical"
                 aria-label={t('resizeDrawer')}
                 onPointerDown={handleResizeStart}
-                className="group relative w-3 shrink-0 touch-none cursor-col-resize bg-background"
+                className="group relative w-3 shrink-0 touch-none cursor-col-resize bg-transparent"
               >
-                <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors group-hover:bg-foreground" />
-                <div className="absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 bg-foreground/0 transition-colors group-hover:bg-foreground/10" />
+                <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-colors group-hover:bg-foreground/60" />
+                <div className="absolute inset-y-0 left-1/2 w-1.5 -translate-x-1/2 bg-foreground/0 transition-colors group-hover:bg-foreground/12" />
               </div>
             )}
             <div
               className={cn(
-                'flex min-w-0 shrink-0 flex-col border-l border-border bg-background',
+                'flex min-w-0 shrink-0 flex-col border-l border-border/60 bg-card',
                 !isDesktop && 'fixed inset-0 z-50 bg-background',
                 isDesktop && isDrawerFullscreen && 'w-full',
               )}
@@ -608,7 +608,7 @@ export function ChatPage() {
       </div>
 
       <Dialog open={isPreferencesDialogOpen} onOpenChange={setIsPreferencesDialogOpen}>
-        <DialogContent className="max-w-[880px] rounded-none border-border/80">
+        <DialogContent className="max-w-[880px] border-border/70">
           <DialogHeader>
             <DialogTitle>{t('chatPreferencesTitle')}</DialogTitle>
             <DialogDescription>{t('chatPreferencesHint')}</DialogDescription>
@@ -619,7 +619,6 @@ export function ChatPage() {
             collections={preferenceCollections}
             onChange={handlePreferencesChange}
             showHeader={false}
-            className="gap-0"
           />
 
           <DialogFooter>

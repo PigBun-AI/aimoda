@@ -186,7 +186,7 @@ function UserBlockRenderer({ block }: { block: ContentBlock }) {
 
   if (block.type === 'text') {
     return block.text ? (
-      <div className="type-chat-body border border-foreground bg-foreground px-4 py-3 whitespace-pre-wrap text-background">
+      <div className="type-chat-message-body border border-foreground bg-foreground px-4 py-3 whitespace-pre-wrap text-background shadow-token-sm">
         {block.text}
       </div>
     ) : null
@@ -197,7 +197,7 @@ function UserBlockRenderer({ block }: { block: ContentBlock }) {
       <img
         src={resolveImageSrc(block.source, 560)}
         alt={block.alt_text || block.file_name || t('uploadedImage')}
-        className="ml-auto max-h-72 border border-border bg-card object-cover"
+        className="ml-auto max-h-72 border border-foreground bg-background object-cover"
       />
     )
   }
@@ -316,18 +316,18 @@ function ShowCollectionPendingCard() {
   const { t } = useTranslation('common')
 
   return (
-    <div className="overflow-hidden border border-border/80 bg-background animate-in fade-in slide-in-from-bottom-1 duration-normal">
+    <div className="overflow-hidden border border-border bg-background shadow-token-sm animate-in fade-in slide-in-from-bottom-1 duration-normal">
       <div className="flex items-start justify-between gap-3 px-4 py-4 sm:px-5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-border/70 bg-background">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-border bg-background">
             <Images size={13} className="text-muted-foreground" />
           </div>
           <div className="space-y-2">
-            <div className="h-4 w-24 rounded bg-muted animate-pulse" />
-            <div className="h-3 w-44 rounded bg-muted/80 animate-pulse" />
+            <div className="h-4 w-24 bg-muted animate-pulse" />
+            <div className="h-3 w-44 bg-muted/80 animate-pulse" />
           </div>
         </div>
-        <div className="inline-flex items-center gap-2 border border-border/80 bg-background px-3 py-1.5">
+        <div className="inline-flex items-center gap-2 border border-border bg-background px-3 py-1.5">
           <Loader2 size={12} className="animate-spin text-muted-foreground" />
           <span className="type-chat-meta text-muted-foreground">{t('generatingResults')}</span>
         </div>
@@ -360,11 +360,11 @@ function ToolTraceGroup({
   const [collapsed, setCollapsed] = useState(true)
 
   return (
-    <div className="overflow-hidden border border-border/80 bg-background">
+    <div className="overflow-hidden border border-border bg-background shadow-token-sm">
       <button
         type="button"
         onClick={() => setCollapsed((prev) => !prev)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/[0.14] sm:px-5"
+        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/[0.08] sm:px-5"
       >
         <div className="flex min-w-0 items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
@@ -381,7 +381,7 @@ function ToolTraceGroup({
       </button>
 
       {!collapsed && (
-        <div className="space-y-2 border-t border-border/80 bg-muted/[0.05] px-3 pb-3 pt-3 sm:px-4">
+        <div className="space-y-2 border-t border-border bg-muted/[0.03] px-3 pb-3 pt-3 sm:px-4">
           {blocks.map((block, index) => (
             <BlockRenderer
               key={index}
@@ -410,7 +410,7 @@ function TextBlockView({
 }) {
   if (!block.text) return null
   return (
-    <div className="border border-border/80 bg-background px-4 py-3 sm:px-5 sm:py-4">
+    <div className="border border-border bg-background px-4 py-3 shadow-token-sm sm:px-5 sm:py-4">
       <ChatMarkdown content={block.text} annotations={block.annotations} onMessageRefClick={onMessageRefClick} />
     </div>
   )
@@ -423,11 +423,11 @@ function ReasoningBlockView({ block }: { block: { type: 'reasoning'; text: strin
   if (!block.text.trim()) return null
 
   return (
-    <div className="overflow-hidden border border-border/80 bg-background">
+    <div className="overflow-hidden border border-border bg-background shadow-token-sm">
       <button
         type="button"
         onClick={() => setCollapsed((prev) => !prev)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/[0.18] sm:px-5"
+        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-muted/[0.08] sm:px-5"
       >
         <div className="flex items-center gap-2">
           {collapsed ? <ChevronRight size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
@@ -441,7 +441,7 @@ function ReasoningBlockView({ block }: { block: { type: 'reasoning'; text: strin
       </button>
 
       {!collapsed && (
-        <div className="border-t border-border/80 bg-muted/[0.08] px-4 py-3 sm:px-5">
+        <div className="border-t border-border bg-muted/[0.04] px-4 py-3 sm:px-5">
           <div className="type-chat-body border-l border-border pl-3 text-muted-foreground">
             <ChatMarkdown content={block.text} />
           </div>
@@ -459,8 +459,8 @@ function ToolCallCard({ block }: { block: { type: 'tool_use'; id: string; name: 
   const isDone = block.status === 'done'
 
   return (
-    <div className="flex items-center gap-2.5 border border-border/70 bg-background px-3 py-2.5 sm:px-4">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center border border-border/70 bg-background">
+    <div className="flex items-center gap-2.5 border border-border bg-background px-3 py-2.5 sm:px-4">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center border border-border bg-background">
         <IconComp size={12.5} className="text-muted-foreground" />
       </div>
       <div className="flex min-w-0 flex-1 items-baseline gap-2">
@@ -501,14 +501,14 @@ function ToolResultView({
 
   if (isError) {
     return (
-      <div className="type-ui-body-sm ml-3 border-l border-foreground py-1 pl-3 text-foreground">
+      <div className="type-ui-body-sm border border-foreground px-3 py-2 text-foreground">
         {parseToolResultSummary(block.content, t)}
       </div>
     )
   }
 
   return (
-    <div className="type-ui-body-sm ml-3 border-l border-border py-1 pl-3 text-muted-foreground">
+    <div className="type-ui-body-sm border-l border-border py-1 pl-3 text-muted-foreground">
       {parseToolResultSummary(block.content, t)}
     </div>
   )
@@ -526,10 +526,10 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
   ]
 
   return (
-    <div className="space-y-3 border border-border/80 bg-background px-4 py-4 sm:px-5">
+    <div className="space-y-3 border border-border bg-background px-4 py-4 shadow-token-sm sm:px-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border/80 bg-muted/[0.14]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-muted/[0.08]">
             <Sparkles size={15} className="text-foreground" />
           </div>
           <div>
@@ -545,7 +545,7 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
       {analysis.summary_zh && <div className="type-chat-body text-foreground">{analysis.summary_zh}</div>}
 
       {analysis.retrieval_query_en && (
-        <div className="border border-border/80 bg-muted/[0.12] px-3 py-2">
+        <div className="border border-border bg-muted/[0.05] px-3 py-2">
           <div className="type-chat-kicker mb-1 text-muted-foreground">Retrieval Query</div>
           <div className="type-chat-body break-words text-foreground">{analysis.retrieval_query_en}</div>
         </div>
@@ -554,7 +554,7 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
       {analysis.style_keywords.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {analysis.style_keywords.map((keyword) => (
-            <span key={keyword} className="type-chat-kicker inline-flex items-center border border-border/80 bg-background px-2.5 py-1 text-foreground">
+            <span key={keyword} className="type-chat-kicker inline-flex items-center border border-border bg-background px-2.5 py-1 text-foreground">
               {keyword}
             </span>
           ))}
@@ -566,7 +566,7 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
           <div className="type-chat-meta text-muted-foreground">{t('suggestedHardFilters')}</div>
           <div className="flex flex-wrap gap-2">
             {filterEntries.map((item, index) => (
-              <span key={`${item.label}-${item.value}-${index}`} className="type-chat-label inline-flex items-center gap-1 border border-border/80 bg-muted/[0.1] px-2.5 py-1 text-foreground">
+              <span key={`${item.label}-${item.value}-${index}`} className="type-chat-label inline-flex items-center gap-1 border border-border bg-muted/[0.04] px-2.5 py-1 text-foreground">
                   <span className="type-caption text-muted-foreground">{item.label}</span>
                   <span>{item.value}</span>
                 </span>
@@ -606,10 +606,10 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
   ].filter((group) => group.values.length > 0)
 
   return (
-    <div className="space-y-3 border border-border/80 bg-background px-4 py-4 sm:px-5">
+    <div className="space-y-3 border border-border bg-background px-4 py-4 shadow-token-sm sm:px-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border/80 bg-muted/[0.14]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-muted/[0.08]">
             <Sparkles size={15} className="text-foreground" />
           </div>
           <div>

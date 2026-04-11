@@ -1,6 +1,7 @@
 // Chat API client — SSE streaming + session CRUD
 
 import { ApiError, fetchWithAuth } from '@/lib/api'
+import { registerDeletedCatalogImage } from '@/features/images/image-lifecycle'
 import type { ChatArtifact, ChatSession, ChatSessionPreferences, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
 import type { SearchPlanMessageRef } from './message-refs'
 
@@ -32,6 +33,37 @@ function buildSearchSessionByIdCacheKey(
     tasteProfileId ?? null,
     typeof tasteProfileWeight === 'number' ? Number(tasteProfileWeight.toFixed(4)) : null,
   ])
+}
+
+function removeImageFromCachedSearchSessions(imageId: string): string[] {
+  const normalizedImageId = imageId.trim()
+  if (!normalizedImageId) return []
+
+  const affectedSearchRequestIds = new Set<string>()
+
+  for (const [cacheKey, response] of searchSessionByIdCache.entries()) {
+    const nextImages = (response.images ?? []).filter(image => image.image_id !== normalizedImageId)
+    const removedCount = (response.images ?? []).length - nextImages.length
+    if (removedCount <= 0) continue
+
+    try {
+      const [searchRequestId] = JSON.parse(cacheKey) as [string]
+      if (typeof searchRequestId === 'string' && searchRequestId) {
+        affectedSearchRequestIds.add(searchRequestId)
+      }
+    } catch {
+      // Ignore malformed cache keys and still patch the cached payload.
+    }
+
+    searchSessionByIdCache.set(cacheKey, {
+      ...response,
+      images: nextImages,
+      total: Math.max(0, response.total - removedCount),
+      has_more: response.has_more,
+    })
+  }
+
+  return Array.from(affectedSearchRequestIds)
 }
 
 export class ChatStreamAbortedError extends Error {
@@ -334,6 +366,57 @@ export async function fetchImageDetail(imageId: string): Promise<ImageResult> {
   const resp = await fetchWithAuth(`/api/chat/image/${imageId}`)
   if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   return resp.json()
+}
+
+export async function deleteCatalogImage(imageId: string): Promise<{
+  image_id: string
+  image_url?: string
+  brand?: string
+  removed_collection_count?: number
+  affected_collection_ids?: string[]
+}> {
+  const resp = await fetchWithAuth(`/api/chat/image/${imageId}`, {
+    method: 'DELETE',
+  })
+  if (!resp.ok) {
+    let payload: { detail?: string; error?: string } | null = null
+    try {
+      payload = await resp.json() as { detail?: string; error?: string }
+    } catch {
+      payload = null
+    }
+    throw new ApiError(
+      payload?.detail ?? payload?.error ?? `HTTP ${resp.status}: ${resp.statusText}`,
+      resp.status,
+      payload,
+    )
+  }
+
+  const payload = await resp.json() as {
+    data?: {
+      image_id: string
+      image_url?: string
+      brand?: string
+      removed_collection_count?: number
+      affected_collection_ids?: string[]
+    }
+  }
+
+  if (!payload.data?.image_id) {
+    throw new Error('Delete image payload missing')
+  }
+
+  const affectedSearchRequestIds = removeImageFromCachedSearchSessions(payload.data.image_id)
+  registerDeletedCatalogImage({
+    imageId: payload.data.image_id,
+    imageUrl: payload.data.image_url,
+    brand: payload.data.brand,
+    affectedSearchRequestIds,
+    affectedFavoriteCollectionIds: payload.data.affected_collection_ids ?? [],
+    removedCollectionCount: payload.data.removed_collection_count,
+  })
+
+  return payload.data
 }
 
 

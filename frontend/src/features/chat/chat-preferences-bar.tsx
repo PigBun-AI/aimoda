@@ -40,7 +40,7 @@ export function ChatPreferencesBar({
   }, [])
 
   return (
-    <div className={className ?? 'flex flex-col gap-3'}>
+    <div className={className ?? 'flex flex-col gap-5'}>
       {showHeader && (
         <div className="space-y-1">
           <p className="type-chat-kicker text-muted-foreground/72">
@@ -52,7 +52,21 @@ export function ChatPreferencesBar({
         </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-3 border-y border-border/80 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <div className="space-y-1.5">
+          <p className="type-chat-kicker text-muted-foreground">
+            {t('dnaPreferenceEyebrow')}
+          </p>
+          <p className="type-chat-meta max-w-[56ch] text-muted-foreground">
+            {t('dnaPreferenceHint')}
+          </p>
+        </div>
+        <div className="type-chat-kicker flex min-h-10 items-center border border-border/80 px-3 text-foreground/88">
+          {t('dnaPreferenceCount', { count: collections.length })}
+        </div>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <PreferenceField label={t('chatPreferenceGender')}>
           <Select
             value={value.gender ?? 'none'}
@@ -156,7 +170,7 @@ function PreferenceField({
   children: ReactNode
 }) {
   return (
-    <label className="grid gap-1.5">
+    <label className="grid gap-2">
       <span className="type-chat-kicker text-muted-foreground/78">{label}</span>
       {children}
     </label>

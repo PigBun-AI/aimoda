@@ -184,12 +184,12 @@ export function ChatInput({
   )
 
   return (
-    <div className="bg-background px-3 pb-3 sm:px-4 sm:pb-4">
+    <div className="bg-transparent px-3 pb-3 sm:px-4 sm:pb-5">
       <div className="mx-auto max-w-3xl">
         <div
           className={[
-            "relative overflow-hidden border bg-background transition-colors",
-            isDragActive ? "border-foreground" : "border-border",
+            "relative overflow-hidden rounded-none border bg-card shadow-token-lg transition-[border-color,background-color,box-shadow]",
+            isDragActive ? "border-foreground/30 bg-card" : "border-border/70",
           ].join(" ")}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -197,8 +197,8 @@ export function ChatInput({
           onDrop={handleDrop}
         >
           {isDragActive && (
-            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/94">
-              <div className="flex flex-col items-center gap-3 border border-foreground px-6 py-6 text-center">
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/90">
+              <div className="flex flex-col items-center gap-3 border border-foreground/20 bg-card px-7 py-7 text-center shadow-token-md">
                 <ImagePlus size={20} className="text-foreground" />
                 <div className="space-y-1">
                   <p className="type-chat-kicker text-foreground">{t("dropImageHere")}</p>
@@ -219,7 +219,7 @@ export function ChatInput({
             />
 
             {(statusBar || infoMessage) && (
-              <div className="border-b border-border/80 bg-muted/[0.14] px-4 py-3 sm:px-5">
+              <div className="border-b border-border/60 bg-muted/[0.16] px-4 py-3 sm:px-5">
                 <div className="flex flex-col gap-2.5">
                   {statusBar && <div className="min-w-0">{statusBar}</div>}
                   {infoMessage && (
@@ -238,12 +238,12 @@ export function ChatInput({
                     <img
                       src={`data:${image.source.media_type};base64,${image.source.data}`}
                       alt={image.fileName}
-                      className="h-16 w-16 border border-border bg-muted object-cover"
+                      className="h-16 w-16 rounded-none border border-border/70 bg-muted object-cover shadow-token-sm"
                     />
                     <button
                       type="button"
                       onClick={() => removePendingImage(image.id)}
-                      className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center border border-border bg-background text-muted-foreground hover:text-foreground"
+                      className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-none border border-border/70 bg-background text-muted-foreground shadow-token-sm hover:text-foreground"
                       aria-label={t("removeImage", { fileName: image.fileName })}
                     >
                       <X size={12} />
@@ -260,15 +260,15 @@ export function ChatInput({
                 onKeyDown={handleKeyPress}
                 placeholder={resolvedPlaceholder}
                 disabled={disabled}
-                className="type-chat-body min-h-[76px] flex-1 w-full resize-none bg-transparent px-4 pt-4 text-foreground outline-none placeholder:text-muted-foreground/72 sm:px-5"
+                className="type-chat-compose-body min-h-[76px] flex-1 w-full resize-none bg-transparent px-4 pt-5 text-foreground outline-none placeholder:text-muted-foreground/72 sm:px-5"
               />
 
-              <div className="flex shrink-0 items-center justify-between border-t border-border/70 bg-background px-3 pb-3 pt-2 sm:px-4">
+              <div className="flex shrink-0 items-center justify-between border-t border-border/60 bg-transparent px-3 pb-3 pt-2 sm:px-4">
                 <div className="flex min-w-0 items-center gap-2">
                   <button
                     type="button"
                     onClick={handlePickImages}
-                    className="control-icon-sm shrink-0 cursor-pointer border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                    className="control-icon-sm flex shrink-0 cursor-pointer items-center justify-center rounded-none border border-border/60 bg-background text-muted-foreground shadow-token-sm transition-[background-color,border-color,color,transform] hover:-translate-y-px hover:border-foreground/18 hover:bg-card hover:text-foreground"
                     title={t("uploadImage")}
                   >
                     <ImagePlus size={18} />
@@ -284,8 +284,8 @@ export function ChatInput({
                     <Button
                       type="button"
                       className={[
-                        "flex h-11 min-w-[92px] shrink-0 cursor-pointer items-center justify-center gap-2 rounded-none border border-foreground bg-background px-4 text-foreground",
-                        "hover:bg-accent disabled:cursor-not-allowed disabled:opacity-55",
+                        "flex h-11 min-w-[104px] shrink-0 cursor-pointer items-center justify-center gap-2 border border-border/70 bg-background px-5 text-foreground",
+                        "hover:bg-card disabled:cursor-not-allowed disabled:opacity-55",
                       ].join(" ")}
                       disabled={isStopping}
                       onClick={onStop}
@@ -296,8 +296,8 @@ export function ChatInput({
                   ) : (
                     <Button
                       className={[
-                        "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-none p-0",
-                        canSend ? "bg-foreground text-background hover:bg-foreground/88" : "bg-border text-muted-foreground",
+                        "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center p-0",
+                        canSend ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground shadow-none",
                       ].join(" ")}
                       disabled={!canSend}
                       onClick={handleSend}

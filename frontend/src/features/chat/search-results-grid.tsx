@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+import { isCatalogImageDeleted, useCatalogImageLifecycleVersion } from '@/features/images/image-lifecycle'
 import type { ImageResult } from './chat-types'
 import type { SearchResponse } from './chat-api'
 import { FashionImage } from './fashion-image'
@@ -31,9 +32,15 @@ export function SearchResultsGrid({
   const { t } = useTranslation('common')
   const gridRef = useRef<HTMLDivElement>(null)
   const [columnCount, setColumnCount] = useState(4)
+  const lifecycleVersion = useCatalogImageLifecycleVersion()
 
   const { images, total, page, page_size } = searchResults
-  const totalPages = Math.ceil(total / page_size)
+  const visibleImages = useMemo(
+    () => images.filter(image => !isCatalogImageDeleted(image.image_id)),
+    [images, lifecycleVersion],
+  )
+  const visibleTotal = Math.max(0, total - (images.length - visibleImages.length))
+  const totalPages = Math.max(1, Math.ceil(visibleTotal / page_size))
 
   useEffect(() => {
     const gridEl = gridRef.current
@@ -62,7 +69,7 @@ export function SearchResultsGrid({
     window.open(`/image/${image.image_id}`, '_blank', 'noopener')
   }, [])
 
-  if (images.length === 0 && !isLoading) {
+  if (visibleImages.length === 0 && !isLoading) {
     return (
       <section className="border-t border-border/80 pt-6">
         <div className="flex min-h-[280px] items-center justify-center">
@@ -83,7 +90,7 @@ export function SearchResultsGrid({
             {labelName}
           </h3>
           <p className="type-chat-meta whitespace-nowrap text-muted-foreground">
-            {total} {t('imageUnit')}
+            {visibleTotal} {t('imageUnit')}
           </p>
         </div>
 
@@ -121,7 +128,7 @@ export function SearchResultsGrid({
           className="grid gap-y-7 gap-x-4"
           style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
         >
-          {images.map(image => (
+          {visibleImages.map(image => (
             <div key={image.image_id} className="w-full space-y-2.5">
               <div
                 className="group relative w-full cursor-pointer overflow-hidden bg-background"

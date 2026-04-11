@@ -38,21 +38,21 @@ export function ReportsPage() {
   )
 
   return (
-    <section className="space-y-8 sm:space-y-10">
-      <header className="grid gap-6 border-t border-border/80 pt-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(220px,0.75fr)] lg:gap-8 lg:pt-6">
+    <section className="space-y-9 sm:space-y-12">
+      <header className="grid gap-6 border-t border-border/70 pt-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(240px,0.75fr)] lg:gap-10 lg:pt-8">
         <div className="space-y-3">
-          <p className="type-chat-kicker text-muted-foreground">
+          <p className="type-chat-kicker text-muted-foreground/88">
             {String(totalReports).padStart(2, '0')}
           </p>
-          <h1 className="type-page-title max-w-[12ch] text-foreground">
+          <h1 className="type-page-title max-w-[10ch] text-balance text-foreground">
             {t('title')}
           </h1>
         </div>
-        <div className="flex flex-col justify-between gap-4 border-t border-border/80 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <p className="type-meta max-w-[32ch] text-muted-foreground">
+        <div className="flex flex-col justify-between gap-4 border border-border/60 bg-card px-5 py-5 shadow-token-sm lg:pl-6">
+          <p className="type-meta max-w-[32ch] text-muted-foreground/84">
             {t('subtitle')}
           </p>
-          <div className="type-meta flex items-center justify-between border-t border-border/80 pt-3 text-muted-foreground">
+          <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
             <span>{t('archiveLabel')}</span>
             <span>{String(page).padStart(2, '0')}</span>
           </div>
@@ -60,7 +60,7 @@ export function ReportsPage() {
       </header>
 
       {isLocked ? (
-        <div className="border border-border/80 bg-background px-6 py-10 sm:px-8 sm:py-12">
+        <div className="border border-border/70 bg-card px-6 py-10 shadow-token-md sm:px-8 sm:py-12">
           <div className="mx-auto flex max-w-2xl flex-col gap-4">
             <p className="type-chat-kicker text-muted-foreground">{t('lockedEyebrow')}</p>
             <h2 className="type-page-title text-foreground sm:text-[2.6rem]">
@@ -70,7 +70,7 @@ export function ReportsPage() {
               {t('lockedBody')}
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button asChild variant="ghost" className="type-chat-action h-10 rounded-none px-4">
+              <Button asChild variant="outline" className="type-chat-action h-10 px-5">
                 <Link to="/profile?tab=access">{t('openMembership')}</Link>
               </Button>
               <RedeemDialog />
@@ -79,10 +79,10 @@ export function ReportsPage() {
         </div>
       ) : (
         <div>
-          <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
+          <div className="grid gap-5 sm:gap-6 md:grid-cols-2">
             {reportsQuery.isLoading
               ? Array.from({ length: 6 }).map((_, index) => (
-                  <Skeleton key={index} className="h-[22rem] w-full rounded-[var(--radius)]" />
+                  <Skeleton key={index} className="h-[24rem] w-full rounded-none" />
                 ))
               : reports.map((report) => {
                   return (
@@ -156,13 +156,13 @@ export function ReportsPage() {
       )}
 
       {totalPages > 1 && (
-        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border/80 pt-5" aria-label={t('pagination')}>
+        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-6" aria-label={t('pagination')}>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
             disabled={page === 1 || reportsQuery.isLoading}
-            className="type-chat-action min-h-[44px] min-w-[44px] rounded-none px-3"
+            className="type-chat-action min-h-[44px] min-w-[44px] px-4"
             aria-label={t('previousPage')}
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
@@ -183,7 +183,7 @@ export function ReportsPage() {
             size="sm"
             onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
             disabled={page === totalPages || reportsQuery.isLoading}
-            className="type-chat-action min-h-[44px] min-w-[44px] rounded-none px-3"
+            className="type-chat-action min-h-[44px] min-w-[44px] px-4"
             aria-label={t('nextPage')}
           >
             <span className="hidden sm:inline">{t('nextPage')}</span>
@@ -193,9 +193,9 @@ export function ReportsPage() {
       )}
 
       {reports.length === 0 && !reportsQuery.isLoading && (
-        <div className="border border-border/80 px-6 py-12 text-center sm:px-8 sm:py-16">
+        <div className="border border-border/70 bg-card px-6 py-12 text-center shadow-token-md sm:px-8 sm:py-16">
           <div className="mx-auto flex max-w-[18rem] flex-col items-center gap-4">
-            <div className="type-chat-kicker border border-border px-4 py-2 text-muted-foreground">
+            <div className="type-chat-kicker border border-border/70 bg-background px-4 py-2 text-muted-foreground">
               00
             </div>
             <p className="type-section-title text-foreground">

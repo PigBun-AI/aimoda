@@ -13,12 +13,14 @@ import { downloadImageAsset } from './image-download'
 import { CHAT_PREFERENCE_WEIGHT_OPTIONS, normalizeChatPreferenceWeightValue } from './chat-preferences-bar'
 import { FavoriteImageDialog } from '@/features/favorites/favorite-image-dialog'
 import { listFavoriteCollections, lookupFavoriteCollections, type FavoriteCollection } from '@/features/favorites/favorites-api'
+import { getDeletedImageIdsForSearchRequest, subscribeToCatalogImageDeleted } from '@/features/images/image-lifecycle'
+import { AdminImageDeleteButton } from './admin-image-delete-button'
 
 const DRAWER_HEADER_META_CLASS = 'type-chat-meta text-muted-foreground'
 const DRAWER_HEADER_ICON_BUTTON_CLASS =
-  'control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground'
+  'control-icon-sm flex items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent/30 hover:text-foreground'
 const DRAWER_HEADER_ACTION_BUTTON_CLASS =
-  'type-chat-action control-pill-sm flex items-center gap-2 border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground'
+  'type-chat-action control-pill-sm flex items-center gap-2 border border-transparent text-muted-foreground transition-colors hover:border-border hover:bg-accent/30 hover:text-foreground'
 
 /** Format brand name: capitalize each word */
 function formatBrand(brand: string): string {
@@ -55,10 +57,14 @@ export function ImageDrawer({
   const [collections, setCollections] = useState<FavoriteCollection[]>([])
   const [favoriteTarget, setFavoriteTarget] = useState<ImageResult | null>(null)
   const [favoriteMap, setFavoriteMap] = useState<Record<string, string[]>>({})
+  const [deletedImageIds, setDeletedImageIds] = useState<Set<string>>(
+    () => new Set(data?.searchRequestId ? getDeletedImageIdsForSearchRequest(data.searchRequestId) : []),
+  )
   if (!open || !data) return null
 
-  const safeImages = data.images || []
-  const displayCount = data.total || safeImages.length
+  const deletedCount = (data.images || []).reduce((count, image) => count + (deletedImageIds.has(image.image_id) ? 1 : 0), 0)
+  const safeImages = (data.images || []).filter(image => !deletedImageIds.has(image.image_id))
+  const displayCount = Math.max(0, (data.total || (data.images || []).length) - deletedCount)
   const thumbnailWidth = isFullscreen ? CHAT_THUMBNAIL_MAX_EDGE.drawerFocus : CHAT_THUMBNAIL_MAX_EDGE.drawer
   const showLoadingState = data.isLoadingMore && safeImages.length === 0
   const showEmptyState = !data.isLoadingMore && safeImages.length === 0
@@ -97,18 +103,52 @@ export function ImageDrawer({
   useEffect(() => {
     setFavoriteMap(prev => {
       const next = { ...prev }
+      let changed = false
       for (const image of safeImages) {
         if (Array.isArray(image.favorite_collection_ids)) {
-          next[image.image_id] = image.favorite_collection_ids
+          const current = prev[image.image_id] ?? []
+          const incoming = image.favorite_collection_ids
+          const isSameLength = current.length === incoming.length
+          const isSameValue = isSameLength && current.every((value, index) => value === incoming[index])
+          if (!isSameValue) {
+            next[image.image_id] = incoming
+            changed = true
+          }
           continue
         }
         if (image.is_favorited === false && !(image.image_id in next)) {
           next[image.image_id] = []
+          changed = true
         }
       }
-      return next
+      return changed ? next : prev
     })
   }, [safeImages])
+
+  useEffect(() => {
+    setDeletedImageIds(new Set(data.searchRequestId ? getDeletedImageIdsForSearchRequest(data.searchRequestId) : []))
+  }, [data.searchRequestId, data.stepLabel])
+
+  useEffect(() => {
+    return subscribeToCatalogImageDeleted((detail) => {
+      const imageId = detail.imageId.trim()
+      if (!imageId) return
+
+      const currentImages = data.images || []
+      const shouldRemove =
+        currentImages.some(image => image.image_id === imageId)
+        || (data.searchRequestId !== null && detail.affectedSearchRequestIds.includes(data.searchRequestId))
+
+      if (!shouldRemove) return
+
+      setDeletedImageIds(prev => {
+        if (prev.has(imageId)) return prev
+        const next = new Set(prev)
+        next.add(imageId)
+        return next
+      })
+    })
+  }, [data.images, data.searchRequestId])
 
   const handleImageClick = (img: typeof safeImages[number]) => {
     window.open(`/image/${img.image_id}`, '_blank')
@@ -137,7 +177,7 @@ export function ImageDrawer({
 
   return (
     <div className={`flex h-full flex-col animate-in slide-in-from-right duration-normal bg-background ${isFullscreen ? 'border-l-0' : 'border-l border-border'}`}>
-      <div className="border-b border-border/80 px-4 py-3 sm:px-5">
+      <div className="border-b border-border px-4 py-3 sm:px-5">
         <div className="flex min-h-10 items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="type-chat-label truncate text-foreground/84">
@@ -169,9 +209,14 @@ export function ImageDrawer({
         </div>
 
         {data.searchRequestId && collections.length > 0 && (
-          <div className="mt-3 grid gap-3 border-t border-border/80 pt-3 lg:grid-cols-[minmax(0,1fr)_220px_168px] lg:items-center">
-            <div className="type-chat-meta text-muted-foreground">
-              {t('favoriteDrawerHint')}
+          <div className="mt-3 grid gap-3 border-t border-border pt-3 lg:grid-cols-[minmax(0,1fr)_220px_168px] lg:items-center">
+            <div className="space-y-1">
+              <p className="type-chat-kicker text-muted-foreground">
+                {t('favoriteDrawerEyebrow')}
+              </p>
+              <p className="type-chat-meta text-muted-foreground">
+                {t('favoriteDrawerHint')}
+              </p>
             </div>
             <Select
               value={data.tasteProfileId ?? 'none'}
@@ -227,7 +272,7 @@ export function ImageDrawer({
           </div>
         ) : showEmptyState ? (
           <div className="flex h-full min-h-[280px] items-center justify-center">
-            <div className="flex max-w-sm flex-col items-center gap-3 border border-border/80 px-6 py-7 text-center">
+            <div className="flex max-w-sm flex-col items-center gap-3 border border-border px-6 py-7 text-center">
               <p className="type-chat-label text-foreground/88">{t('drawerEmptyTitle')}</p>
               <p className="type-chat-meta leading-relaxed text-muted-foreground">
                 {data.emptyState === 'unavailable'
@@ -247,23 +292,23 @@ export function ImageDrawer({
             )}
             style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
           >
-            {safeImages.map((img, i) => (
-              <div key={i} className="w-full space-y-2.5">
+            {safeImages.map((img) => (
+              <div key={img.image_id} className="w-full space-y-2.5">
                 <div
                   onClick={() => handleImageClick(img)}
-                  className="group relative w-full cursor-pointer overflow-hidden bg-background"
+                  className="group relative w-full cursor-pointer overflow-hidden border border-border bg-background"
                   style={{ aspectRatio: '1 / 2', width: '100%' }}
                   title={t('viewImageItem', { brand: img.brand || t('image') })}
                 >
                   <FashionImage image={img} className="w-full h-full" thumbnailWidth={thumbnailWidth} />
-                  <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
+                  <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/5 dark:group-hover:bg-white/[0.04]" />
                   <div className="absolute right-2 top-2 flex flex-col gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
                       onClick={(event) => handleFavoriteOpen(event, img)}
-                      className="flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-foreground"
-                      title={t('favorite')}
-                      aria-label={t('favorite')}
+                      className="flex h-8 w-8 items-center justify-center border border-border bg-background text-foreground transition-colors hover:border-foreground"
+                      title={favoriteMap[img.image_id]?.length ? t('favoriteSaved') : t('favorite')}
+                      aria-label={favoriteMap[img.image_id]?.length ? t('favoriteSaved') : t('favorite')}
                     >
                       <Heart
                         size={14}
@@ -273,16 +318,28 @@ export function ImageDrawer({
                     <button
                       type="button"
                       onClick={(event) => handleImageDownload(event, img)}
-                      className="flex h-8 w-8 items-center justify-center border border-white/20 bg-background/88 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-foreground"
+                      className="flex h-8 w-8 items-center justify-center border border-border bg-background text-foreground transition-colors hover:border-foreground"
                       title={t('download')}
                       aria-label={t('download')}
                     >
                       <Download size={14} />
                     </button>
+                    <AdminImageDeleteButton
+                      imageId={img.image_id}
+                      brand={img.brand}
+                      onDeleted={(deletedImageId) => {
+                        setDeletedImageIds(prev => {
+                          if (prev.has(deletedImageId)) return prev
+                          const next = new Set(prev)
+                          next.add(deletedImageId)
+                          return next
+                        })
+                      }}
+                    />
                   </div>
                 </div>
 
-                <div className="space-y-1.5 text-left">
+                <div className="space-y-1.5 border-t border-border pt-2 text-left">
                   <div className="flex min-h-[0.875rem] items-center gap-2">
                     {img.year != null && (
                       <div className="type-chat-kicker text-muted-foreground/92">

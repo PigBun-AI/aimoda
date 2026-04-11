@@ -13,7 +13,7 @@ export function ThemeToggle({ className }: { className?: string }) {
   return (
     <button
       onClick={toggleTheme}
-      className={cn('p-2 rounded-lg transition-colors hover:bg-accent', className)}
+      className={cn('border border-transparent p-2 transition-colors hover:border-border hover:bg-accent/30', className)}
       aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
     >
       {theme === 'light' ? (

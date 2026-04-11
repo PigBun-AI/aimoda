@@ -5,10 +5,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Filter, ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { DEFAULT_DRAWER_PAGE_SIZE, fetchCachedSearchSessionById, peekCachedSearchSessionById } from './chat-api'
+import {
+  DEFAULT_DRAWER_PAGE_SIZE,
+  fetchCachedSearchSessionById,
+  peekCachedSearchSessionById,
+} from './chat-api'
+import { getDeletedImageIdsForSearchRequest, subscribeToCatalogImageDeleted } from '@/features/images/image-lifecycle'
 import type { SearchResultData, ImageResult, ChatSessionPreferences } from './chat-types'
 import { FashionImage } from './fashion-image'
 import { CHAT_THUMBNAIL_MAX_EDGE } from './oss-image'
+import { AdminImageDeleteButton } from './admin-image-delete-button'
 
 interface SearchResultCardProps {
   data: SearchResultData
@@ -59,17 +65,28 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
     ),
     [data.search_request_id, tasteProfileId, tasteProfileWeight],
   )
-  const [previewImages, setPreviewImages] = useState<ImageResult[]>(() => (cachedPreview?.images ?? []).slice(0, 4))
+  const [previewImages, setPreviewImages] = useState<ImageResult[]>(() => {
+    const deletedIds = new Set(getDeletedImageIdsForSearchRequest(data.search_request_id))
+    return (cachedPreview?.images ?? []).filter(image => !deletedIds.has(image.image_id)).slice(0, 4)
+  })
+  const [deletedImageIds, setDeletedImageIds] = useState<Set<string>>(
+    () => new Set(getDeletedImageIdsForSearchRequest(data.search_request_id)),
+  )
   const [previewState, setPreviewState] = useState<'loading' | 'ready' | 'empty' | 'error'>(() => {
     if (data.total <= 0) return 'empty'
     if ((cachedPreview?.images ?? []).length > 0) return 'ready'
     return 'loading'
   })
+  const visibleTotal = Math.max(0, data.total - deletedImageIds.size)
   const hasFilters = data.filters_applied.length > 0
   const filterCount = data.filters_applied.length
   const summary = hasFilters
-    ? t('searchResultSummaryWithFilters', { count: data.total, filters: filterCount })
-    : t('searchResultSummary', { count: data.total })
+    ? t('searchResultSummaryWithFilters', { count: visibleTotal, filters: filterCount })
+    : t('searchResultSummary', { count: visibleTotal })
+
+  useEffect(() => {
+    setDeletedImageIds(new Set(getDeletedImageIdsForSearchRequest(data.search_request_id)))
+  }, [data.search_request_id])
 
   useEffect(() => {
     let cancelled = false
@@ -90,8 +107,9 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
       tasteProfileWeight,
     )
     if (immediate) {
-      setPreviewImages((immediate.images ?? []).slice(0, 4))
-      setPreviewState((immediate.images ?? []).length > 0 ? 'ready' : 'empty')
+      const nextImages = (immediate.images ?? []).filter(image => !deletedImageIds.has(image.image_id)).slice(0, 4)
+      setPreviewImages(nextImages)
+      setPreviewState(nextImages.length > 0 ? 'ready' : 'empty')
       return () => {
         cancelled = true
       }
@@ -109,7 +127,7 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
     )
       .then((response) => {
         if (cancelled) return
-        const nextImages = (response.images ?? []).slice(0, 4)
+        const nextImages = (response.images ?? []).filter(image => !deletedImageIds.has(image.image_id)).slice(0, 4)
         setPreviewImages(nextImages)
         setPreviewState(nextImages.length > 0 ? 'ready' : 'empty')
       })
@@ -123,17 +141,36 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
     return () => {
       cancelled = true
     }
-  }, [data.search_request_id, data.total, tasteProfileId, tasteProfileWeight])
+  }, [data.search_request_id, data.total, deletedImageIds, tasteProfileId, tasteProfileWeight])
+
+  useEffect(() => {
+    return subscribeToCatalogImageDeleted((detail) => {
+      const imageId = detail.imageId.trim()
+      if (!imageId || !detail.affectedSearchRequestIds.includes(data.search_request_id)) return
+
+      setDeletedImageIds(prev => {
+        if (prev.has(imageId)) return prev
+        const next = new Set(prev)
+        next.add(imageId)
+        return next
+      })
+      setPreviewImages(prev => {
+        const next = prev.filter(image => image.image_id !== imageId)
+        setPreviewState(next.length > 0 ? 'ready' : 'empty')
+        return next
+      })
+    })
+  }, [data.search_request_id])
 
   return (
-    <div className="overflow-hidden border border-border/80 bg-background animate-in fade-in slide-in-from-bottom-1 duration-normal">
+    <div className="overflow-hidden border border-border bg-background shadow-token-sm animate-in fade-in slide-in-from-bottom-1 duration-normal">
       <div className="space-y-4 px-4 py-4 sm:px-5 sm:py-5">
-        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="type-chat-label text-foreground/84">{t('searchResultTitle')}</span>
               <span className="type-chat-meta text-muted-foreground">
-                {t('imageCountWithUnit', { count: data.total })}
+                {t('imageCountWithUnit', { count: visibleTotal })}
               </span>
             </div>
             <p className="type-chat-meta max-w-[50ch] text-muted-foreground">
@@ -141,10 +178,10 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
             </p>
           </div>
 
-          {data.total > 0 && data.search_request_id && (
+          {visibleTotal > 0 && data.search_request_id && (
             <button
               onClick={() => onOpenDrawer(data.search_request_id)}
-              className="type-chat-action inline-flex min-h-8 items-center gap-1 self-start border-b border-transparent pb-0.5 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+              className="type-chat-action inline-flex min-h-8 items-center gap-1 self-start border border-transparent px-2 py-1 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
             >
               {t('viewAll')}
               <ArrowRight size={11} />
@@ -161,7 +198,7 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
             {data.filters_applied.slice(0, 4).map((f, i) => (
               <span
                 key={i}
-                className="type-chat-kicker border border-border/70 px-2.5 py-1 text-foreground/82"
+                className="type-chat-kicker border border-border px-2.5 py-1 text-foreground/82"
               >
                 {formatFilterTag(f, t)}
               </span>
@@ -185,13 +222,25 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {previewImages.map((img, i) => (
-                <PreviewThumbnail key={i} img={img} />
+                <PreviewThumbnail
+                  key={img.image_id || i}
+                  img={img}
+                  onDeleted={(deletedImageId) => {
+                    setDeletedImageIds(prev => {
+                      if (prev.has(deletedImageId)) return prev
+                      const next = new Set(prev)
+                      next.add(deletedImageId)
+                      return next
+                    })
+                    setPreviewImages(prev => prev.filter(image => image.image_id !== deletedImageId))
+                  }}
+                />
               ))}
             </div>
           </div>
         )}
 
-        {previewState === 'loading' && data.search_request_id && data.total > 0 && (
+        {previewState === 'loading' && data.search_request_id && visibleTotal > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <span className="type-chat-kicker text-muted-foreground">{t('resultPreview')}</span>
@@ -200,7 +249,7 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {Array.from({ length: 4 }).map((_, index) => (
                 <div key={index} className="min-w-0 space-y-1.5">
-                  <div className="animate-pulse bg-muted/70" style={{ aspectRatio: '1 / 2' }} />
+                  <div className="animate-pulse border border-border bg-muted/60" style={{ aspectRatio: '1 / 2' }} />
                   <div className="h-3 w-2/3 animate-pulse bg-muted/70" />
                 </div>
               ))}
@@ -208,7 +257,7 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
           </div>
         )}
 
-        {previewState === 'error' && data.search_request_id && data.total > 0 && (
+        {previewState === 'error' && data.search_request_id && visibleTotal > 0 && (
           <div className="type-chat-meta text-muted-foreground">
             {t('resultPreviewUnavailable')}
           </div>
@@ -219,15 +268,18 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
 }
 
 /** Inline preview thumbnail — 1:2 aspect ratio with bbox crop */
-function PreviewThumbnail({ img }: { img: ImageResult }) {
+function PreviewThumbnail({ img, onDeleted }: { img: ImageResult; onDeleted?: (imageId: string) => void }) {
   return (
     <div className="min-w-0 space-y-1.5">
       <div
-        className="group relative overflow-hidden bg-background"
+        className="group relative overflow-hidden border border-border bg-background"
         style={{ aspectRatio: '1 / 2' }}
       >
         <FashionImage image={img} className="w-full h-full" thumbnailWidth={CHAT_THUMBNAIL_MAX_EDGE.resultPreview} />
-        <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/8" />
+        <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/5 dark:group-hover:bg-white/[0.04]" />
+        <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+          <AdminImageDeleteButton imageId={img.image_id} brand={img.brand} onDeleted={onDeleted} />
+        </div>
       </div>
       {img.brand && (
         <div className="type-chat-meta truncate px-0.5 text-muted-foreground">

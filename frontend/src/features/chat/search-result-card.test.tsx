@@ -6,8 +6,14 @@ import { SearchResultCard } from './search-result-card'
 
 vi.mock('./chat-api', () => ({
   DEFAULT_DRAWER_PAGE_SIZE: 50,
+  deleteCatalogImage: vi.fn(),
   fetchCachedSearchSessionById: vi.fn(),
   peekCachedSearchSessionById: vi.fn(() => null),
+}))
+
+vi.mock('@/features/images/image-lifecycle', () => ({
+  getDeletedImageIdsForSearchRequest: vi.fn(() => []),
+  subscribeToCatalogImageDeleted: vi.fn(() => () => {}),
 }))
 
 vi.mock('./fashion-image', () => ({
@@ -24,7 +30,7 @@ const mockedPeekCachedSearchSessionById = vi.mocked(peekCachedSearchSessionById)
 describe('SearchResultCard', () => {
   it('hydrates preview images from the current retrieval preferences', async () => {
     mockedPeekCachedSearchSessionById.mockReturnValueOnce(null)
-    mockedFetchCachedSearchSessionById.mockResolvedValueOnce({
+    mockedFetchCachedSearchSessionById.mockResolvedValue({
       images: [
         {
           image_url: 'https://example.com/look-1.jpg',

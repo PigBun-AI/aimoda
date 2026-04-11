@@ -53,3 +53,40 @@ export function getImageListContext(contextId: string): ImageListContext | null 
     return null
   }
 }
+
+export function removeImageFromAllContexts(imageId: string): string[] {
+  if (typeof window === 'undefined') return []
+
+  const normalizedImageId = imageId.trim()
+  if (!normalizedImageId) return []
+
+  const prefix = 'fr_image_list_ctx_'
+  const affectedContextIds: string[] = []
+
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index)
+    if (!key?.startsWith(prefix)) continue
+
+    const raw = localStorage.getItem(key)
+    if (!raw) continue
+
+    try {
+      const context: ImageListContext = JSON.parse(raw)
+      const nextImages = (context.images ?? []).filter(image => image.image_id !== normalizedImageId)
+      const removedCount = (context.images ?? []).length - nextImages.length
+      if (removedCount <= 0) continue
+
+      const contextId = key.slice(prefix.length)
+      affectedContextIds.push(contextId)
+      localStorage.setItem(key, JSON.stringify({
+        ...context,
+        imageIds: nextImages.map(image => image.image_id),
+        images: nextImages,
+      }))
+    } catch {
+      // Ignore malformed stored contexts.
+    }
+  }
+
+  return affectedContextIds
+}

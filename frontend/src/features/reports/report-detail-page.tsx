@@ -18,7 +18,7 @@ function getSafeIframeUrl(url: string): string | null {
     const parsedUrl = new URL(url, window.location.origin)
 
     if (parsedUrl.origin === window.location.origin) {
-      return `${parsedUrl.pathname}${parsedUrl.search}${parsedUrl.hash}`
+      return parsedUrl.pathname + parsedUrl.search + parsedUrl.hash
     }
 
     if (parsedUrl.hostname.endsWith('.aliyuncs.com')) {
@@ -41,13 +41,13 @@ export function ReportDetailPage() {
   const isLocked = reportQuery.error instanceof ApiError && reportQuery.error.status === 403
 
   const safeIframeUrl = useMemo(() => {
-    if (!reportQuery.data?.iframeUrl) {
+    if (reportQuery.data?.iframeUrl == null) {
       return null
     }
     return getSafeIframeUrl(reportQuery.data.iframeUrl)
   }, [reportQuery.data?.iframeUrl])
 
-  const { prevReport, nextReport } = useMemo(() => {
+  const prevNext = useMemo(() => {
     const list = reportsQuery.data?.reports ?? []
     const currentIndex = list.findIndex((report) => String(report.id) === reportId)
     return {
@@ -66,7 +66,7 @@ export function ReportDetailPage() {
     )
   }
 
-  if (!reportQuery.data) {
+  if (reportQuery.data == null) {
     if (isLocked) {
       return (
         <div className="flex h-dvh items-center justify-center bg-background px-6">
@@ -75,9 +75,7 @@ export function ReportDetailPage() {
             <h1 className="mt-3 font-serif text-[2.2rem] leading-[0.94] tracking-[-0.04em] text-foreground">
               {t('lockedTitle')}
             </h1>
-            <p className="mt-4 max-w-[42ch] text-sm text-muted-foreground">
-              {t('lockedBody')}
-            </p>
+            <p className="mt-4 max-w-[42ch] text-sm text-muted-foreground">{t('lockedBody')}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button asChild variant="ghost">
                 <Link to="/profile?tab=access">{t('openMembership')}</Link>
@@ -104,79 +102,116 @@ export function ReportDetailPage() {
     )
   }
 
+  const formattedDate = new Date(reportQuery.data.updatedAt).toLocaleDateString(
+    i18n.language === 'zh-CN' ? 'zh-CN' : 'en-US',
+    {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    },
+  )
+
   return (
     <div className="flex h-dvh flex-col bg-background">
-      <div className="grid shrink-0 gap-5 border-b border-border px-4 py-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)] sm:px-6">
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => navigate('/reports')}>
-              <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
-              <span>{t('backToList')}</span>
-            </Button>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              {reportQuery.data.brand}
-            </span>
+      <header className="shrink-0 border-b border-border">
+        <div className="grid gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)] lg:gap-10 lg:py-5">
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>
+                <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+                <span>{t('backToList')}</span>
+              </Button>
+              <div className="flex flex-wrap items-center gap-2 text-right">
+                <span className="type-chat-kicker text-muted-foreground">{reportQuery.data.brand}</span>
+                <span className="type-chat-kicker border border-border px-2 py-1 text-muted-foreground">Report</span>
+              </div>
+            </div>
+
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_200px]">
+              <div className="space-y-3">
+                <p className="type-chat-kicker text-muted-foreground">{reportQuery.data.season}</p>
+                <h1 className="type-page-title max-w-[12ch] text-foreground">{reportQuery.data.title}</h1>
+              </div>
+              <div className="border-l border-border pl-5">
+                <p className="type-chat-kicker text-muted-foreground">Updated</p>
+                <p className="mt-2 text-sm uppercase tracking-[0.14em] text-foreground">{formattedDate}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="border-t border-border pt-4">
-            <h1 className="max-w-[16ch] font-serif text-[2rem] font-medium leading-[0.95] tracking-[-0.04em] text-foreground sm:text-[2.75rem]">
-              {reportQuery.data.title}
-            </h1>
-          </div>
-        </div>
-
-        <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              {reportQuery.data.season}
-            </p>
-            <p className="text-[11px] uppercase leading-5 tracking-[0.14em] text-muted-foreground">
-              {new Date(reportQuery.data.updatedAt).toLocaleDateString(i18n.language === 'zh-CN' ? 'zh-CN' : 'en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-              })}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!prevReport}
-              onClick={() => prevReport && navigate(`/reports/${prevReport.id}`)}
-            >
-              <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
-              <span>{t('previousArticle')}</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!nextReport}
-              onClick={() => nextReport && navigate(`/reports/${nextReport.id}`)}
-            >
-              <span>{t('nextArticle')}</span>
-              <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 bg-[#efefeb] p-3 dark:bg-[#0f0f0f] sm:p-4">
-        <div className="h-full border border-border bg-background">
-          {safeIframeUrl ? (
-            <iframe
-              className="h-full w-full border-0"
-              src={safeIframeUrl}
-              title={reportQuery.data.title}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center px-6">
-              <p className="max-w-sm text-center text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                {t('iframeError')}
+          <div className="grid gap-5 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+            <div className="space-y-3">
+              <p className="type-chat-kicker text-muted-foreground">Archive note</p>
+              <p className="type-body-muted max-w-[30ch]">
+                {reportQuery.data.brand} {reportQuery.data.season} · {formattedDate}
               </p>
             </div>
-          )}
+
+            <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={prevNext.prevReport == null}
+                onClick={() => {
+                  if (prevNext.prevReport) {
+                    navigate('/reports/' + String(prevNext.prevReport.id))
+                  }
+                }}
+                className="justify-between"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+                  <span>{t('previousArticle')}</span>
+                </span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={prevNext.nextReport == null}
+                onClick={() => {
+                  if (prevNext.nextReport) {
+                    navigate('/reports/' + String(prevNext.nextReport.id))
+                  }
+                }}
+                className="justify-between"
+              >
+                <span>{t('nextArticle')}</span>
+                <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="min-h-0 flex-1 p-3 sm:p-4">
+        <div className="grid h-full gap-3 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-4">
+          <aside className="hidden border border-border bg-background px-5 py-5 lg:flex lg:flex-col lg:justify-between">
+            <div className="space-y-5">
+              <div className="border-b border-border pb-4">
+                <p className="type-chat-kicker text-muted-foreground">Edition</p>
+                <p className="mt-2 type-section-title text-foreground">{reportQuery.data.season}</p>
+              </div>
+              <div className="space-y-2">
+                <p className="type-chat-kicker text-muted-foreground">Brand</p>
+                <p className="type-chat-title text-foreground">{reportQuery.data.brand}</p>
+              </div>
+              <div className="space-y-2 border-t border-border pt-4">
+                <p className="type-chat-kicker text-muted-foreground">Published</p>
+                <p className="type-chat-meta text-foreground">{formattedDate}</p>
+              </div>
+            </div>
+            <p className="type-chat-meta text-muted-foreground">A clean editorial reader with stark black-and-white framing.</p>
+          </aside>
+
+          <div className="min-h-0 border border-border bg-background">
+            {safeIframeUrl ? (
+              <iframe className="h-full w-full border-0 bg-white dark:bg-black" src={safeIframeUrl} title={reportQuery.data.title} />
+            ) : (
+              <div className="flex h-full items-center justify-center px-6">
+                <p className="max-w-sm text-center text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('iframeError')}</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
