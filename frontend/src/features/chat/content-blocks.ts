@@ -6,7 +6,7 @@ export function normalizeContentBlocks(blocks: ContentBlock[]): ContentBlock[] {
       return {
         ...block,
         // Persisted assistant messages are fetched only after the turn ends,
-        // so legacy blocks without an explicit status should be treated as complete.
+        // so blocks without an explicit status should be treated as complete.
         status: block.status ?? 'done',
       }
     }

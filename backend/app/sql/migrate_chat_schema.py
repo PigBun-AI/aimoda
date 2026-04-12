@@ -188,28 +188,18 @@ def run_migration():
 
 
 def migrate_existing_content_to_jsonb():
-    """Migrate existing TEXT content in messages to JSONB array format.
-
-    Old format: content = 'Hello world'
-    New format: content = [{"type": "text", "text": "Hello world"}]
-
-    Only migrates rows where content is still TEXT (not already JSONB array).
-    """
+    """Normalize null message content into the canonical JSONB array format."""
     with get_pg_conn() as conn:
-        # Migrate TEXT content to JSONB array
         migrated = conn.execute("""
             UPDATE messages
             SET content = CASE
                 WHEN jsonb_typeof(content) IS NULL THEN '[]'::jsonb
-                WHEN jsonb_typeof(content) = 'string' THEN
-                    to_jsonb(ARRAY[jsonb_build_object('type', 'text', 'text', content)])
                 ELSE content
             END
             WHERE jsonb_typeof(content) IS NULL
-               OR jsonb_typeof(content) = 'string'
         """).rowcount
         conn.commit()
-    print(f"Migrated {migrated} rows from TEXT to JSONB content format.")
+    print(f"Normalized {migrated} rows with null content to JSONB arrays.")
     return migrated
 
 

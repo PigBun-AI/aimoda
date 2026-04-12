@@ -4,6 +4,22 @@
 
 import { z } from "zod";
 import { createGallery } from "../db.js";
+import { jsonStringCompatibleArray, parseStructuredArgs } from "../tool_input.js";
+
+const createGalleryRuntimeSchema = z.object({
+  title: z.string(),
+  description: z.string().optional(),
+  category: z
+    .enum(["trend", "collection", "street_style", "editorial", "inspiration"])
+    .optional()
+    .default("inspiration"),
+  tags: z.array(z.string()).optional().default([]),
+  source: z.string().optional().default("manual"),
+  status: z
+    .enum(["draft", "published", "archived"])
+    .optional()
+    .default("published"),
+});
 
 export const createGallerySchema = {
   title: z.string().describe("图集标题"),
@@ -13,10 +29,8 @@ export const createGallerySchema = {
     .optional()
     .default("inspiration")
     .describe("分类: trend/collection/street_style/editorial/inspiration"),
-  tags: z
-    .array(z.string())
+  tags: jsonStringCompatibleArray(z.string())
     .optional()
-    .default([])
     .describe("标签数组，如 ['minimalist', 'ss25', 'runway']"),
   source: z.string().optional().default("manual").describe("来源: vogue/pinterest/xiaohongshu/manual"),
   status: z
@@ -35,13 +49,18 @@ export async function createGalleryTool(args: {
   status?: string;
 }) {
   try {
+    const normalizedArgs = parseStructuredArgs(
+      createGalleryRuntimeSchema,
+      args,
+      "create_gallery arguments",
+    );
     const gallery = await createGallery({
-      title: args.title,
-      description: args.description,
-      category: args.category,
-      tags: args.tags,
-      source: args.source,
-      status: args.status,
+      title: normalizedArgs.title,
+      description: normalizedArgs.description,
+      category: normalizedArgs.category,
+      tags: normalizedArgs.tags,
+      source: normalizedArgs.source,
+      status: normalizedArgs.status,
     });
 
     return {

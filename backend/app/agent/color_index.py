@@ -175,7 +175,7 @@ class ColorIndex:
                 # Apply hard filters before scoring.
                 if gender and payload.get("gender", "").lower() != gender.lower():
                     continue
-                payload_quarter = normalize_quarter_value(payload.get("quarter") or payload.get("season"))
+                payload_quarter = normalize_quarter_value(payload.get("quarter"))
                 if normalized_quarter and payload_quarter != normalized_quarter:
                     continue
                 # Score combines color closeness AND percentage

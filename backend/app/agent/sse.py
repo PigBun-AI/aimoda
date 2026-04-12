@@ -51,7 +51,7 @@ def extract_images_from_json(text: str) -> tuple[list[dict], dict]:
                 "remaining": remaining_val,
                 "search_request_id": data.get("search_request_id"),
             }
-            items = data.get("results", data.get("sample_images", []))
+            items = data.get("results", [])
         elif isinstance(data, list):
             items = data
         else:
@@ -65,7 +65,7 @@ def extract_images_from_json(text: str) -> tuple[list[dict], dict]:
                     "image_id": item.get("image_id", ""),
                     "brand": item.get("brand", ""),
                     "year": item.get("year"),
-                    "quarter": item.get("quarter") or item.get("season"),
+                    "quarter": item.get("quarter"),
                     "score": item.get("score", 0),
                     "garments": item.get("garments", []),
                     "colors": item.get("colors", []),

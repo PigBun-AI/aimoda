@@ -4,6 +4,21 @@
 
 import { z } from "zod";
 import { updateGallery } from "../db.js";
+import { jsonStringCompatibleArray, parseStructuredArgs } from "../tool_input.js";
+
+const updateGalleryRuntimeSchema = z.object({
+  gallery_id: z.string(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  category: z
+    .enum(["trend", "collection", "street_style", "editorial", "inspiration"])
+    .optional(),
+  tags: z.array(z.string()).optional(),
+  source: z.string().optional(),
+  status: z
+    .enum(["draft", "published", "archived"])
+    .optional(),
+});
 
 export const updateGallerySchema = {
   gallery_id: z.string().describe("图集 ID"),
@@ -13,7 +28,7 @@ export const updateGallerySchema = {
     .enum(["trend", "collection", "street_style", "editorial", "inspiration"])
     .optional()
     .describe("新分类"),
-  tags: z.array(z.string()).optional().describe("新标签数组（覆盖原有标签）"),
+  tags: jsonStringCompatibleArray(z.string()).optional().describe("新标签数组（覆盖原有标签）"),
   source: z.string().optional().describe("新来源"),
   status: z
     .enum(["draft", "published", "archived"])
@@ -31,7 +46,12 @@ export async function updateGalleryTool(args: {
   status?: string;
 }) {
   try {
-    const { gallery_id, ...updates } = args;
+    const normalizedArgs = parseStructuredArgs(
+      updateGalleryRuntimeSchema,
+      args,
+      "update_gallery arguments",
+    );
+    const { gallery_id, ...updates } = normalizedArgs;
     const gallery = await updateGallery(gallery_id, updates);
 
     if (!gallery) {

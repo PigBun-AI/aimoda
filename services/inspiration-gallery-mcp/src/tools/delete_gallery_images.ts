@@ -1,15 +1,26 @@
 import { z } from "zod";
 import { deleteGalleryImagesByIds } from "../db.js";
 import { deleteObjectsByUrls } from "../oss.js";
+import { jsonStringCompatibleArray, parseStructuredArgs } from "../tool_input.js";
+
+const deleteGalleryImagesRuntimeSchema = z.object({
+  gallery_id: z.string().optional(),
+  image_ids: z.array(z.string()).min(1).max(200),
+});
 
 export const deleteGalleryImagesSchema = {
   gallery_id: z.string().optional().describe("可选，限制删除范围到单个图集"),
-  image_ids: z.array(z.string()).min(1).max(200).describe("要删除的图片 ID 列表"),
+  image_ids: jsonStringCompatibleArray(z.string()).describe("要删除的图片 ID 列表"),
 };
 
 export async function deleteGalleryImagesTool(args: { gallery_id?: string; image_ids: string[] }) {
   try {
-    const deletedImages = await deleteGalleryImagesByIds(args.image_ids, args.gallery_id);
+    const normalizedArgs = parseStructuredArgs(
+      deleteGalleryImagesRuntimeSchema,
+      args,
+      "delete_gallery_images arguments",
+    );
+    const deletedImages = await deleteGalleryImagesByIds(normalizedArgs.image_ids, normalizedArgs.gallery_id);
     await deleteObjectsByUrls(deletedImages.map((item) => item.image_url));
 
     return {

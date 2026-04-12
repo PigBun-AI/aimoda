@@ -10,6 +10,7 @@ import { z } from "zod";
 import { addGalleryImages, getGallery } from "../db.js";
 import { uploadToOSS } from "../oss.js";
 import { extractColorsFromBuffer } from "../utils/colors.js";
+import { jsonStringCompatibleArray, parseStructuredArgs } from "../tool_input.js";
 
 /** Browser-like headers to bypass CDN anti-bot checks */
 const FETCH_HEADERS: Record<string, string> = {
@@ -55,24 +56,36 @@ async function fetchWithRetry(
 
 export const addImagesSchema = {
   gallery_id: z.string().describe("图集 ID（从 create_gallery 返回）"),
-  images: z
-    .array(
-      z.object({
-        filename: z.string().describe("文件名，如 01-cover.jpg"),
-        data: z
-          .string()
-          .optional()
-          .describe("base64 编码的图片数据（与 url 二选一）"),
-        url: z
-          .string()
-          .optional()
-          .describe("已上传的图片 URL（与 data 二选一）"),
-        caption: z.string().optional().describe("图片说明文字"),
-        sort_order: z.number().optional().describe("排序序号（默认按传入顺序）"),
-      }),
-    )
+  images: jsonStringCompatibleArray(
+    z.object({
+      filename: z.string().describe("文件名，如 01-cover.jpg"),
+      data: z
+        .string()
+        .optional()
+        .describe("base64 编码的图片数据（与 url 二选一）"),
+      url: z
+        .string()
+        .optional()
+        .describe("已上传的图片 URL（与 data 二选一）"),
+      caption: z.string().optional().describe("图片说明文字"),
+      sort_order: z.number().optional().describe("排序序号（默认按传入顺序）"),
+    }),
+  )
     .describe("图片列表（每张需提供 data 或 url 之一）"),
 };
+
+const addImagesRuntimeSchema = z.object({
+  gallery_id: z.string(),
+  images: z.array(
+    z.object({
+      filename: z.string(),
+      data: z.string().optional(),
+      url: z.string().optional(),
+      caption: z.string().optional(),
+      sort_order: z.number().optional(),
+    }),
+  ),
+});
 
 export async function addImagesTool(args: {
   gallery_id: string;
@@ -85,8 +98,13 @@ export async function addImagesTool(args: {
   }>;
 }) {
   try {
+    const normalizedArgs = parseStructuredArgs(
+      addImagesRuntimeSchema,
+      args,
+      "add_images arguments",
+    );
     // Verify gallery exists
-    const gallery = await getGallery(args.gallery_id);
+    const gallery = await getGallery(normalizedArgs.gallery_id);
     if (!gallery) {
       return {
         content: [
@@ -94,7 +112,7 @@ export async function addImagesTool(args: {
             type: "text" as const,
             text: JSON.stringify({
               success: false,
-              error: `图集 ${args.gallery_id} 不存在`,
+              error: `图集 ${normalizedArgs.gallery_id} 不存在`,
             }),
           },
         ],
@@ -118,16 +136,16 @@ export async function addImagesTool(args: {
       warning?: string;
     }> = [];
 
-    for (let i = 0; i < args.images.length; i++) {
-      const img = args.images[i];
+    for (let i = 0; i < normalizedArgs.images.length; i++) {
+      const img = normalizedArgs.images[i];
       let imageUrl: string;
       let colors: any[] = [];
 
       if (img.data) {
         // Upload base64 data to OSS
-        const buffer = Buffer.from(img.data, "base64");
-        imageUrl = await uploadToOSS(
-          args.gallery_id,
+          const buffer = Buffer.from(img.data, "base64");
+          imageUrl = await uploadToOSS(
+          normalizedArgs.gallery_id,
           img.filename,
           buffer,
         );
@@ -143,7 +161,7 @@ export async function addImagesTool(args: {
         try {
           const { buffer, contentType } = await fetchWithRetry(img.url);
           imageUrl = await uploadToOSS(
-            args.gallery_id,
+            normalizedArgs.gallery_id,
             img.filename,
             buffer,
             contentType,
@@ -187,7 +205,7 @@ export async function addImagesTool(args: {
       });
     }
 
-    const dbImages = await addGalleryImages(args.gallery_id, uploaded);
+    const dbImages = await addGalleryImages(normalizedArgs.gallery_id, uploaded);
 
     return {
       content: [
@@ -196,7 +214,7 @@ export async function addImagesTool(args: {
           text: JSON.stringify(
             {
               success: true,
-              gallery_id: args.gallery_id,
+              gallery_id: normalizedArgs.gallery_id,
               added: dbImages.length,
               total_images: (gallery.image_count || 0) + dbImages.length,
               oss_uploaded: dbImages.length - fallbackUrls.length,

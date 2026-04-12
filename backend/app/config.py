@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     STYLE_KNOWLEDGE_EMBEDDING_URL: str = "http://183.62.232.22:18730"
     STYLE_KNOWLEDGE_EMBEDDING_MODEL: str = "infgrad/stella-mrl-large-zh-v3.5-1792d"
     STYLE_KNOWLEDGE_SEMANTIC_SCORE_THRESHOLD: float = 0.5
+    STYLE_KNOWLEDGE_LOW_SCORE_FALLBACK_THRESHOLD: float = 0.75
 
     POSTGRES_DSN: str = "postgresql://fashion:fashion@postgres:5432/fashion_chat"
     REDIS_DSN: str = "redis://redis:6379/0"

@@ -104,7 +104,7 @@ def build_session_filter(session):
         elif f["type"] == "meta":
             key = f["key"]
             val = f["value"]
-            if key in {"season", "quarter"}:
+            if key == "quarter":
                 quarter = normalize_quarter_value(val)
                 if quarter:
                     must_conditions.append(FieldCondition(key="quarter", match=MatchAny(any=[quarter])))
@@ -243,19 +243,6 @@ def _available_values_via_direct_facet(
         if value:
             counter[value] += int(hit.count or 0)
 
-    if counter or dimension != "quarter":
-        return _counter_to_response(counter)
-
-    # Older payloads may still expose season-like strings; use it as a compatibility fallback.
-    for hit in _facet_values_for_field(
-        client,
-        field="season",
-        qdrant_filter=qdrant_filter,
-        cancel_check=cancel_check,
-    ):
-        value = normalize_quarter_value(hit.value)
-        if value:
-            counter[value] += int(hit.count or 0)
     return _counter_to_response(counter)
 
 
@@ -438,8 +425,6 @@ def apply_session_filters(client, session, *, cancel_check: CancelCheck = None):
 
 def available_values(client, dimension, category=None, current_filters=None, *, cancel_check: CancelCheck = None):
     """Find what values are available for a dimension given current filters."""
-    if dimension == "season":
-        dimension = "quarter"
     effective_category = _infer_effective_category(category, current_filters)
     cache_key = _cache_key_for_available_values(
         dimension=dimension,

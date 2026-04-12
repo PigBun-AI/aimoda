@@ -18,12 +18,16 @@ class QueryContext(TypedDict, total=False):
     style_retrieval_query: str
     style_rich_text: str
     style_name: str
+    vision_retrieval_query: str
+    vision_summary_zh: str
+    vision_primary_category: str
 
 
 _contexts: dict[str, QueryContext] = {}
 _session_image_contexts: dict[str, QueryContext] = {}
 _session_image_blocks: dict[str, list[dict]] = {}
 _session_style_contexts: dict[str, QueryContext] = {}
+_session_vision_contexts: dict[str, QueryContext] = {}
 
 
 def set_query_context(thread_id: str, context: QueryContext | None) -> None:
@@ -70,6 +74,25 @@ def remember_session_style(
         _session_style_contexts[thread_id] = context
 
 
+def remember_session_vision(
+    thread_id: str,
+    *,
+    vision_retrieval_query: str,
+    vision_summary_zh: str = "",
+    vision_primary_category: str = "",
+) -> None:
+    context: QueryContext = {}
+    if vision_retrieval_query.strip():
+        context["vision_retrieval_query"] = vision_retrieval_query.strip()
+    if vision_summary_zh.strip():
+        context["vision_summary_zh"] = vision_summary_zh.strip()
+    if vision_primary_category.strip():
+        context["vision_primary_category"] = vision_primary_category.strip().lower()
+
+    if context:
+        _session_vision_contexts[thread_id] = context
+
+
 def get_session_image_context(thread_id: str) -> QueryContext | None:
     return _session_image_contexts.get(thread_id)
 
@@ -80,6 +103,10 @@ def get_session_image_blocks(thread_id: str) -> list[dict]:
 
 def get_session_style_context(thread_id: str) -> QueryContext | None:
     return _session_style_contexts.get(thread_id)
+
+
+def get_session_vision_context(thread_id: str) -> QueryContext | None:
+    return _session_vision_contexts.get(thread_id)
 
 
 def merge_query_contexts(*contexts: QueryContext | None) -> QueryContext | None:
@@ -97,6 +124,12 @@ def merge_query_contexts(*contexts: QueryContext | None) -> QueryContext | None:
             merged["style_rich_text"] = str(context.get("style_rich_text", "")).strip()
         if context.get("style_name"):
             merged["style_name"] = str(context.get("style_name", "")).strip()
+        if context.get("vision_retrieval_query"):
+            merged["vision_retrieval_query"] = str(context.get("vision_retrieval_query", "")).strip()
+        if context.get("vision_summary_zh"):
+            merged["vision_summary_zh"] = str(context.get("vision_summary_zh", "")).strip()
+        if context.get("vision_primary_category"):
+            merged["vision_primary_category"] = str(context.get("vision_primary_category", "")).strip().lower()
     return merged or None
 
 
@@ -104,6 +137,7 @@ def get_session_query_context(thread_id: str) -> QueryContext | None:
     return merge_query_contexts(
         get_session_image_context(thread_id),
         get_session_style_context(thread_id),
+        get_session_vision_context(thread_id),
     )
 
 
