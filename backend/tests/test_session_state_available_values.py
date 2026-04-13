@@ -98,3 +98,21 @@ def test_available_values_uses_ttl_cache_for_identical_requests():
 
     assert first == second
     assert client.facet_calls == 1
+
+
+def test_available_values_for_quarter_does_not_fallback_to_legacy_season_field():
+    observed_fields: list[str] = []
+
+    def _fake_facet_values_for_field(*args, **kwargs):
+        observed_fields.append(kwargs["field"])
+        return []
+
+    with patch("backend.app.agent.session_state._facet_values_for_field", side_effect=_fake_facet_values_for_field):
+        values = session_state._available_values_via_direct_facet(
+            client=object(),
+            dimension="quarter",
+            qdrant_filter=None,
+        )
+
+    assert values == []
+    assert observed_fields == ["quarter"]

@@ -86,28 +86,9 @@ def _uuid(val: str) -> str:
 
 
 def _deserialize_content(content) -> list[dict]:
-    """Deserialize message content from the database.
-
-    New format: JSONB array of ContentBlocks, e.g. [{"type": "text", "text": "..."}]
-    Old format: plain string (TEXT content from pre-migration data)
-
-    For backward compatibility, old TEXT content is returned as [{"type": "text", "text": "<original>"}].
-    If the content is already a list (JSONB), deserialize it; otherwise fall back to the old format.
-    """
+    """Deserialize persisted ContentBlock arrays from the database."""
     if isinstance(content, list):
         return content
-    if isinstance(content, str):
-        # Try parsing as JSON array first (new ContentBlock format stored as TEXT)
-        if content.startswith("["):
-            try:
-                parsed = json.loads(content)
-                if isinstance(parsed, list):
-                    return parsed
-            except (json.JSONDecodeError, ValueError):
-                pass
-        # Old plain TEXT content — wrap in ContentBlock format
-        return [{"type": "text", "text": content}] if content else []
-    # Unknown type — return empty array
     return []
 
 
@@ -865,7 +846,19 @@ def set_session_agent_runtime(session_id: str, agent_state: dict | None) -> None
 
         config = _normalize_session_config(dict(row[0]) if row[0] else {})
         runtime = dict(config.get("runtime", {}) if isinstance(config.get("runtime"), dict) else {})
-        runtime["agent_state"] = dict(agent_state or {})
+        existing_agent_state = runtime.get("agent_state", {}) if isinstance(runtime.get("agent_state"), dict) else {}
+        if agent_state:
+            merged_agent_state = dict(existing_agent_state)
+            for key, value in dict(agent_state).items():
+                if isinstance(value, dict) and isinstance(merged_agent_state.get(key), dict):
+                    next_value = dict(merged_agent_state.get(key, {}))
+                    next_value.update(value)
+                    merged_agent_state[key] = next_value
+                else:
+                    merged_agent_state[key] = value
+            runtime["agent_state"] = merged_agent_state
+        else:
+            runtime["agent_state"] = {}
         config["runtime"] = runtime
 
         conn.execute(
@@ -877,6 +870,13 @@ def set_session_agent_runtime(session_id: str, agent_state: dict | None) -> None
             (psycopg.types.json.Json(config), _uuid(session_id)),
         )
         conn.commit()
+
+
+def merge_session_agent_runtime(session_id: str, patch: dict | None) -> None:
+    """Merge a partial agent runtime patch into chat_sessions.model_config.runtime."""
+    if patch is None:
+        return
+    set_session_agent_runtime(session_id, patch)
 
 
 def auto_title_session(session_id: str, content_blocks: list[dict] | None) -> str | None:

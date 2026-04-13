@@ -159,10 +159,6 @@ export function buildMessageRefUrl(target: MessageRefTarget): string {
   return `${MESSAGE_REF_PREFIX}${encodeBase64Url(JSON.stringify(target))}`
 }
 
-function escapeMarkdownLabel(text: string): string {
-  return text.replace(/[\[\]()]/g, "\\$&")
-}
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 }
@@ -353,6 +349,10 @@ function findPhraseReplacements(
   const replacements: ReplacementRange[] = []
   const fallbackRefs: MessageRenderSegment[] = []
 
+  const shouldSuppressFallbackRef = (target: MessageRefTarget): boolean => (
+    target.kind === "search_request" && target.source === "collection_result"
+  )
+
   refAnnotation.items.forEach((item, index) => {
     const phrases = (item.phrases ?? []).filter(
       (phrase): phrase is string => typeof phrase === "string" && phrase.trim().length > 0,
@@ -365,11 +365,10 @@ function findPhraseReplacements(
     }
 
     if (!range) {
-      if (fallbackRefs.length > 0) {
-        fallbackRefs.push({ type: "text", text: " " })
-      } else {
-        fallbackRefs.push({ type: "text", text: " " })
+      if (shouldSuppressFallbackRef(item.target)) {
+        return
       }
+      fallbackRefs.push({ type: "text", text: " " })
       fallbackRefs.push({
         type: "ref",
         text: `[${index + 1}]`,
@@ -479,20 +478,6 @@ export function buildMessageRefSegments(content: string, annotations?: MessageAn
   }
 
   return parseLegacyMessageRefSegments(visibleContent)
-}
-
-// Legacy helper kept for backward-compat tests and any pending callers.
-export function injectMessageRefMarkdown(content: string, annotations?: MessageAnnotation[]): string {
-  const visibleContent = stripStructuredRefPayload(content)
-  const segments = buildMessageRefSegments(visibleContent, annotations)
-  if (!segments.length) return visibleContent
-
-  return segments
-    .map((segment) => {
-      if (segment.type === "text") return segment.text
-      return `[${escapeMarkdownLabel(segment.text)}](${buildMessageRefUrl(segment.target)})`
-    })
-    .join("")
 }
 
 export function stripStructuredRefPayload(content: string): string {

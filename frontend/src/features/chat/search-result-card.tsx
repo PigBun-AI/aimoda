@@ -38,10 +38,7 @@ function formatFilterTag(filter: string, t: (key: string, options?: Record<strin
   const parts = filter.split('=')
   if (parts.length === 2) {
     let [dim, val] = parts
-    if (dim === 'season') {
-      dim = 'quarter'
-      val = normalizeQuarterLabel(val, t)
-    } else if (dim === 'quarter') {
+    if (dim === 'quarter') {
       val = normalizeQuarterLabel(val, t)
     }
     // Show dimension:value for garment tags, just value for simple ones

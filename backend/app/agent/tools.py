@@ -42,6 +42,7 @@ from .session_state import (
 )
 from .harness import (
     infer_active_category,
+    get_runtime_plan,
     get_turn_context,
     note_invalid_filter_attempt,
     clear_invalid_filter_attempt,
@@ -50,30 +51,17 @@ from .harness import (
 from .color_utils import COLOR_KEYWORDS, color_matches
 from ..services.chat_service import create_artifact, set_session_agent_runtime
 from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registry
-from ..services.fashion_vision_service import analyze_fashion_images, FashionVisionError
+from ..services.fashion_vision_service import (
+    analyze_fashion_images,
+    FashionVisionError,
+    generate_style_retrieval_query,
+)
 from ..services.style_knowledge_service import search_style_knowledge
 from ..services.style_feedback_service import record_style_gap_feedback
 from ..value_normalization import normalize_quarter_list, normalize_quarter_value, normalize_string_list_value
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
-from .query_context import remember_session_style, set_query_context, merge_query_contexts
+from .query_context import remember_session_style, remember_session_vision, set_query_context, merge_query_contexts
 from ..config import settings
-
-# ── Backward-compatible aliases used by routers and other modules ──
-_format_result = format_result
-_get_collection = get_collection
-_encode_text = encode_text
-_encode_image = encode_image
-_apply_aesthetic_boost = apply_aesthetic_boost
-_build_qdrant_filter = build_qdrant_filter
-_build_guidance = build_guidance
-_scroll_all = scroll_all
-_get_session = get_session
-_set_session = set_session
-_build_session_filter = build_session_filter
-_count_session = count_session
-_apply_session_filters = apply_session_filters
-_available_values = available_values
-
 
 def _structured_filter_error(
     *,
@@ -228,6 +216,7 @@ def _persist_agent_runtime_state(
                     query_text=str(session.get("query", "")),
                     session_filters=session.get("filters", []),
                 ),
+                "runtime_plan": get_runtime_plan(thread_id) or {},
             },
         )
     except Exception:
@@ -255,10 +244,100 @@ def _persist_runtime_semantics(
                     query_text=str(session.get("query", "")),
                     session_filters=session.get("filters", []),
                 ),
+                "runtime_plan": get_runtime_plan(thread_id) or {},
             },
         )
     except Exception:
         return
+
+
+def _runtime_plan_filter_entries(thread_id: str) -> list[dict]:
+    plan = get_runtime_plan(thread_id) or {}
+    entries: list[dict] = []
+    for item in plan.get("hard_filters", []):
+        if not isinstance(item, dict):
+            continue
+        dimension = str(item.get("dimension", "")).strip().lower()
+        value = item.get("value")
+        if not dimension or value in (None, ""):
+            continue
+        if dimension == "category":
+            entry = {"type": "category", "key": "category", "value": str(value).strip().lower()}
+        elif dimension in {"brand", "gender", "quarter", "year_min", "image_type"}:
+            entry = {"type": "meta", "key": dimension, "value": value}
+        else:
+            continue
+        if entry not in entries:
+            entries.append(entry)
+    return entries
+
+
+def _current_runtime_policy(thread_id: str) -> dict:
+    plan = get_runtime_plan(thread_id) or {}
+    policy = plan.get("policy_flags", {})
+    return dict(policy) if isinstance(policy, dict) else {}
+
+
+def _current_runtime_next_step(thread_id: str) -> str:
+    plan = get_runtime_plan(thread_id) or {}
+    return str(plan.get("next_step_hint", "")).strip()
+
+
+def _current_runtime_blocked_tools(thread_id: str) -> set[str]:
+    plan = get_runtime_plan(thread_id) or {}
+    return {
+        str(item).strip()
+        for item in plan.get("blocked_tools", [])
+        if str(item).strip()
+    }
+
+
+def _format_runtime_seeded_filters(entries: list[dict]) -> list[str]:
+    return [_format_filter_entry(item) for item in entries]
+
+
+def _tool_routing_error(
+    *,
+    tool_name: str,
+    reason: str,
+    suggested_next_actions: list[str],
+    suggested_strategy: str,
+) -> str:
+    return json.dumps({
+        "error": reason,
+        "message": reason,
+        "error_type": "strategy_mismatch",
+        "tool": tool_name,
+        "retry_same_call": False,
+        "suggested_strategy": suggested_strategy,
+        "suggested_next_actions": suggested_next_actions,
+    }, ensure_ascii=False)
+
+
+def _post_collection_next_step(thread_id: str, *, style_retrieval_query: str = "") -> str:
+    next_step = _current_runtime_next_step(thread_id)
+    if next_step == "start_collection_then_add_brand_filter":
+        return "add_brand_filter"
+    if next_step == "start_collection":
+        return "show_collection" if style_retrieval_query else "add_filter"
+    if next_step:
+        return next_step
+    return "show_collection" if style_retrieval_query else "add_filter"
+
+
+def _compose_semantic_grounding_text(query_context: dict) -> str:
+    style_rich_text = str(query_context.get("style_rich_text", "")).strip()
+    style_retrieval_query = str(query_context.get("style_retrieval_query", "")).strip()
+    vision_retrieval_query = str(query_context.get("vision_retrieval_query", "")).strip()
+
+    parts: list[str] = []
+    if style_rich_text:
+        parts.append(style_rich_text)
+    elif style_retrieval_query:
+        parts.append(style_retrieval_query)
+    if vision_retrieval_query:
+        parts.append(f"vision_reference: {vision_retrieval_query}")
+    return "\n".join(part for part in parts if part).strip()
 
 
 def _normalize_vector(vector: list[float]) -> list[float]:
@@ -274,7 +353,6 @@ _TREND_FACET_KEYS = {
     "style": "style",
     "gender": "gender",
     "quarter": "quarter",
-    "season": "quarter",
     "year": "year",
 }
 
@@ -286,7 +364,6 @@ _TREND_PAYLOAD_SELECTORS = {
     "style": ["style"],
     "gender": ["gender"],
     "quarter": ["quarter"],
-    "season": ["quarter"],
     "year": ["year"],
     "color": ["garments"],
     "fabric": ["garments"],
@@ -307,8 +384,6 @@ def _normalize_trend_value(value: object) -> str | None:
 
 def _canonicalize_temporal_dimension(value: str | None) -> str:
     normalized = (_normalize_optional_tool_string(value) or "").lower()
-    if normalized == "season":
-        return "quarter"
     return normalized
 
 
@@ -320,8 +395,6 @@ def _format_filter_entry(filter_item: dict) -> str:
 
     key = str(filter_item.get("key", "")).strip()
     value = filter_item.get("value", "")
-    if key == "season":
-        key = "quarter"
     if key == "quarter":
         normalized = normalize_quarter_value(value)
         if normalized:
@@ -400,8 +473,8 @@ def _count_trend_values_from_payload(
                 counter[value] = counter.get(value, 0) + 1
         return
 
-    if dimension in {"season", "quarter"}:
-        quarter_value = normalize_quarter_value(payload.get("quarter") or payload.get("season"))
+    if dimension == "quarter":
+        quarter_value = normalize_quarter_value(payload.get("quarter"))
         if quarter_value:
             counter[quarter_value] = counter.get(quarter_value, 0) + 1
         return
@@ -538,6 +611,23 @@ def _compact_fashion_vision_result(analysis: dict) -> dict:
     }
 
 
+def _extract_vision_semantic_context(analysis: dict) -> dict[str, object]:
+    compact = _compact_fashion_vision_result(analysis)
+    hard_filters = compact.get("hard_filters", {}) if isinstance(compact.get("hard_filters"), dict) else {}
+    categories = [
+        str(item).strip().lower()
+        for item in hard_filters.get("category", [])
+        if str(item).strip()
+    ]
+    unique_categories = list(dict.fromkeys(categories))
+    return {
+        "vision_retrieval_query": str(compact.get("retrieval_query_en", "")).strip(),
+        "vision_summary_zh": str(compact.get("summary_zh", "")).strip(),
+        "vision_primary_category": unique_categories[0] if len(unique_categories) == 1 else "",
+        "vision_categories": unique_categories,
+    }
+
+
 def _run_coro_sync(coro):
     try:
         asyncio.get_running_loop()
@@ -547,6 +637,101 @@ def _run_coro_sync(coro):
     with ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(asyncio.run, coro)
         return future.result()
+
+
+def _semantic_style_score(payload: dict[str, object]) -> float | None:
+    primary_style = payload.get("primary_style", {}) if isinstance(payload.get("primary_style"), dict) else {}
+    raw_score = primary_style.get("score")
+    try:
+        if raw_score in (None, ""):
+            return None
+        return float(raw_score)
+    except (TypeError, ValueError):
+        return None
+
+
+def _style_query_fallback_reason(payload: dict[str, object]) -> str | None:
+    status = str(payload.get("status", "")).strip().lower()
+    if status == "not_found":
+        return "style_not_found"
+
+    if status != "ok":
+        return None
+
+    if str(payload.get("search_stage", "")).strip().lower() != "semantic":
+        return None
+
+    score = _semantic_style_score(payload)
+    if score is None:
+        return "semantic_score_missing"
+    if score < settings.STYLE_KNOWLEDGE_LOW_SCORE_FALLBACK_THRESHOLD:
+        return "semantic_score_below_threshold"
+    return None
+
+
+def _maybe_generate_style_fallback_query(
+    *,
+    payload: dict[str, object],
+    query: str,
+    config: RunnableConfig | None,
+) -> tuple[dict[str, object], bool]:
+    fallback_reason = _style_query_fallback_reason(payload)
+    if not fallback_reason:
+        return payload, False
+
+    thread_id = get_thread_id(config) if config else ""
+    image_blocks = get_session_image_blocks(thread_id) if thread_id else []
+    primary_style = payload.get("primary_style", {}) if isinstance(payload.get("primary_style"), dict) else {}
+    style_reference = None
+    if primary_style:
+        style_reference = {
+            "style_name": str(primary_style.get("style_name", "")).strip(),
+            "score": _semantic_style_score(payload),
+            "style_rich_text": str(payload.get("rich_text", "")).strip(),
+        }
+
+    try:
+        generated = _run_coro_sync(generate_style_retrieval_query(
+            user_request=query,
+            image_blocks=image_blocks,
+            style_reference=style_reference,
+        ))
+    except Exception as exc:
+        next_payload = dict(payload)
+        next_payload["generated_retrieval_query"] = {
+            "source": "vlm_fallback",
+            "fallback_reason": fallback_reason,
+            "error": str(exc),
+        }
+        return next_payload, False
+
+    next_payload = dict(payload)
+    retrieval_plan = dict(next_payload.get("retrieval_plan", {}) if isinstance(next_payload.get("retrieval_plan"), dict) else {})
+    retrieval_plan["retrieval_query_en"] = str(generated.get("retrieval_query_en", "")).strip()
+    retrieval_plan["style_rich_text"] = str(generated.get("style_rich_text", "")).strip()
+    retrieval_plan["query_generation_source"] = "vlm_fallback"
+    retrieval_plan["fallback_reason"] = fallback_reason
+    next_payload["retrieval_plan"] = retrieval_plan
+    next_payload["rich_text"] = str(generated.get("style_rich_text", "")).strip()
+
+    execution_hint = dict(next_payload.get("execution_hint", {}) if isinstance(next_payload.get("execution_hint"), dict) else {})
+    execution_hint["preferred_collection_query_source"] = "retrieval_plan.retrieval_query_en"
+    execution_hint["auto_ground_generated_query"] = True
+    next_payload["execution_hint"] = execution_hint
+
+    next_payload["generated_retrieval_query"] = {
+        "source": "vlm_fallback",
+        "fallback_reason": fallback_reason,
+        "model": str(generated.get("model", "")).strip(),
+        "summary": str(generated.get("summary", "")).strip(),
+    }
+
+    original_hint = str(next_payload.get("agent_hint", "")).strip()
+    next_payload["agent_hint"] = (
+        "Use the generated retrieval_query_en as the primary execution payload for semantic retrieval. "
+        "Treat any low-confidence style-library match only as weak background reference."
+    ) + (f" {original_hint}" if original_hint else "")
+    return next_payload, True
 
 
 @tool
@@ -603,11 +788,47 @@ def fashion_vision(
         )
         artifact_id = artifact["id"]
 
+    vision_context = _extract_vision_semantic_context(analysis)
+    vision_retrieval_query = str(vision_context.get("vision_retrieval_query", "")).strip()
+    vision_summary_zh = str(vision_context.get("vision_summary_zh", "")).strip()
+    vision_primary_category = str(vision_context.get("vision_primary_category", "")).strip().lower()
+    recommended_next_step = "start_collection"
+    if vision_primary_category:
+        recommended_next_step = "start_collection"
+
+    if config and (vision_retrieval_query or vision_summary_zh or vision_primary_category):
+        remember_session_vision(
+            thread_id,
+            vision_retrieval_query=vision_retrieval_query,
+            vision_summary_zh=vision_summary_zh,
+            vision_primary_category=vision_primary_category,
+        )
+        set_query_context(
+            thread_id,
+            merge_query_contexts(
+                get_query_context(thread_id),
+                {
+                    "vision_retrieval_query": vision_retrieval_query,
+                    "vision_summary_zh": vision_summary_zh,
+                    "vision_primary_category": vision_primary_category,
+                },
+            ),
+        )
+        update_session_semantics(
+            thread_id=thread_id,
+            explicit_category=vision_primary_category or None,
+            vision_retrieval_query=vision_retrieval_query or None,
+            vision_summary_zh=vision_summary_zh or None,
+        )
+        _persist_runtime_semantics(config=config, thread_id=thread_id)
+
     return json.dumps({
         "ok": True,
         "artifact_id": artifact_id,
         "image_count": len(image_blocks),
         "model": analysis.get("model", ""),
+        "recommended_next_step": recommended_next_step,
+        "vision_primary_category": vision_primary_category or None,
         "analysis": _compact_fashion_vision_result(analysis),
     }, ensure_ascii=False)
 
@@ -641,6 +862,12 @@ def search_style(
     try:
         payload = search_style_knowledge(query, limit=max(1, min(limit, 5)))
         _ensure_run_active(config, stage="search_style:after_lookup")
+        payload, generated_query_applied = _maybe_generate_style_fallback_query(
+            payload=dict(payload),
+            query=query,
+            config=config,
+        )
+        _ensure_run_active(config, stage="search_style:after_fallback")
     except ChatRunCancelledError:
         raise
     except Exception as exc:
@@ -655,15 +882,17 @@ def search_style(
             ),
         }, ensure_ascii=False)
 
-    if payload.get("status") == "ok" and config:
+    status = str(payload.get("status", "")).strip().lower()
+
+    if config and status in {"ok", "not_found"}:
         thread_id = get_thread_id(config)
         primary_style = payload.get("primary_style", {}) if isinstance(payload.get("primary_style"), dict) else {}
         retrieval_plan = payload.get("retrieval_plan", {}) if isinstance(payload.get("retrieval_plan"), dict) else {}
         style_retrieval_query = str(retrieval_plan.get("retrieval_query_en", "")).strip()
-        style_rich_text = str(payload.get("rich_text", "")).strip() or str(retrieval_plan.get("style_rich_text", "")).strip()
-        style_name = str(primary_style.get("style_name", "")).strip()
+        style_rich_text = str(retrieval_plan.get("style_rich_text", "")).strip() or str(payload.get("rich_text", "")).strip()
+        style_name = "" if generated_query_applied else str(primary_style.get("style_name", "")).strip()
         match_confidence = str(payload.get("match_confidence", "") or "").strip().lower()
-        should_auto_ground = match_confidence != "candidate"
+        should_auto_ground = generated_query_applied or status == "not_found" or match_confidence != "candidate"
 
         if should_auto_ground and (style_retrieval_query or style_rich_text):
             remember_session_style(
@@ -692,7 +921,8 @@ def search_style(
                 style_rich_text=style_rich_text or None,
             )
         _persist_runtime_semantics(config=config, thread_id=thread_id)
-    elif payload.get("status") == "not_found":
+
+    if payload.get("status") == "not_found":
         try:
             thread_id = get_thread_id(config) if config else None
             feedback = record_style_gap_feedback(
@@ -744,10 +974,11 @@ def start_collection(
     image_vectors = query_context.get("image_embeddings", [])
     image_vector = average_embeddings(image_vectors) if image_vectors else None
     style_retrieval_query = str(query_context.get("style_retrieval_query", "")).strip()
-    style_rich_text = str(query_context.get("style_rich_text", "")).strip()
+    vision_retrieval_query = str(query_context.get("vision_retrieval_query", "")).strip()
+    runtime_seed_filters = _runtime_plan_filter_entries(thread_id)
 
     text_vector = encode_text(query, cancel_check=cancel_check) if query else None
-    style_semantic_text = style_rich_text or style_retrieval_query
+    style_semantic_text = _compose_semantic_grounding_text(query_context)
     style_vector = encode_text(style_semantic_text, cancel_check=cancel_check) if style_semantic_text else None
     fused_vector = _fuse_query_vectors(
         text_vector=text_vector,
@@ -757,40 +988,51 @@ def start_collection(
     if fused_vector is not None:
         fused_vector = apply_aesthetic_boost(fused_vector)
 
-    effective_query = query or style_retrieval_query
+    effective_query = query or style_retrieval_query or vision_retrieval_query
 
     session = {
         "query": effective_query,
         "vector_type": "fashion_clip",
         "q_emb": fused_vector,
-        "filters": [],
+        "filters": runtime_seed_filters,
         "active": True,
     }
 
     set_session(config, session)
     _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
     count = count_session(client, session, cancel_check=cancel_check)
+    seeded_filter_summary = _format_runtime_seeded_filters(runtime_seed_filters)
+    recommended_next_step = _post_collection_next_step(
+        thread_id,
+        style_retrieval_query=style_retrieval_query,
+    )
     return json.dumps({
         "status": "collection_started",
         "total": count,
         "query": effective_query or "(all images)",
         "style_retrieval_query": style_retrieval_query or None,
-        "style_rich_text_used": bool(style_semantic_text),
+        "vision_retrieval_query": vision_retrieval_query or None,
+        "seeded_filters": seeded_filter_summary,
+        "recommended_next_step": recommended_next_step,
         "message": (
             f"Collection started with {count} images. Use add_filter to narrow down."
-            if not image_vectors and not style_retrieval_query
+            if not image_vectors and not style_retrieval_query and not vision_retrieval_query
             else (
                 f"Collection started with {count} images using {len(image_vectors)} uploaded image(s). Use add_filter to narrow down."
-                if image_vectors and not style_retrieval_query
+                if image_vectors and not style_retrieval_query and not vision_retrieval_query
                 else (
-                    f"Collection started with {count} images using style knowledge grounding. Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
-                    if style_retrieval_query and not image_vectors
+                    f"Collection started with {count} images using semantic grounding. Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
+                    if (style_retrieval_query or vision_retrieval_query) and not image_vectors
                     else (
-                        f"Collection started with {count} images using {len(image_vectors)} uploaded image(s) and style knowledge grounding. "
+                        f"Collection started with {count} images using {len(image_vectors)} uploaded image(s) and semantic grounding. "
                         "Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
                     )
                 )
             )
+        ) + (
+            f" Default hard filters applied: {', '.join(seeded_filter_summary)}."
+            if seeded_filter_summary
+            else ""
         ),
     })
 
@@ -987,6 +1229,24 @@ def add_filter(
             value=value,
             category=category,
         )
+        policy = _current_runtime_policy(thread_id)
+        if policy.get("duplicate_filters_are_noop") and entry in session["filters"]:
+            remaining = count_session(
+                client,
+                session,
+                cancel_check=cancel_check,
+                exact=True,
+            )
+            _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
+            filter_summary = [_format_filter_entry(f) for f in session["filters"]]
+            return json.dumps({
+                "action": "filter_already_active",
+                "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
+                "remaining": remaining,
+                "active_filters": filter_summary,
+                "message": f"{dimension}={value} is already active. Keeping the current collection unchanged.",
+                "resolved_category": inferred_category,
+            })
         session["filters"].append(entry)
         set_session(config, session)
         _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
@@ -1103,7 +1363,7 @@ def peek_collection(
         peek_results.append({
             "brand": p.payload.get("brand", "Unknown"),
             "style": p.payload.get("style", ""),
-            "quarter": normalize_quarter_value(p.payload.get("quarter") or p.payload.get("season")) or "",
+            "quarter": normalize_quarter_value(p.payload.get("quarter")) or "",
             "year": p.payload.get("year", 0),
             "garments": ", ".join(garment_details),
         })
@@ -1136,6 +1396,7 @@ def show_collection(
     count = count_session(client, session, cancel_check=cancel_check)
 
     filter_summary = [_format_filter_entry(f) for f in session["filters"]]
+    thread_id = get_thread_id(config) if config else ""
 
     serializable_session = _serialize_search_session(session)
     session_id = _session_id_from_config(config)
@@ -1161,6 +1422,7 @@ def show_collection(
         "total": count,
         "query": str(session.get("query", "") or ""),
         "filters_applied": filter_summary,
+        "recommended_next_step": _current_runtime_next_step(thread_id) or "done",
         "message": f"Showing {count} matching images in paginated results. Filters applied: {len(filter_summary)}.",
     }, ensure_ascii=False)
 
@@ -1231,7 +1493,7 @@ def explore_colors(
         "total_matching_images": len(matching),
         "color_shades": [{"name": n, "count": c} for n, c in sorted(shades.items(), key=lambda x: -x[1])[:15]],
         "companion_colors": [{"name": n, "count": c} for n, c in sorted(companions.items(), key=lambda x: -x[1])[:15]],
-        "sample_images": matching[:20],
+        "results": matching[:20],
     }, ensure_ascii=False)
 
 
@@ -1283,6 +1545,55 @@ def analyze_trends(
             dimension="",
             value=search or brand,
             reason="Trend analysis dimension must be a non-empty string.",
+        )
+
+    garment_dims = {"color", "fabric", "pattern", "silhouette", "sleeve_length", "garment_length", "collar"}
+    active_category = infer_active_category(
+        thread_id=thread_id,
+        session_filters=get_session(config).get("filters", []) if config else [],
+    ) if thread_id else None
+    blocked_tools = _current_runtime_blocked_tools(thread_id) if thread_id else set()
+    runtime_policy = _current_runtime_policy(thread_id) if thread_id else {}
+
+    if "analyze_trends" in blocked_tools and runtime_policy.get("brand_focus_skips_trend_analysis"):
+        suggested_brand = brand or search or "<brand-name>"
+        session_active = bool(get_session(config).get("active")) if config else False
+        suggested_actions = (
+            [f'add_filter("brand", "{suggested_brand}")', "show_collection()"]
+            if session_active
+            else ['start_collection("")', f'add_filter("brand", "{suggested_brand}")']
+        )
+        return _tool_routing_error(
+            tool_name="analyze_trends",
+            reason=(
+                "Current runtime plan is a single-brand retrieval flow. Trend analysis is intentionally skipped "
+                "because the next deterministic step should be a direct brand filter."
+            ),
+            suggested_next_actions=suggested_actions,
+            suggested_strategy=(
+                "Use direct brand filtering instead of exploratory trend counting when the user's intent is 'only this brand'."
+            ),
+        )
+
+    if (
+        dimension in garment_dims
+        and not normalized_categories
+        and not active_category
+        and runtime_policy.get("image_query_requires_semantic_start_before_garment_trends")
+    ):
+        return _tool_routing_error(
+            tool_name="analyze_trends",
+            reason=(
+                f'Garment trend analysis for "{dimension}" is blocked until a single garment category is resolved. '
+                "For image-led queries, start semantic retrieval first, then analyze or filter within the resolved category."
+            ),
+            suggested_next_actions=[
+                'start_collection("<image-grounded semantic query>")',
+                'add_filter("category", "<garment-category>")',
+            ],
+            suggested_strategy=(
+                "Resolve the retrieval pool or garment category first; otherwise garment-level trend counts are too noisy."
+            ),
         )
 
     cache_key = _build_trend_cache_key(

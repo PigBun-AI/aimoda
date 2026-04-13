@@ -3,8 +3,26 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import json
+
 from app.agent import tools
+from app.agent import harness, query_context
 from app.services import fashion_vision_service as service
+
+
+def setup_function():
+    harness._turn_contexts.clear()
+    harness._session_semantics.clear()
+    harness._runtime_plans.clear()
+    query_context._contexts.clear()
+    query_context._session_image_contexts.clear()
+    query_context._session_image_blocks.clear()
+    query_context._session_style_contexts.clear()
+    query_context._session_vision_contexts.clear()
+
+
+def teardown_function():
+    setup_function()
 
 
 class _FakeResponse:
@@ -101,13 +119,13 @@ def test_fashion_vision_tool_uses_session_images(monkeypatch):
     monkeypatch.setattr(tools, "_run_coro_sync", _fake_run_coro_sync)
     monkeypatch.setattr(tools, "create_artifact", lambda **kwargs: {"id": "artifact-1"})
 
-    result = tools.fashion_vision.func("找类似款", config=config)
-
-    import json
-
-    payload = json.loads(result)
+    payload = json.loads(tools.fashion_vision.func("找类似款", config=config))
     assert payload["ok"] is True
     assert payload["artifact_id"] == "artifact-1"
     assert payload["analysis"]["retrieval_query_en"] == "black tailored blazer"
     assert payload["analysis"]["hard_filters"]["category"] == ["jacket"]
     assert payload["analysis"]["hard_filters"]["quarter"] == []
+    assert payload["vision_primary_category"] == "jacket"
+    assert payload["recommended_next_step"] == "start_collection"
+    assert query_context.get_session_query_context("user-1:session-1")["vision_retrieval_query"] == "black tailored blazer"
+    assert harness.get_session_semantics("user-1:session-1")["primary_category"] == "jacket"

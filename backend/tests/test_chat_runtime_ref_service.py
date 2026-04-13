@@ -11,7 +11,7 @@ def test_attach_runtime_brand_refs_creates_brand_search_plan_from_grounded_style
         {
             "type": "tool_result",
             "tool_use_id": "tool-collection",
-            "content": '{"action":"show_collection","search_request_id":"artifact-1","filters_applied":["category=dress","quarter=秋冬"],"query":"luxury red dress elegant silhouette","sample_images":[{"brand":"Valentino"}]}',
+            "content": '{"action":"show_collection","search_request_id":"artifact-1","filters_applied":["category=dress","quarter=秋冬"],"query":"luxury red dress elegant silhouette"}',
         },
         {
             "type": "text",
@@ -40,7 +40,7 @@ def test_attach_runtime_brand_refs_matches_brand_case_insensitively_and_preserve
         {
             "type": "tool_result",
             "tool_use_id": "tool-collection",
-            "content": '{"action":"show_collection","search_request_id":"artifact-1","filters_applied":["category=dress"],"query":"cold restrained black dress","sample_images":[{"brand":"giada"}]}',
+            "content": '{"action":"show_collection","search_request_id":"artifact-1","filters_applied":["category=dress"],"query":"cold restrained black dress"}',
         },
         {
             "type": "text",
@@ -57,7 +57,7 @@ def test_attach_runtime_brand_refs_matches_brand_case_insensitively_and_preserve
     assert attached is True
     item = enriched[-1]["annotations"][0]["items"][0]
     assert item["quote"] == "Giada"
-    assert item["target"]["brand"] == "giada"
+    assert item["target"]["brand"] == "Giada"
 
 
 def test_attach_runtime_brand_refs_extracts_explicit_brand_suggestions_from_text_cues():
@@ -65,7 +65,7 @@ def test_attach_runtime_brand_refs_extracts_explicit_brand_suggestions_from_text
         {
             "type": "tool_result",
             "tool_use_id": "tool-collection",
-            "content": '{"action":"show_collection","search_request_id":"artifact-1","filters_applied":["gender=female"],"query":"Korean fashion Seoul street style casual relaxed everyday wear","sample_images":[{"brand":"system"}]}',
+            "content": '{"action":"show_collection","search_request_id":"artifact-1","filters_applied":["gender=female"],"query":"Korean fashion Seoul street style casual relaxed everyday wear"}',
         },
         {
             "type": "text",

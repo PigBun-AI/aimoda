@@ -64,6 +64,7 @@ from ..services.chat_service import (
     set_session_execution_status,
     get_artifact,
     get_session_agent_runtime,
+    merge_session_agent_runtime,
     maybe_compact_session,
     get_compaction_bootstrap_payload,
     clear_compaction_bootstrap,
@@ -86,18 +87,33 @@ from ..agent.session_state import (
     set_session as set_agent_session,
 )
 from ..agent.harness import (
+    build_intent_brief,
+    build_planner_frame,
+    build_runtime_plan,
     build_turn_context,
     build_turn_playbook,
+    format_intent_brief,
+    format_planner_frame,
+    format_runtime_plan,
+    get_runtime_plan,
     get_session_semantics,
+    get_runtime_plan_from_payload,
+    set_runtime_plan,
     set_session_semantics,
     update_session_semantics,
     set_turn_context,
     clear_turn_context,
 )
+from ..agent.runtime_reducer import (
+    format_execution_state,
+    merge_execution_state,
+    reduce_tool_result_blocks,
+)
 from ..agent.query_context import (
     set_query_context,
     remember_session_images,
     remember_session_style,
+    remember_session_vision,
     get_session_image_blocks,
     get_session_query_context,
     merge_query_contexts,
@@ -353,6 +369,25 @@ async def _persist_streaming_assistant_message(
             "ref_enrichment_status": ref_enrichment_status,
         },
     )
+    reduced_execution_state = reduce_tool_result_blocks(raw_blocks)
+    if reduced_execution_state:
+        existing_runtime_state = await asyncio.to_thread(get_session_agent_runtime, session_id)
+        existing_execution_state = (
+            existing_runtime_state.get("execution_state", {})
+            if isinstance(existing_runtime_state, dict)
+            and isinstance(existing_runtime_state.get("execution_state"), dict)
+            else {}
+        )
+        await asyncio.to_thread(
+            merge_session_agent_runtime,
+            session_id,
+            {
+                "execution_state": merge_execution_state(
+                    existing_execution_state,
+                    reduced_execution_state,
+                ),
+            },
+        )
     return persisted_message_id, raw_blocks
 
 
@@ -776,6 +811,20 @@ def _restore_agent_session_from_runtime_state(
                 style_rich_text=style_rich_text,
                 style_name=style_name,
             )
+        vision_retrieval_query = str(semantics.get("vision_retrieval_query", "")).strip()
+        vision_summary_zh = str(semantics.get("vision_summary_zh", "")).strip()
+        vision_primary_category = str(semantics.get("primary_category", "")).strip().lower()
+        if vision_retrieval_query or vision_summary_zh or vision_primary_category:
+            remember_session_vision(
+                thread_id,
+                vision_retrieval_query=vision_retrieval_query,
+                vision_summary_zh=vision_summary_zh,
+                vision_primary_category=vision_primary_category,
+            )
+
+    runtime_plan = runtime_state.get("runtime_plan")
+    if isinstance(runtime_plan, dict) and runtime_plan:
+        set_runtime_plan(thread_id, get_runtime_plan_from_payload(runtime_plan))
 
     return session
 
@@ -888,6 +937,10 @@ def _compose_agent_input(
     *,
     fallback_image_count: int = 0,
     turn_playbook: str = "",
+    intent_brief: str = "",
+    execution_state: str = "",
+    planner_frame: str = "",
+    runtime_plan: str = "",
     compaction_bootstrap: str = "",
     session_preferences: str = "",
 ) -> str:
@@ -896,6 +949,14 @@ def _compose_agent_input(
     prefix_parts = []
     if turn_playbook:
         prefix_parts.append(turn_playbook)
+    if intent_brief:
+        prefix_parts.append(intent_brief)
+    if execution_state:
+        prefix_parts.append(execution_state)
+    if planner_frame:
+        prefix_parts.append(planner_frame)
+    if runtime_plan:
+        prefix_parts.append(runtime_plan)
     prefix_parts.append(_format_inline_ref_protocol())
     if compaction_bootstrap:
         prefix_parts.append(compaction_bootstrap)
@@ -1113,6 +1174,12 @@ async def chat_endpoint(
         )
     existing_agent_session = restored_agent_session or get_agent_session({"configurable": {"thread_id": thread_id}})
     session_semantics = get_session_semantics(thread_id)
+    runtime_state_snapshot = await asyncio.to_thread(get_session_agent_runtime, req.session_id)
+    execution_state_snapshot = (
+        runtime_state_snapshot.get("execution_state", {})
+        if isinstance(runtime_state_snapshot, dict) and isinstance(runtime_state_snapshot.get("execution_state"), dict)
+        else {}
+    )
     fallback_image_blocks = [] if image_blocks else get_session_image_blocks(thread_id)
     turn_context = build_turn_context(
         query_text=query_text,
@@ -1122,10 +1189,38 @@ async def chat_endpoint(
         session_primary_category=session_semantics.get("primary_category"),
     )
     set_turn_context(thread_id, turn_context)
+    runtime_plan = build_runtime_plan(
+        query_text=query_text,
+        has_images=bool(image_blocks or fallback_image_blocks),
+        session_filters=existing_agent_session.get("filters", []),
+        session_active=bool(existing_agent_session.get("active")),
+        session_primary_category=session_semantics.get("primary_category"),
+        session_preferences=session.get("preferences") if isinstance(session, dict) else None,
+        session_semantics=session_semantics,
+        previous_plan=get_runtime_plan(thread_id),
+    )
+    set_runtime_plan(thread_id, runtime_plan)
+    intent_brief = build_intent_brief(
+        query_text=query_text,
+        has_images=bool(image_blocks or fallback_image_blocks),
+        session_active=bool(existing_agent_session.get("active")),
+        turn_context=turn_context,
+        runtime_plan=runtime_plan,
+        session_semantics=session_semantics,
+    )
+    planner_frame = build_planner_frame(
+        runtime_plan=runtime_plan,
+        intent_brief=intent_brief,
+        execution_state=execution_state_snapshot,
+    )
     agent_input = _compose_agent_input(
         raw_content_blocks,
         fallback_image_count=len(fallback_image_blocks),
         turn_playbook=build_turn_playbook(turn_context),
+        intent_brief=format_intent_brief(intent_brief),
+        execution_state=format_execution_state(execution_state_snapshot),
+        planner_frame=format_planner_frame(planner_frame),
+        runtime_plan=format_runtime_plan(runtime_plan),
         compaction_bootstrap=_format_compaction_bootstrap(compaction_bootstrap),
         session_preferences=_format_session_preferences(session.get("preferences")),
     )
@@ -1534,7 +1629,6 @@ class SearchSimilarRequest(BaseModel):
     top_category: str | None = None  # tops / bottoms / full → chooses named vector
     gender: str | None = None  # hard filter: female / male
     quarter: str | None = None
-    season: str | None = None
     page: int = 1
     page_size: int = 50
     taste_profile_id: str | None = None
@@ -1549,7 +1643,6 @@ class SearchByColorRequest(BaseModel):
     min_percentage: float = 0.0
     gender: str | None = None
     quarter: str | None = None
-    season: str | None = None
     page: int = 1
     page_size: int = 50
     taste_profile_id: str | None = None
@@ -1673,7 +1766,6 @@ async def search_similar_endpoint(
             garment_tags=req.garment_tags,
             gender=req.gender,
             quarter=req.quarter,
-            season=req.season,
         )
 
         offset = (req.page - 1) * req.page_size
@@ -1814,7 +1906,7 @@ async def search_by_color_endpoint(
         threshold=req.threshold,
         min_percentage=req.min_percentage,
         gender=req.gender,
-        quarter=normalize_quarter_value(req.quarter or req.season),
+        quarter=normalize_quarter_value(req.quarter),
         page=1 if req.taste_profile_id else req.page,
         page_size=requested_page_size,
     )
@@ -2091,6 +2183,12 @@ async def websocket_chat(websocket: WebSocket):
                     )
                 existing_agent_session = restored_agent_session or get_agent_session({"configurable": {"thread_id": thread_id}})
                 session_semantics = get_session_semantics(thread_id)
+                runtime_state_snapshot = await asyncio.to_thread(get_session_agent_runtime, session_id)
+                execution_state_snapshot = (
+                    runtime_state_snapshot.get("execution_state", {})
+                    if isinstance(runtime_state_snapshot, dict) and isinstance(runtime_state_snapshot.get("execution_state"), dict)
+                    else {}
+                )
                 fallback_image_blocks = [] if image_blocks else get_session_image_blocks(thread_id)
                 turn_context = build_turn_context(
                     query_text=query_text,
@@ -2100,10 +2198,38 @@ async def websocket_chat(websocket: WebSocket):
                     session_primary_category=session_semantics.get("primary_category"),
                 )
                 set_turn_context(thread_id, turn_context)
+                runtime_plan = build_runtime_plan(
+                    query_text=query_text,
+                    has_images=bool(image_blocks or fallback_image_blocks),
+                    session_filters=existing_agent_session.get("filters", []),
+                    session_active=bool(existing_agent_session.get("active")),
+                    session_primary_category=session_semantics.get("primary_category"),
+                    session_preferences=session.get("preferences") if isinstance(session, dict) else None,
+                    session_semantics=session_semantics,
+                    previous_plan=get_runtime_plan(thread_id),
+                )
+                set_runtime_plan(thread_id, runtime_plan)
+                intent_brief = build_intent_brief(
+                    query_text=query_text,
+                    has_images=bool(image_blocks or fallback_image_blocks),
+                    session_active=bool(existing_agent_session.get("active")),
+                    turn_context=turn_context,
+                    runtime_plan=runtime_plan,
+                    session_semantics=session_semantics,
+                )
+                planner_frame = build_planner_frame(
+                    runtime_plan=runtime_plan,
+                    intent_brief=intent_brief,
+                    execution_state=execution_state_snapshot,
+                )
                 agent_input = _compose_agent_input(
                     raw_content_blocks,
                     fallback_image_count=len(fallback_image_blocks),
                     turn_playbook=build_turn_playbook(turn_context),
+                    intent_brief=format_intent_brief(intent_brief),
+                    execution_state=format_execution_state(execution_state_snapshot),
+                    planner_frame=format_planner_frame(planner_frame),
+                    runtime_plan=format_runtime_plan(runtime_plan),
                     compaction_bootstrap=_format_compaction_bootstrap(compaction_bootstrap),
                     session_preferences=_format_session_preferences(session.get("preferences") if isinstance(session, dict) else None),
                 )

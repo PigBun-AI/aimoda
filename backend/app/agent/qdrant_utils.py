@@ -228,7 +228,7 @@ def apply_aesthetic_boost(v_pos: list[float]) -> list[float]:
 
 def build_qdrant_filter(
     categories=None, brand=None, gender=None, top_categories=None,
-    quarter=None, season=None, year_min=None, image_type=None,
+    quarter=None, year_min=None, image_type=None,
     garment_tags=None,
 ) -> Filter | None:
     """Build Qdrant filter using ALL available database indexes."""
@@ -248,8 +248,6 @@ def build_qdrant_filter(
             key="top_categories", match=MatchAny(any=[tc.lower() for tc in top_categories])
         ))
     normalized_quarters = normalize_quarter_list(quarter)
-    if not normalized_quarters and season:
-        normalized_quarters = normalize_quarter_list(season)
     if normalized_quarters:
         conditions.append(FieldCondition(
             key="quarter", match=MatchAny(any=normalized_quarters)
@@ -345,11 +343,7 @@ def format_result(payload: dict, score: float = 0) -> dict:
         "brand": normalize_text_value(payload.get("brand")) or "",
         "style": payload.get("style", ""),
         "gender": normalize_text_value(payload.get("gender")) or "",
-        "quarter": (
-            normalize_quarter_value(payload.get("quarter"))
-            or normalize_quarter_value(payload.get("season"))
-            or ""
-        ),
+        "quarter": normalize_quarter_value(payload.get("quarter")) or "",
         "season": normalize_text_value(payload.get("season")) or "",
         "year": payload.get("year", 0),
         "garments": garments_summary,
@@ -454,16 +448,3 @@ def scroll_all(client, collection: str, scroll_filter=None,
     ):
         all_pts.append(point)
     return all_pts
-
-
-# ── Backward-compatible aliases (used by other modules) ──
-# These allow existing imports like `from .tools import get_qdrant` to work
-# during the transition period.
-_format_result = format_result
-_get_collection = get_collection
-_encode_text = encode_text
-_apply_aesthetic_boost = apply_aesthetic_boost
-_build_qdrant_filter = build_qdrant_filter
-_select_vector_type = select_vector_type
-_build_guidance = build_guidance
-_scroll_all = scroll_all

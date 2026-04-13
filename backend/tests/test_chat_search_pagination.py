@@ -91,7 +91,7 @@ async def test_search_similar_brand_pagination_uses_scroll_page_offset(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_search_similar_accepts_legacy_season_alias(monkeypatch):
+async def test_search_similar_forwards_quarter_filter(monkeypatch):
     client = _CursorScrollClient([{"image_id": "look-1", "brand": "akris", "year": 2026}])
     captured: dict[str, object] = {}
 
@@ -110,7 +110,7 @@ async def test_search_similar_accepts_legacy_season_alias(monkeypatch):
     response = await chat_router.search_similar_endpoint(
         chat_router.SearchSimilarRequest(
             brand="akris",
-            season="fw",
+            quarter="fw",
             page=1,
             page_size=15,
         ),
@@ -118,4 +118,4 @@ async def test_search_similar_accepts_legacy_season_alias(monkeypatch):
     )
 
     assert response["total"] == 1
-    assert captured["season"] == "fw"
+    assert captured["quarter"] == "fw"

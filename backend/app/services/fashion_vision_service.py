@@ -15,6 +15,24 @@ _PROMPT_PATTERN = re.compile(
     r"<!--\s*PROMPT_START\s*-->(.*?)<!--\s*PROMPT_END\s*-->",
     re.DOTALL,
 )
+_STYLE_RETRIEVAL_QUERY_PROMPT = """
+You generate retrieval-ready English fashion queries for FashionCLIP-style semantic search.
+
+Goal:
+- Translate the user's fashion intent into one precise English `retrieval_query_en`.
+- The query can be moderately long and descriptive.
+- Prioritize the user's wording and any attached image(s).
+- If a low-confidence style-library reference is provided, use it only as a weak hint, never as ground truth.
+
+Output rules:
+- Return JSON only.
+- Required fields:
+  - `retrieval_query_en`: one English sentence or clause sequence optimized for fashion image retrieval
+  - `style_rich_text`: a slightly richer English grounding text for semantic retrieval
+  - `summary`: short summary of what cues were emphasized
+- Do not output markdown.
+- Do not mention uncertainty.
+""".strip()
 
 
 class FashionVisionError(RuntimeError):
@@ -80,6 +98,50 @@ def _user_message_parts(
     if request:
         instruction += f" User refinement: {request}"
     parts.append({"type": "text", "text": instruction})
+
+    for image_block in image_blocks:
+        image_content = _image_content_block(image_block)
+        if image_content is not None:
+            parts.append(image_content)
+
+    return parts
+
+
+def _style_query_message_parts(
+    *,
+    image_blocks: list[dict[str, Any]],
+    user_request: str,
+    style_reference: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    parts: list[dict[str, Any]] = []
+    request = user_request.strip()
+    if not request and not image_blocks:
+        raise FashionVisionError("No text or images available for retrieval query generation")
+
+    instruction_lines = [
+        "Generate retrieval-ready English fashion search text.",
+        "User request:",
+        request or "(image-led request without extra text)",
+    ]
+
+    if style_reference:
+        style_name = str(style_reference.get("style_name", "")).strip()
+        score = style_reference.get("score")
+        reference_text = str(style_reference.get("style_rich_text", "")).strip()
+        reference_lines = ["Low-confidence style-library hint (weak reference only):"]
+        if style_name:
+            reference_lines.append(f"- candidate_style: {style_name}")
+        if score not in (None, ""):
+            reference_lines.append(f"- similarity_score: {score}")
+        if reference_text:
+            reference_lines.append(f"- reference_cues: {reference_text}")
+        instruction_lines.extend(reference_lines)
+
+    instruction_lines.extend([
+        "Focus on garment category, silhouette, cut, palette, fabric, surface texture, styling details, and overall fashion mood.",
+        "Prefer concrete visual descriptors over abstract trend labels.",
+    ])
+    parts.append({"type": "text", "text": "\n".join(instruction_lines)})
 
     for image_block in image_blocks:
         image_content = _image_content_block(image_block)
@@ -254,3 +316,55 @@ async def analyze_fashion_images(
     normalized = _normalize_output(parsed, image_count=len(image_blocks))
     normalized["model"] = settings.VLM_MODEL
     return normalized
+
+
+async def generate_style_retrieval_query(
+    *,
+    user_request: str,
+    image_blocks: list[dict[str, Any]] | None = None,
+    style_reference: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not settings.OPENAI_API_KEY:
+        raise FashionVisionError("OPENAI_API_KEY is not configured")
+
+    user_parts = _style_query_message_parts(
+        image_blocks=image_blocks or [],
+        user_request=user_request,
+        style_reference=style_reference,
+    )
+    request_body = {
+        "model": settings.VLM_MODEL,
+        "temperature": 0.1,
+        "max_tokens": min(settings.VLM_MAX_TOKENS, 500),
+        "messages": [
+            {"role": "system", "content": _STYLE_RETRIEVAL_QUERY_PROMPT},
+            {"role": "user", "content": user_parts},
+        ],
+    }
+
+    base_url = settings.OPENAI_BASE_URL.rstrip("/")
+    endpoint = f"{base_url}/chat/completions"
+    timeout = httpx.Timeout(settings.VLM_TIMEOUT_SECONDS)
+    headers = {
+        "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(endpoint, headers=headers, json=request_body)
+        response.raise_for_status()
+        payload = response.json()
+
+    raw_text = _extract_text_content(payload)
+    parsed = _extract_json_object(raw_text)
+    retrieval_query_en = str(parsed.get("retrieval_query_en", "")).strip()
+    if not retrieval_query_en:
+        raise FashionVisionError("retrieval query generator returned empty retrieval_query_en")
+
+    style_rich_text = str(parsed.get("style_rich_text", "")).strip() or retrieval_query_en
+    return {
+        "retrieval_query_en": retrieval_query_en,
+        "style_rich_text": style_rich_text,
+        "summary": str(parsed.get("summary", "")).strip(),
+        "model": settings.VLM_MODEL,
+    }

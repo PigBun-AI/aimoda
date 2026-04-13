@@ -134,6 +134,27 @@ describe("message refs", () => {
     ])
   })
 
+  it("skips duplicate numeric refs for collection-result search targets", () => {
+    const target = {
+      kind: "search_request" as const,
+      search_request_id: "artifact-789",
+      label: "精筛结果",
+      source: "collection_result",
+    }
+
+    expect(buildMessageRefSegments("这一组更贴近你的需求。", [{
+      type: "message_refs",
+      items: [
+        {
+          target,
+          phrases: ["Akris"],
+        },
+      ],
+    }])).toEqual([
+      { type: "text", text: "这一组更贴近你的需求。" },
+    ])
+  })
+
   it("converts legacy aimoda markdown links into structured segments", () => {
     const target = {
       kind: "search_request" as const,
