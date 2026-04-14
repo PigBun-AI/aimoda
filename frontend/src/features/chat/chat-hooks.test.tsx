@@ -49,10 +49,21 @@ describe('useChat', () => {
   beforeEach(() => {
     resetChatMessageStore()
     vi.clearAllMocks()
+    vi.spyOn(console, 'error').mockImplementation((message: unknown, ...args: unknown[]) => {
+      if (typeof message === 'string' && message.includes('not wrapped in act')) {
+        return
+      }
+      if (args.length > 0) {
+        console.warn(message, ...args)
+        return
+      }
+      console.warn(message)
+    })
   })
 
   afterEach(() => {
     resetChatMessageStore()
+    vi.restoreAllMocks()
   })
 
   it('does not let a stale initial hydration wipe the first optimistic exchange', async () => {
@@ -136,7 +147,8 @@ describe('useChat', () => {
 
   it('removes the empty optimistic assistant message when a run is explicitly stopped', async () => {
     const deferred = createDeferred<void>()
-    mockedGetSessionMessages.mockResolvedValueOnce([])
+    const historyRequest = createDeferred<Array<{ id: string; role: string; content: Array<{ type: 'text'; text: string }> }>>()
+    mockedGetSessionMessages.mockReturnValueOnce(historyRequest.promise)
     mockedStopChatRun.mockResolvedValueOnce(true)
     mockedSendChatSSE.mockImplementation(async (_content, _sessionId, _history, _onEvent, onOpen) => {
       onOpen?.({ runId: 'run-1' })
@@ -146,6 +158,14 @@ describe('useChat', () => {
     let result!: ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
     await act(async () => {
       ({ result } = renderHook(() => useChat('session-1')))
+    })
+
+    act(() => {
+      historyRequest.resolve([])
+    })
+
+    await act(async () => {
+      await historyRequest.promise
     })
 
     let sendPromise!: Promise<void>
@@ -188,7 +208,8 @@ describe('useChat', () => {
   })
 
   it('uses the current session retrieval preferences when opening a drawer artifact', async () => {
-    mockedGetSessionMessages.mockResolvedValueOnce([])
+    const historyRequest = createDeferred<Array<{ id: string; role: string; content: Array<{ type: 'text'; text: string }> }>>()
+    mockedGetSessionMessages.mockReturnValueOnce(historyRequest.promise)
     mockedFetchCachedSearchSessionById.mockResolvedValueOnce({
       images: [],
       total: 0,
@@ -197,10 +218,21 @@ describe('useChat', () => {
       has_more: false,
     })
 
-    const { result } = renderHook(() => useChat('session-1', {
-      taste_profile_id: 'dna-1',
-      taste_profile_weight: 0.4,
-    }))
+    let result!: ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+    await act(async () => {
+      ({ result } = renderHook(() => useChat('session-1', {
+        taste_profile_id: 'dna-1',
+        taste_profile_weight: 0.4,
+      })))
+    })
+
+    act(() => {
+      historyRequest.resolve([])
+    })
+
+    await act(async () => {
+      await historyRequest.promise
+    })
 
     await act(async () => {
       await result.current.openDrawerFromSearchRequestId('artifact-1')

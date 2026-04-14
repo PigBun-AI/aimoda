@@ -1,21 +1,23 @@
-import { type ReactNode, useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from 'react'
 import { BarChart3, FileText, Image as ImageIcon, LogOut, Tags, Ticket, User, UserCog } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { queryClient } from '@/main'
 import { PageFrame } from '@/components/layout/page-frame'
+import { PageIntro } from '@/components/layout/page-intro'
 import { Button } from '@/components/ui/button'
 import { clearSession, getSessionUser } from '@/features/auth/protected-route'
-import { DashboardPage } from '@/features/admin/dashboard-page'
-import { ArticlesPage } from '@/features/admin/articles-page'
-import { AdminPage } from '@/features/admin/admin-page'
-import { RedemptionCodesPage } from '@/features/admin/redemption-codes-page'
-import { AdminGalleriesPage } from '@/features/admin/admin-galleries-page'
-import { StyleGapPage } from '@/features/admin/style-gap-page'
 import { MembershipOverview } from '@/features/membership/membership-overview'
 import { useMembershipStatus } from '@/features/membership/use-membership'
 import { cn } from '@/lib/utils'
+
+const DashboardTabPage = lazy(() => import('@/features/admin/dashboard-page').then((module) => ({ default: module.DashboardPage })))
+const ArticlesTabPage = lazy(() => import('@/features/admin/articles-page').then((module) => ({ default: module.ArticlesPage })))
+const AdminUsersTabPage = lazy(() => import('@/features/admin/admin-page').then((module) => ({ default: module.AdminPage })))
+const RedemptionCodesTabPage = lazy(() => import('@/features/admin/redemption-codes-page').then((module) => ({ default: module.RedemptionCodesPage })))
+const AdminGalleriesTabPage = lazy(() => import('@/features/admin/admin-galleries-page').then((module) => ({ default: module.AdminGalleriesPage })))
+const StyleGapTabPage = lazy(() => import('@/features/admin/style-gap-page').then((module) => ({ default: module.StyleGapPage })))
 
 type TabId = 'profile' | 'access' | 'dashboard' | 'articles' | 'galleries' | 'styleGaps' | 'users' | 'redemption'
 
@@ -65,17 +67,17 @@ export function ProfilePage() {
       case 'access':
         return <AccessContent />
       case 'dashboard':
-        return <WorkbenchScrollArea><DashboardPage /></WorkbenchScrollArea>
+        return renderWorkbenchTab(<DashboardTabPage />)
       case 'articles':
-        return <WorkbenchScrollArea><ArticlesPage /></WorkbenchScrollArea>
+        return renderWorkbenchTab(<ArticlesTabPage />)
       case 'galleries':
-        return <WorkbenchScrollArea><AdminGalleriesPage /></WorkbenchScrollArea>
+        return renderWorkbenchTab(<AdminGalleriesTabPage />)
       case 'styleGaps':
-        return <WorkbenchScrollArea><StyleGapPage /></WorkbenchScrollArea>
+        return renderWorkbenchTab(<StyleGapTabPage />)
       case 'users':
-        return <WorkbenchScrollArea><AdminPage /></WorkbenchScrollArea>
+        return renderWorkbenchTab(<AdminUsersTabPage />)
       case 'redemption':
-        return <WorkbenchScrollArea><RedemptionCodesPage /></WorkbenchScrollArea>
+        return renderWorkbenchTab(<RedemptionCodesTabPage />)
       default:
         return <ProfileContent />
     }
@@ -83,30 +85,25 @@ export function ProfilePage() {
 
   return (
     <PageFrame fullHeight>
-      <header className="shrink-0 border-t border-border/70 px-0 py-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(280px,0.75fr)] xl:gap-10">
-          <div className="space-y-3">
-            <p className="type-chat-kicker text-muted-foreground">
-              {currentUser?.role ?? 'guest'}
-            </p>
-            <h1 className="type-page-title max-w-[10ch] text-balance text-foreground">
-              {currentUser?.name ?? t('profileTab')}
-            </h1>
-          </div>
-          <div className="flex flex-col justify-between gap-4 border border-border/60 bg-card px-5 py-5 shadow-token-sm">
-            <p className="type-meta max-w-[32ch] break-all text-muted-foreground">
+      <PageIntro
+        eyebrow={currentUser?.role ?? 'guest'}
+        title={currentUser?.name ?? t('profileTab')}
+        aside={(
+          <div className="flex h-full flex-col justify-between gap-4">
+            <p className="type-meta max-w-[32ch] break-all text-pretty text-muted-foreground">
               {currentUser?.email ?? currentUser?.phone ?? t('notSet')}
             </p>
             <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
               <span>{t('profile.accountLabel')}</span>
-              <span>{String(visibleTabs.length).padStart(2, '0')}</span>
+              <span className="tabular-nums">{String(visibleTabs.length).padStart(2, '0')}</span>
             </div>
           </div>
-        </div>
-      </header>
+        )}
+        className="shrink-0"
+      />
 
       <div className="relative shrink-0 border-b border-border/60 px-0 pb-2">
-        <div className="scrollbar-hide flex items-center gap-3 overflow-x-auto sm:gap-4">
+        <div className="scrollbar-hide flex items-center gap-2.5 overflow-x-auto sm:gap-3">
           {visibleTabs.map(tab => {
             const Icon = tab.icon
             const isActive = activeTab === tab.id
@@ -124,7 +121,7 @@ export function ProfilePage() {
                   setSearchParams(nextParams, { replace: true })
                 }}
                 className={cn(
-                  'type-chat-kicker relative flex items-center gap-2 whitespace-nowrap rounded-none border px-4 py-3 transition-[background-color,border-color,color,transform] duration-fast cursor-pointer',
+                  'type-chat-kicker relative flex items-center gap-2 whitespace-nowrap rounded-none border px-3.5 py-2.5 transition-[background-color,border-color,color,transform] duration-fast cursor-pointer',
                   isActive ? 'border-border bg-card text-foreground shadow-token-sm' : 'border-transparent text-muted-foreground hover:-translate-y-px hover:border-border/60 hover:bg-card/72 hover:text-foreground',
                 )}
               >
@@ -134,7 +131,7 @@ export function ProfilePage() {
             )
           })}
         </div>
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-background to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 border-l border-border/20 bg-background/84" />
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden animate-fade-in">
@@ -146,9 +143,31 @@ export function ProfilePage() {
 
 function WorkbenchScrollArea({ children }: { children: ReactNode }) {
   return (
-    <div className="h-full overflow-y-auto px-5 py-6 sm:px-6">
+    <div className="h-full overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
       {children}
     </div>
+  )
+}
+
+function WorkbenchLoading() {
+  return (
+    <div className="space-y-4">
+      <div className="h-4 w-24 rounded-none bg-muted/70" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="h-32 rounded-none border border-border bg-muted/45" />
+        ))}
+      </div>
+      <div className="h-44 rounded-none border border-border bg-muted/35" />
+    </div>
+  )
+}
+
+function renderWorkbenchTab(node: ReactNode) {
+  return (
+    <WorkbenchScrollArea>
+      <Suspense fallback={<WorkbenchLoading />}>{node}</Suspense>
+    </WorkbenchScrollArea>
   )
 }
 
@@ -174,20 +193,20 @@ function ProfileContent() {
   }, [i18n.language, t])
 
   return (
-    <div className="grid h-full min-h-0 gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
+    <div className="grid h-full min-h-0 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
       <section className="min-h-0 overflow-y-auto px-0 py-1 sm:px-0">
-        <div className="grid gap-5 border border-border/70 bg-card shadow-token-md">
-          <div className="grid gap-5 border-b border-border/60 px-5 py-5 md:grid-cols-[minmax(0,1fr)_minmax(180px,0.5fr)]">
+        <div className="grid gap-4 border border-border/70 bg-card shadow-token-md">
+          <div className="grid gap-4 border-b border-border/60 px-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(160px,0.5fr)]">
             <div className="space-y-2">
               <p className="type-chat-kicker text-muted-foreground">
                 {t('profile.accountEyebrow')}
               </p>
-              <h2 className="type-section-title text-foreground sm:text-[2rem]">
+              <h2 className="type-ed-title-sm text-foreground">
                 {t('profile.accountTitle')}
               </h2>
             </div>
 
-            <div className="flex flex-col justify-end gap-3 border-t border-border/60 pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+            <div className="flex flex-col justify-end gap-2.5 border-t border-border/60 pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
               <p className="type-meta text-muted-foreground">
                 {currentUser?.role ?? 'guest'}
               </p>
@@ -198,7 +217,7 @@ function ProfileContent() {
             </div>
           </div>
 
-          <div className="px-5">
+          <div className="px-4">
             <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/60 py-4 sm:flex-row sm:items-center sm:gap-6">
               <span className="type-meta text-muted-foreground">{t('username')}</span>
               <span className="type-label text-foreground sm:text-right">{currentUser?.name ?? t('notSet')}</span>
@@ -217,7 +236,7 @@ function ProfileContent() {
 
       <aside className="min-h-0 overflow-y-auto px-0 py-1 sm:px-0">
         <div className="space-y-4">
-          <div className="border border-border/70 bg-card p-5 text-sm text-muted-foreground shadow-token-md">
+          <div className="border border-border/70 bg-card p-4 text-sm text-muted-foreground shadow-token-md">
             <p className="type-chat-kicker text-muted-foreground">
               {t('membership.profileTitle')}
             </p>
@@ -247,7 +266,7 @@ function ProfileContent() {
             onClick={handleLogout}
           >
             <span>{t('common:logout')}</span>
-            <LogOut className="h-4 w-4" />
+            <LogOut className="size-4" />
           </Button>
         </div>
       </aside>
@@ -269,15 +288,15 @@ function AccessContent() {
   }, [i18n.language, t])
 
   return (
-    <div className="grid h-full min-h-0 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-      <section className="min-h-0 overflow-y-auto border-r border-border/80 px-5 py-5 sm:px-6">
+    <div className="grid h-full min-h-0 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+      <section className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 xl:border-r xl:border-border/80">
         <div className="space-y-6">
-          <div className="border border-border/80 bg-background px-5 py-5">
+          <div className="border border-border/80 bg-background px-4 py-5">
             <div className="space-y-3">
               <p className="type-chat-kicker text-muted-foreground">
                 {t('accessTab')}
               </p>
-              <h2 className="type-section-title text-foreground sm:text-[2.15rem]">
+              <h2 className="type-ed-title-sm text-foreground">
                 {t('membership.profileTitle')}
               </h2>
               <p className="type-body-muted max-w-[34ch]">
@@ -286,7 +305,7 @@ function AccessContent() {
             </div>
           </div>
 
-          <div className="border border-border/80 bg-background p-5">
+          <div className="border border-border/80 bg-background p-4">
             <div className="space-y-3">
               <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border/80 pb-3 sm:flex-row sm:items-center sm:gap-4">
                 <span className="type-meta text-muted-foreground">{t('membership.currentPlan')}</span>
@@ -315,7 +334,7 @@ function AccessContent() {
         </div>
       </section>
 
-      <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-6">
+      <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
         <MembershipOverview showHeader={false} compact />
       </div>
     </div>

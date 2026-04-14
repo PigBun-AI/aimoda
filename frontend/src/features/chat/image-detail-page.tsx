@@ -180,7 +180,7 @@ export function ImageDetailPage() {
   }, [i18n])
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <header
         data-image-detail-header="true"
         data-page-sticky-header="true"
@@ -263,7 +263,7 @@ export function ImageDetailPage() {
       </header>
 
       {isLoading && (
-        <div className="flex items-center justify-center px-4 py-10" style={{ minHeight: 'calc(100vh - 64px)' }}>
+        <div className="flex items-center justify-center px-4 py-10" style={{ minHeight: 'calc(100dvh - 64px)' }}>
           <div className="flex min-w-[240px] max-w-full flex-col items-center gap-4 border border-border px-8 py-10">
             <div className="flex gap-1">
               <span className="h-1.5 w-1.5 animate-pulse bg-muted-foreground" style={{ animationDelay: '0s' }} />
@@ -278,7 +278,7 @@ export function ImageDetailPage() {
       )}
 
       {!isLoading && !currentImage && (
-        <div className="flex items-center justify-center px-4 py-10" style={{ minHeight: 'calc(100vh - 64px)' }}>
+        <div className="flex items-center justify-center px-4 py-10" style={{ minHeight: 'calc(100dvh - 64px)' }}>
           <div className="flex min-w-[280px] max-w-full flex-col items-center gap-4 border border-border px-8 py-10 text-center">
             <p className="type-chat-title text-foreground">
               {isCurrentImageDeleted ? t('deletedImageUnavailableTitle') : t('imageUnavailableTitle')}

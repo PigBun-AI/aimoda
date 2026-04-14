@@ -171,7 +171,7 @@ export function FavoriteImageDialog({
               onClick={() => void handleCreateAndAdd()}
               disabled={isMutating === 'create' || !newCollectionName.trim()}
             >
-              {isMutating === 'create' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              {isMutating === 'create' ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Plus className="mr-2 size-4" />}
               {t('favoriteCreateCollection')}
             </Button>
           </div>
@@ -181,13 +181,13 @@ export function FavoriteImageDialog({
             <div className="grid max-h-[360px] gap-3 overflow-y-auto pr-1">
               {isLoading && (
                 <div className="flex min-h-[160px] items-center justify-center border border-border/80">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
                 </div>
               )}
 
               {!isLoading && collections.length === 0 && (
                 <div className="flex min-h-[160px] flex-col items-center justify-center gap-2 border border-dashed border-border/80 px-6 text-center">
-                  <Heart className="h-4 w-4 text-muted-foreground" />
+                  <Heart className="size-4 text-muted-foreground" />
                   <p className="type-chat-meta text-muted-foreground">{t('favoriteCollectionsEmpty')}</p>
                 </div>
               )}
@@ -223,10 +223,10 @@ export function FavoriteImageDialog({
 
                     <div className="flex items-center justify-end">
                       {isBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                        <Loader2 className="size-4 animate-spin text-muted-foreground" />
                       ) : isSelected ? (
                         <span className="inline-flex items-center gap-2 text-foreground">
-                          <Check className="h-4 w-4" />
+                          <Check className="size-4" />
                           <span className="type-chat-kicker">{t('favoriteSaved')}</span>
                         </span>
                       ) : (

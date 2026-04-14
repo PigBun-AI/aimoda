@@ -18,6 +18,7 @@ import type {
 import { SearchResultCard } from './search-result-card'
 import { ChatMarkdown } from './chat-markdown'
 import { getOssThumbnailUrl } from './oss-image'
+import { cn } from '@/lib/utils'
 
 const toolIcons: Record<string, typeof Search> = {
   search: Search,
@@ -46,6 +47,9 @@ const toolLabels: Record<string, string> = {
   show_collection: 'toolShowCollection',
   fashion_vision: 'toolFashionVision',
 }
+
+const TOOL_TRACE_ICON_CLASS = 'flex size-8 shrink-0 items-center justify-center border border-border bg-background'
+const TOOL_CALL_ICON_CLASS = 'flex size-7 shrink-0 items-center justify-center border border-border bg-background'
 
 function parseShowCollectionResult(content: string): SearchResultData | null {
   try {
@@ -299,7 +303,7 @@ function BlockRenderer({
   }
   if (block.type === 'document') {
     return (
-      <div className="border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+      <div className="type-chat-meta border border-border bg-card px-4 py-3 text-muted-foreground">
         {block.file_name ? t('documentFileNamed', { fileName: block.file_name }) : t('documentFile')}
       </div>
     )
@@ -319,12 +323,12 @@ function ShowCollectionPendingCard() {
     <div className="overflow-hidden border border-border bg-background shadow-token-sm animate-in fade-in slide-in-from-bottom-1 duration-normal">
       <div className="flex items-start justify-between gap-3 px-4 py-4 sm:px-5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-border bg-background">
+          <div className={TOOL_TRACE_ICON_CLASS}>
             <Images size={13} className="text-muted-foreground" />
           </div>
           <div className="space-y-2">
-            <div className="h-4 w-24 bg-muted animate-pulse" />
-            <div className="h-3 w-44 bg-muted/80 animate-pulse" />
+            <div className="h-4 w-24 rounded-none bg-muted" />
+            <div className="h-3 w-44 rounded-none bg-muted/80" />
           </div>
         </div>
         <div className="inline-flex items-center gap-2 border border-border bg-background px-3 py-1.5">
@@ -460,7 +464,7 @@ function ToolCallCard({ block }: { block: { type: 'tool_use'; id: string; name: 
 
   return (
     <div className="flex items-center gap-2.5 border border-border bg-background px-3 py-2.5 sm:px-4">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center border border-border bg-background">
+      <div className={TOOL_CALL_ICON_CLASS}>
         <IconComp size={12.5} className="text-muted-foreground" />
       </div>
       <div className="flex min-w-0 flex-1 items-baseline gap-2">
@@ -529,7 +533,7 @@ function FashionVisionCard({ data }: { data: FashionVisionResultData }) {
     <div className="space-y-3 border border-border bg-background px-4 py-4 shadow-token-sm sm:px-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-muted/[0.08]">
+          <div className={cn(TOOL_TRACE_ICON_CLASS, 'bg-muted/[0.08]')}>
             <Sparkles size={15} className="text-foreground" />
           </div>
           <div>
@@ -609,7 +613,7 @@ function StyleKnowledgeCard({ data }: { data: StyleKnowledgeResultData }) {
     <div className="space-y-3 border border-border bg-background px-4 py-4 shadow-token-sm sm:px-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center border border-border bg-muted/[0.08]">
+          <div className={cn(TOOL_TRACE_ICON_CLASS, 'bg-muted/[0.08]')}>
             <Sparkles size={15} className="text-foreground" />
           </div>
           <div>

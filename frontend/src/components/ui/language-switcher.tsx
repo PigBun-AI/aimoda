@@ -22,10 +22,10 @@ export function LanguageSwitcher() {
     <Button
       variant="ghost"
       size="sm"
-      className="gap-1.5 text-sm font-medium"
+      className="type-chat-action gap-1.5"
       onClick={toggleLanguage}
     >
-      <Languages className="h-4 w-4" />
+      <Languages className="size-4" />
       <span>{t(currentLang.labelKey)}</span>
     </Button>
   )

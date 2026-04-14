@@ -230,7 +230,7 @@ export function ImageLabels({ image, anchorBox, onLabelSearch, activeLabelKey = 
               labelRefs.current[key] = element
             }}
             type="button"
-            className={`pointer-events-auto absolute inline-flex max-w-[min(220px,28vw)] cursor-pointer items-center gap-1.5 border border-border bg-background px-2.5 py-1.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground transition-all hover:border-foreground/25 hover:bg-accent/20 ${isSearching ? 'opacity-70' : ''}`}
+            className={`type-chat-kicker pointer-events-auto absolute inline-flex max-w-[min(220px,28vw)] cursor-pointer items-center gap-1.5 border border-border bg-background px-2.5 py-1.5 text-left text-foreground transition-all hover:border-foreground/25 hover:bg-accent/20 ${isSearching ? 'opacity-70' : ''}`}
             style={{
               left: `${placement?.left ?? labelAnchorX}px`,
               top: `${placement?.top ?? labelAnchorY}px`,
@@ -249,7 +249,7 @@ export function ImageLabels({ image, anchorBox, onLabelSearch, activeLabelKey = 
               {displayName}
             </span>
             {isSearching && (
-              <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+              <Loader2 className="size-3 shrink-0 animate-spin text-primary" />
             )}
           </button>
         )

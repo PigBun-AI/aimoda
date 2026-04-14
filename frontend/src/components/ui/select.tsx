@@ -15,14 +15,14 @@ const SelectTrigger = forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'type-action-label flex min-h-11 w-full items-center justify-between rounded-[var(--radius-sm)] border border-input bg-background px-3 py-3 text-foreground ring-offset-background transition-colors placeholder:text-muted-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground focus:ring-offset-2 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      'type-action-label flex min-h-10 w-full items-center justify-between rounded-none border border-input bg-background px-3 py-2.5 text-foreground ring-offset-background transition-colors placeholder:text-muted-foreground focus:border-foreground focus:outline-none focus:ring-1 focus:ring-foreground focus:ring-offset-2 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
       className,
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
+      <ChevronDown className="size-4 text-muted-foreground" strokeWidth={1.75} />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))
@@ -37,7 +37,7 @@ const SelectScrollUpButton = forwardRef<
     className={cn('flex cursor-default items-center justify-center border-b border-border py-1 text-muted-foreground', className)}
     {...props}
   >
-    <ChevronUp className="h-4 w-4" strokeWidth={1.75} />
+    <ChevronUp className="size-4" strokeWidth={1.75} />
   </SelectPrimitive.ScrollUpButton>
 ))
 SelectScrollUpButton.displayName = SelectPrimitive.ScrollUpButton.displayName
@@ -51,7 +51,7 @@ const SelectScrollDownButton = forwardRef<
     className={cn('flex cursor-default items-center justify-center border-t border-border py-1 text-muted-foreground', className)}
     {...props}
   >
-    <ChevronDown className="h-4 w-4" strokeWidth={1.75} />
+    <ChevronDown className="size-4" strokeWidth={1.75} />
   </SelectPrimitive.ScrollDownButton>
 ))
 SelectScrollDownButton.displayName = SelectPrimitive.ScrollDownButton.displayName
@@ -93,14 +93,14 @@ const SelectItem = forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'type-action-label relative flex min-h-9 w-full cursor-default select-none items-center border border-transparent py-2 pl-8 pr-3 text-foreground outline-none transition-colors focus:border-border focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      'type-action-label relative flex min-h-9 w-full cursor-default select-none items-center border border-transparent py-1.5 pl-7 pr-3 text-foreground outline-none transition-colors focus:border-border focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
       className,
     )}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center text-muted-foreground">
+    <span className="absolute left-2 flex size-3.5 items-center justify-center text-muted-foreground">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" strokeWidth={1.75} />
+        <Check className="size-4" strokeWidth={1.75} />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { ROUTER_FUTURE } from '@/app/router-future'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { AuthProvider } from '@/features/auth/auth-store'
@@ -13,7 +14,7 @@ describe('route guards', () => {
   it('redirects unauthenticated users to login', () => {
     render(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/reports']}>
+        <MemoryRouter initialEntries={['/reports']} future={ROUTER_FUTURE}>
           <Routes>
             <Route path="/" element={<div>cover page</div>} />
             <Route element={<ProtectedRoute />}>
@@ -40,7 +41,7 @@ describe('route guards', () => {
 
     render(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/admin']}>
+        <MemoryRouter initialEntries={['/admin']} future={ROUTER_FUTURE}>
           <Routes>
             <Route element={<AdminRoute />}>
               <Route path="/admin" element={<div>admin page</div>} />

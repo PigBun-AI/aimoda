@@ -87,12 +87,12 @@ function ActionButton({ icon, label, onClick }: ActionButtonProps) {
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-[64px] flex-1 flex-col items-center justify-center gap-2 border-t border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground first:border-t-0 sm:min-h-[72px] lg:min-h-0 lg:border-b lg:border-t-0 lg:first:border-b lg:last:border-b-0"
+      className="flex min-h-[64px] flex-1 flex-col items-center justify-center gap-2 rounded-none border-t border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground first:border-t-0 sm:min-h-[72px] lg:min-h-0 lg:border-b lg:border-t-0 lg:first:border-b lg:last:border-b-0"
       title={label}
       aria-label={label}
     >
       {icon}
-      <span className="text-[9px] font-semibold uppercase tracking-[0.18em]">{label}</span>
+      <span className="type-chat-kicker">{label}</span>
     </button>
   )
 }

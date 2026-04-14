@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { ROUTER_FUTURE } from '@/app/router-future'
 import { describe, expect, it, vi } from 'vitest'
 
 import '@/i18n'
@@ -30,7 +31,7 @@ describe('AdminPage', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter>
+        <MemoryRouter future={ROUTER_FUTURE}>
           <AdminPage />
         </MemoryRouter>
       </QueryClientProvider>,

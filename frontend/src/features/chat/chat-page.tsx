@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { SlidersHorizontal, X } from 'lucide-react'
+import { Loader2, SlidersHorizontal, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -83,11 +83,7 @@ function LoadingIndicator() {
     <div className="animate-in fade-in flex items-center gap-3 border-t border-border/80 py-4 duration-normal">
       <div className="h-px flex-1 bg-border/70" />
       <div className="flex min-w-0 items-center justify-center gap-2.5">
-        <div className="flex gap-1">
-          <div className="h-1 w-1 animate-pulse bg-foreground" style={{ animationDelay: '0s' }} />
-          <div className="h-1 w-1 animate-pulse bg-foreground" style={{ animationDelay: '0.25s' }} />
-          <div className="h-1 w-1 animate-pulse bg-foreground" style={{ animationDelay: '0.5s' }} />
-        </div>
+        <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
         <span className="type-chat-kicker text-muted-foreground">{t('agentThinking')}</span>
       </div>
       <div className="h-px flex-1 bg-border/70" />
@@ -99,10 +95,10 @@ function EmptyState() {
   const { t } = useTranslation('common')
 
   return (
-    <div className="flex min-h-full w-full items-center justify-center px-6 py-8 text-center">
+    <div className="flex min-h-full w-full items-center justify-center px-5 py-6 text-center">
       {/* Keep the empty state deliberately simple; the editorialized split layout
           pulled too much attention and made the chat entry feel heavier. */}
-      <div className="flex w-full max-w-3xl flex-col items-center border border-border/60 bg-card px-8 py-12 shadow-token-lg sm:px-12 sm:py-16">
+      <div className="flex w-full max-w-[44rem] flex-col items-center border border-border/60 bg-card px-6 py-8 shadow-token-md sm:px-8 sm:py-10">
         <div className="w-full max-w-xl border-b border-border/60 pb-8">
           <div className="flex items-center justify-center gap-4">
             <img src="/aimoda-logo.svg" alt="aimoda" className="h-8 w-auto dark:hidden" />
@@ -150,7 +146,7 @@ export function ChatPage() {
   const [drawerWidthPercent, setDrawerWidthPercent] = useState(() => {
     if (typeof window === 'undefined') return 45
     const stored = Number(window.localStorage.getItem(drawerWidthStorageKey))
-    return Number.isFinite(stored) && stored >= 28 && stored <= 62 ? stored : 45
+    return Number.isFinite(stored) && stored >= 24 && stored <= 62 ? stored : 45
   })
   const { isDrawerFullscreen, setDrawerFullscreen } = useChatLayoutStore()
 
@@ -357,7 +353,7 @@ export function ChatPage() {
       const rect = container.getBoundingClientRect()
       const nextChatWidth = ((clientX - rect.left) / rect.width) * 100
       const nextDrawerWidth = 100 - nextChatWidth
-      const clamped = Math.max(28, Math.min(62, nextDrawerWidth))
+      const clamped = Math.max(24, Math.min(62, nextDrawerWidth))
       setDrawerWidthPercent(clamped)
     }
 
@@ -495,7 +491,7 @@ export function ChatPage() {
       size="sm"
       onClick={handleOpenPreferencesDialog}
       className={cn(
-        'h-11 min-w-[112px] items-center justify-start gap-2 px-4 text-left',
+        'h-10 min-w-[108px] items-center justify-start gap-2 px-3.5 text-left',
         hasActiveChatPreferences(draftPreferences) && 'border-foreground/55',
       )}
     >
@@ -521,11 +517,11 @@ export function ChatPage() {
           )}
           style={isDesktop ? { width: `${chatWidthPercent}%` } : undefined}
         >
-          <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-7">
+          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
             {messages.length === 0 ? (
               <EmptyState />
             ) : (
-              <div className="mx-auto w-full max-w-3xl border-t border-border/60 pt-6 sm:pt-8">
+              <div className="mx-auto w-full max-w-3xl border-t border-border/60 pt-5 sm:pt-6">
                 {messages.map((msg) => (
                   <MessageBubble
                     key={msg.id}
@@ -576,18 +572,21 @@ export function ChatPage() {
               style={isDesktop ? { width: isDrawerFullscreen ? '100%' : `${drawerWidthPercent}%` } : undefined}
             >
               {!isDesktop && (
-                <div className="flex h-12 shrink-0 items-center border-b border-border px-4">
+                <div className="flex h-11 shrink-0 items-center border-b border-border px-3.5">
                   <button
+                    type="button"
                     onClick={() => setDrawerOpen(false)}
-                    className="type-chat-label flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+                    className="type-chat-label inline-flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
                   >
                     <span>←</span>
                     <span>{t('backToChat')}</span>
                   </button>
                   <div className="flex-1" />
                   <button
+                    type="button"
                     onClick={() => setDrawerOpen(false)}
-                    className="flex h-8 w-8 items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                    className="inline-flex size-8 items-center justify-center border border-transparent text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                    aria-label={t('close')}
                   >
                     <X size={16} />
                   </button>

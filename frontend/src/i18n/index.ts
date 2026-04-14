@@ -17,6 +17,7 @@ i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
+    showSupportNotice: false,
     resources: {
       en: { common: enCommon, auth: enAuth, reports: enReports, admin: enAdmin },
       'zh-CN': { common: zhCommon, auth: zhAuth, reports: zhReports, admin: zhAdmin }

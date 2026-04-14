@@ -155,7 +155,7 @@ export function ImageViewer({ image, activeLabelKey = null, onLabelSearch }: Ima
       {showHint && !loading && (
         <div className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 border border-border bg-background px-3 py-2">
           <MousePointerClick size={14} className="shrink-0 text-muted-foreground" />
-          <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="type-chat-kicker whitespace-nowrap text-muted-foreground">
             {t('imageInteractionHint')}
           </span>
         </div>

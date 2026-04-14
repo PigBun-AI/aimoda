@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
 
+import { PageFrame } from '@/components/layout/page-frame'
+import { PageIntro } from '@/components/layout/page-intro'
 import { Button } from '@/components/ui/button'
 import { RedeemDialog } from '@/features/redemption/redeem-dialog'
 import { useReportDetail } from '@/features/reports/use-report-detail'
@@ -58,8 +60,8 @@ export function ReportDetailPage() {
 
   if (reportQuery.isLoading) {
     return (
-      <div className="flex h-dvh items-center justify-center bg-background">
-        <div className="border border-border px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+      <div className="flex h-full min-h-0 items-center justify-center bg-background">
+        <div className="type-chat-kicker border border-border px-4 py-3 text-muted-foreground">
           {t('common:loading')}
         </div>
       </div>
@@ -69,13 +71,13 @@ export function ReportDetailPage() {
   if (reportQuery.data == null) {
     if (isLocked) {
       return (
-        <div className="flex h-dvh items-center justify-center bg-background px-6">
+        <div className="flex h-full min-h-0 items-center justify-center bg-background px-6">
           <div className="w-full max-w-2xl border border-border bg-card px-8 py-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t('lockedEyebrow')}</p>
-            <h1 className="mt-3 font-serif text-[2.2rem] leading-[0.94] tracking-[-0.04em] text-foreground">
+            <p className="type-chat-kicker text-muted-foreground">{t('lockedEyebrow')}</p>
+            <h1 className="type-page-title mt-3 text-foreground">
               {t('lockedTitle')}
             </h1>
-            <p className="mt-4 max-w-[42ch] text-sm text-muted-foreground">{t('lockedBody')}</p>
+            <p className="type-body-muted mt-4 max-w-[42ch] text-pretty">{t('lockedBody')}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button asChild variant="ghost">
                 <Link to="/profile?tab=access">{t('openMembership')}</Link>
@@ -88,11 +90,11 @@ export function ReportDetailPage() {
     }
 
     return (
-      <div className="flex h-dvh items-center justify-center bg-background px-6">
+      <div className="flex h-full min-h-0 items-center justify-center bg-background px-6">
         <div className="max-w-md border border-border px-8 py-10 text-center">
-          <p className="font-serif text-3xl tracking-[-0.03em] text-foreground">{t('notFound')}</p>
+          <p className="type-section-title text-foreground">{t('notFound')}</p>
           <button
-            className="mt-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
+            className="type-chat-kicker mt-6 text-muted-foreground transition-colors hover:text-foreground"
             onClick={() => navigate('/reports')}
           >
             {t('backToList')}
@@ -112,82 +114,87 @@ export function ReportDetailPage() {
   )
 
   return (
-    <div className="flex h-dvh flex-col bg-background">
-      <header className="shrink-0 border-b border-border">
-        <div className="grid gap-6 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)] lg:gap-10 lg:py-5">
-          <div className="space-y-5">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-              <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>
-                <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
-                <span>{t('backToList')}</span>
-              </Button>
-              <div className="flex flex-wrap items-center gap-2 text-right">
-                <span className="type-chat-kicker text-muted-foreground">{reportQuery.data.brand}</span>
-                <span className="type-chat-kicker border border-border px-2 py-1 text-muted-foreground">Report</span>
-              </div>
-            </div>
-
-            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_200px]">
-              <div className="space-y-3">
-                <p className="type-chat-kicker text-muted-foreground">{reportQuery.data.season}</p>
-                <h1 className="type-page-title max-w-[12ch] text-foreground">{reportQuery.data.title}</h1>
-              </div>
-              <div className="border-l border-border pl-5">
-                <p className="type-chat-kicker text-muted-foreground">Updated</p>
-                <p className="mt-2 text-sm uppercase tracking-[0.14em] text-foreground">{formattedDate}</p>
-              </div>
+    <PageFrame fullHeight width="wide">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <div className="shrink-0 border-b border-border/70 pb-4 sm:pb-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+            <Button variant="ghost" size="sm" onClick={() => navigate('/reports')}>
+              <ArrowLeft className="size-4" strokeWidth={1.75} />
+              <span>{t('backToList')}</span>
+            </Button>
+            <div className="flex flex-wrap items-center gap-2 text-right">
+              <span className="type-chat-kicker text-muted-foreground">{reportQuery.data.brand}</span>
+              <span className="type-chat-kicker border border-border px-2 py-1 text-muted-foreground">Report</span>
             </div>
           </div>
 
-          <div className="grid gap-5 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-            <div className="space-y-3">
-              <p className="type-chat-kicker text-muted-foreground">Archive note</p>
-              <p className="type-body-muted max-w-[30ch]">
-                {reportQuery.data.brand} {reportQuery.data.season} · {formattedDate}
-              </p>
-            </div>
+          <div className="pt-4 sm:pt-5">
+            <PageIntro
+              variant="editorial"
+              eyebrow={reportQuery.data.season}
+              title={reportQuery.data.title}
+              description={`${reportQuery.data.brand} · ${formattedDate}`}
+              titleClassName="max-w-[11ch]"
+              descriptionClassName="max-w-[44ch]"
+              aside={(
+                <div className="flex h-full flex-col justify-between gap-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-3">
+                      <span className="type-chat-kicker text-muted-foreground">Updated</span>
+                      <span className="type-chat-meta tabular-nums text-right text-foreground">{formattedDate}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-4 border-b border-border/60 pb-3">
+                      <span className="type-chat-kicker text-muted-foreground">Brand</span>
+                      <span className="type-chat-meta text-right text-foreground">{reportQuery.data.brand}</span>
+                    </div>
+                    <div className="flex items-start justify-between gap-4">
+                      <span className="type-chat-kicker text-muted-foreground">Edition</span>
+                      <span className="type-chat-meta text-right text-foreground">{reportQuery.data.season}</span>
+                    </div>
+                  </div>
 
-            <div className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={prevNext.prevReport == null}
-                onClick={() => {
-                  if (prevNext.prevReport) {
-                    navigate('/reports/' + String(prevNext.prevReport.id))
-                  }
-                }}
-                className="justify-between"
-              >
-                <span className="inline-flex items-center gap-2">
-                  <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
-                  <span>{t('previousArticle')}</span>
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={prevNext.nextReport == null}
-                onClick={() => {
-                  if (prevNext.nextReport) {
-                    navigate('/reports/' + String(prevNext.nextReport.id))
-                  }
-                }}
-                className="justify-between"
-              >
-                <span>{t('nextArticle')}</span>
-                <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
-              </Button>
-            </div>
+                  <div className="grid gap-2 border-t border-border/60 pt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={prevNext.prevReport == null}
+                      onClick={() => {
+                        if (prevNext.prevReport) {
+                          navigate('/reports/' + String(prevNext.prevReport.id))
+                        }
+                      }}
+                      className="justify-between"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <ChevronLeft className="size-4" strokeWidth={1.75} />
+                        <span>{t('previousArticle')}</span>
+                      </span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={prevNext.nextReport == null}
+                      onClick={() => {
+                        if (prevNext.nextReport) {
+                          navigate('/reports/' + String(prevNext.nextReport.id))
+                        }
+                      }}
+                      className="justify-between"
+                    >
+                      <span>{t('nextArticle')}</span>
+                      <ChevronRight className="size-4" strokeWidth={1.75} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            />
           </div>
         </div>
-      </header>
 
-      <div className="min-h-0 flex-1 p-3 sm:p-4">
-        <div className="grid h-full gap-3 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-4">
-          <aside className="hidden border border-border bg-background px-5 py-5 lg:flex lg:flex-col lg:justify-between">
-            <div className="space-y-5">
-              <div className="border-b border-border pb-4">
+        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[216px_minmax(0,1fr)] xl:gap-4">
+          <aside className="hidden border border-border bg-background px-4 py-4 xl:flex xl:flex-col xl:justify-between">
+            <div className="space-y-4">
+              <div className="border-b border-border pb-3">
                 <p className="type-chat-kicker text-muted-foreground">Edition</p>
                 <p className="mt-2 type-section-title text-foreground">{reportQuery.data.season}</p>
               </div>
@@ -195,26 +202,26 @@ export function ReportDetailPage() {
                 <p className="type-chat-kicker text-muted-foreground">Brand</p>
                 <p className="type-chat-title text-foreground">{reportQuery.data.brand}</p>
               </div>
-              <div className="space-y-2 border-t border-border pt-4">
+              <div className="space-y-2 border-t border-border pt-3">
                 <p className="type-chat-kicker text-muted-foreground">Published</p>
-                <p className="type-chat-meta text-foreground">{formattedDate}</p>
+                <p className="type-chat-meta tabular-nums text-foreground">{formattedDate}</p>
               </div>
             </div>
             <p className="type-chat-meta text-muted-foreground">A clean editorial reader with stark black-and-white framing.</p>
           </aside>
 
-          <div className="min-h-0 border border-border bg-background">
+          <div className="min-h-[60vh] border border-border bg-background xl:min-h-0">
             {safeIframeUrl ? (
-              <iframe className="h-full w-full border-0 bg-white dark:bg-black" src={safeIframeUrl} title={reportQuery.data.title} />
+              <iframe className="h-full min-h-[60vh] w-full border-0 bg-white dark:bg-black xl:min-h-0" src={safeIframeUrl} title={reportQuery.data.title} />
             ) : (
-              <div className="flex h-full items-center justify-center px-6">
-                <p className="max-w-sm text-center text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{t('iframeError')}</p>
+              <div className="flex h-full min-h-[60vh] items-center justify-center px-6 xl:min-h-0">
+                <p className="type-chat-kicker max-w-sm text-center text-muted-foreground">{t('iframeError')}</p>
               </div>
             )}
           </div>
         </div>
       </div>
-    </div>
+    </PageFrame>
   )
 }
 

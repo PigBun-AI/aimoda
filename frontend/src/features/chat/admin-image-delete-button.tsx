@@ -57,7 +57,7 @@ export function AdminImageDeleteButton({
       onClick={handleClick}
       disabled={isDeleting}
       className={cn(
-        'flex h-8 w-8 items-center justify-center rounded-none border border-border/80 bg-background/92 text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:border-destructive/35 hover:text-destructive disabled:pointer-events-none disabled:opacity-70',
+        'flex size-8 items-center justify-center rounded-none border border-border/80 bg-background/92 text-muted-foreground shadow-token-sm backdrop-blur-sm transition-colors hover:border-destructive/35 hover:text-destructive disabled:pointer-events-none disabled:opacity-70',
         className,
       )}
       aria-label={t('deleteCatalogImage')}
