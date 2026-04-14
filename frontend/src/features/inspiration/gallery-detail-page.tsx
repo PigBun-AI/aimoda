@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
+import { PageFrame } from '@/components/layout/page-frame'
+import { PageIntro } from '@/components/layout/page-intro'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -12,6 +14,9 @@ interface GalleryEntry {
   image: GalleryImage
   index: number
 }
+
+const LIGHTBOX_CHROME_BUTTON_CLASS = 'inline-flex size-10 items-center justify-center border border-white/15 text-white/70 transition-colors hover:border-white/40 hover:text-white'
+const LIGHTBOX_NAV_BUTTON_CLASS = 'absolute top-1/2 z-40 inline-flex size-10 -translate-y-1/2 items-center justify-center border border-white/12 bg-black/60 text-white/70 transition-colors hover:border-white/35 hover:text-white'
 
 function buildGalleryMeta(gallery: Gallery, language: string) {
   return [
@@ -177,7 +182,7 @@ export function GalleryDetailPage() {
         <p className="type-page-title max-w-[10ch] text-center text-foreground">{t('galleryNotFound')}</p>
         <Link to="/inspiration" className="mt-6">
           <Button variant="outline" size="sm" className="rounded-none">
-            <ArrowLeft className="mr-1 h-4 w-4" />
+            <ArrowLeft className="mr-1 size-4" />
             {t('backToInspiration')}
           </Button>
         </Link>
@@ -186,42 +191,54 @@ export function GalleryDetailPage() {
   }
 
   return (
-    <section className="mx-auto max-w-[1680px] px-4 py-6 sm:px-6 sm:py-8 md:px-8">
-      <div className="border-t border-border pt-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
-          <Link to="/inspiration">
-            <Button variant="ghost" size="sm" className="gap-1 rounded-none px-0 text-muted-foreground hover:bg-transparent hover:text-foreground">
-              <ArrowLeft className="h-4 w-4" />
-              {t('backToInspiration')}
-            </Button>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="type-chat-kicker text-muted-foreground">{gallery.category || t('imageArchiveLabel')}</span>
-            <span className="h-1 w-1 bg-foreground/70" />
-            <span className="type-chat-kicker text-foreground">{String(gallery.image_count).padStart(2, '0')}</span>
+    <PageFrame width="full">
+      <section className="mx-auto w-full max-w-[1600px]">
+        <div className="border-b border-border/70 pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
+            <Link to="/inspiration">
+              <Button variant="ghost" size="sm" className="gap-1 rounded-none px-0 text-muted-foreground hover:bg-transparent hover:text-foreground">
+                <ArrowLeft className="size-4" />
+                {t('backToInspiration')}
+              </Button>
+            </Link>
+            <div className="flex items-center gap-3">
+              <span className="type-chat-kicker text-muted-foreground">{gallery.category || t('imageArchiveLabel')}</span>
+              <span className="size-1 bg-foreground/70" />
+              <span className="type-chat-kicker text-foreground">{String(gallery.image_count).padStart(2, '0')}</span>
+            </div>
+          </div>
+
+          <div className="pt-4 sm:pt-5">
+            <PageIntro
+              variant="editorial"
+              eyebrow="Inspiration dossier"
+              title={gallery.title}
+              description={gallery.description || 'Curated visual references'}
+              titleClassName="max-w-[11ch]"
+              descriptionClassName="max-w-[46ch]"
+              aside={(
+                <div className="flex h-full flex-col justify-between gap-4">
+                  <div className="space-y-3">
+                    {galleryMeta.map((item) => (
+                      <div key={item.label} className="flex items-start justify-between gap-4 border-b border-border/60 pb-3 last:border-b-0 last:pb-0">
+                        <span className="type-chat-kicker text-muted-foreground">{item.label}</span>
+                        <span className="type-chat-meta text-right text-foreground">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
+                    <span>Gallery flow</span>
+                    <span className="tabular-nums text-foreground">{String(images.length).padStart(2, '0')}</span>
+                  </div>
+                </div>
+              )}
+            />
           </div>
         </div>
-      </div>
 
-      <div className="mt-8 grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
-        <div className="order-2 xl:order-1">
-          <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
-            <div className="space-y-3">
-              <p className="type-chat-kicker text-muted-foreground">Inspiration dossier</p>
-              <h1 className="type-page-title max-w-[12ch] text-balance text-foreground">{gallery.title}</h1>
-            </div>
-            <div className="type-chat-meta text-muted-foreground">
-              {gallery.description ? null : 'Curated visual references'}
-            </div>
-          </div>
-
-          {gallery.description && (
-            <p className="type-body-muted mt-5 max-w-[62ch] border-b border-border pb-6">
-              {gallery.description}
-            </p>
-          )}
-
-          <div className="mt-6 border-b border-border pb-3">
+        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_304px] xl:items-start">
+          <div className="order-2 xl:order-1">
+          <div className="border-b border-border pb-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="type-chat-kicker text-muted-foreground">Gallery flow</p>
@@ -237,11 +254,11 @@ export function GalleryDetailPage() {
 
           <div
             ref={masonryRef}
-            className="mt-6 grid gap-4 md:gap-5"
+            className="mt-5 grid gap-3.5 md:gap-4"
             style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
           >
             {masonryColumns.map((column, columnIndex) => (
-              <div key={`column-${columnIndex}`} className="flex min-w-0 flex-col gap-4 md:gap-5">
+              <div key={`column-${columnIndex}`} className="flex min-w-0 flex-col gap-3.5 md:gap-4">
                 {column.map(({ image, index }) => (
                   <button
                     key={image.id}
@@ -249,7 +266,7 @@ export function GalleryDetailPage() {
                     onClick={() => setLightboxIndex(index)}
                     className="group block w-full text-left"
                   >
-                    <div className="border border-border bg-card p-3 sm:p-4">
+                    <div className="border border-border bg-card p-3">
                       <div className="overflow-hidden bg-white dark:bg-black">
                         <img
                           src={image.image_url}
@@ -281,9 +298,9 @@ export function GalleryDetailPage() {
           </div>
         </div>
 
-        <aside className="order-1 xl:order-2 xl:sticky xl:top-24">
-          <div className="space-y-5">
-            <div className="border border-border bg-card p-5 sm:p-6">
+        <aside className="order-1 xl:order-2 xl:sticky xl:top-20">
+          <div className="space-y-4">
+            <div className="border border-border bg-card p-4 sm:p-5">
               <p className="type-chat-kicker text-muted-foreground">Overview</p>
               <div className="mt-4 space-y-3">
                 {galleryMeta.map((item) => (
@@ -295,7 +312,7 @@ export function GalleryDetailPage() {
               </div>
             </div>
 
-            <div className="border border-border bg-card p-5 sm:p-6">
+            <div className="border border-border bg-card p-4 sm:p-5">
               <p className="type-chat-kicker text-muted-foreground">Tags</p>
               {gallery.tags.length > 0 ? (
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -334,14 +351,15 @@ export function GalleryDetailPage() {
         </aside>
       </div>
 
-      <div className="flex justify-center pb-6 pt-12">
+      <div className="flex justify-center pb-2 pt-10">
         <Link to="/inspiration">
           <Button variant="outline" size="sm" className="gap-1 rounded-none">
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="size-4" />
             {t('backToInspiration')}
           </Button>
         </Link>
       </div>
+      </section>
 
       {lightboxIndex !== null && activeImage && (
         <div
@@ -349,58 +367,61 @@ export function GalleryDetailPage() {
           onClick={() => setLightboxIndex(null)}
         >
           <div className="flex h-full flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between gap-4 border-b border-white/12 px-4 py-3 sm:px-6">
+            <div className="flex items-center justify-between gap-4 border-b border-white/12 px-4 py-3 sm:px-5">
               <div className="min-w-0">
                 <p className="type-chat-kicker text-white/45">{gallery.category || 'Archive'}</p>
-                <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.16em] text-white">
-                  <span className="truncate">{gallery.title}</span>
-                  <span className="h-1 w-1 bg-white/35" />
-                  <span>{formatLookIndex(lightboxIndex)} / {String(images.length).padStart(2, '0')}</span>
+                <div className="mt-1 flex flex-wrap items-center gap-3">
+                  <span className="type-chat-kicker truncate text-white">{gallery.title}</span>
+                  <span className="size-1 bg-white/35" />
+                  <span className="type-chat-kicker text-white">{formatLookIndex(lightboxIndex)} / {String(images.length).padStart(2, '0')}</span>
                 </div>
               </div>
               <button
                 type="button"
-                className="flex h-10 w-10 items-center justify-center border border-white/15 text-white/70 transition-colors hover:border-white/40 hover:text-white"
+                className={LIGHTBOX_CHROME_BUTTON_CLASS}
                 onClick={() => setLightboxIndex(null)}
+                aria-label={t('close')}
               >
-                <X className="h-5 w-5" />
+                <X className="size-5" />
               </button>
             </div>
 
-            <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="relative flex min-h-0 items-center justify-center px-4 py-4 sm:px-8 sm:py-6">
+            <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_304px]">
+              <div className="relative flex min-h-0 items-center justify-center px-4 py-4 sm:px-6 sm:py-5">
                 {lightboxIndex > 0 && (
                   <button
                     type="button"
-                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 border border-white/12 bg-black/60 p-2 text-white/70 transition-colors hover:border-white/35 hover:text-white sm:left-6"
+                    className={`${LIGHTBOX_NAV_BUTTON_CLASS} left-3 sm:left-6`}
                     onClick={() => setLightboxIndex(lightboxIndex - 1)}
+                    aria-label={t('previous')}
                   >
-                    <ChevronLeft className="h-6 w-6" />
+                    <ChevronLeft className="size-6" />
                   </button>
                 )}
 
                 <img
                   src={activeImage.image_url}
                   alt={activeImage.caption || gallery.title}
-                  className="max-h-[calc(100vh-13.5rem)] max-w-full object-contain"
+                  className="max-h-[calc(100dvh-13.5rem)] max-w-full object-contain"
                 />
 
                 {lightboxIndex < images.length - 1 && (
                   <button
                     type="button"
-                    className="absolute right-3 top-1/2 z-10 -translate-y-1/2 border border-white/12 bg-black/60 p-2 text-white/70 transition-colors hover:border-white/35 hover:text-white sm:right-6"
+                    className={`${LIGHTBOX_NAV_BUTTON_CLASS} right-3 sm:right-6`}
                     onClick={() => setLightboxIndex(lightboxIndex + 1)}
+                    aria-label={t('next')}
                   >
-                    <ChevronRight className="h-6 w-6" />
+                    <ChevronRight className="size-6" />
                   </button>
                 )}
               </div>
 
-              <aside className="min-h-0 overflow-y-auto border-t border-white/10 px-4 py-5 sm:px-6 xl:border-l xl:border-t-0">
-                <div className="space-y-6">
+              <aside className="min-h-0 overflow-y-auto border-t border-white/10 px-4 py-4 sm:px-5 xl:border-l xl:border-t-0">
+                <div className="space-y-5">
                   <div className="border-b border-white/12 pb-4">
                     <p className="type-chat-kicker text-white/45">Caption</p>
-                    <p className="mt-3 text-[12px] uppercase tracking-[0.14em] text-white">
+                    <p className="type-chat-kicker mt-3 text-white">
                       {activeImage.caption || gallery.title}
                     </p>
                   </div>
@@ -408,18 +429,18 @@ export function GalleryDetailPage() {
                   <div className="space-y-3">
                     <p className="type-chat-kicker text-white/45">Details</p>
                     <div className="space-y-2">
-                      <div className="flex items-start justify-between gap-4 text-[11px] uppercase tracking-[0.14em]">
-                        <span className="text-white/45">Look</span>
-                        <span className="text-white">{formatLookIndex(lightboxIndex)}</span>
+                      <div className="flex items-start justify-between gap-4">
+                        <span className="type-chat-kicker text-white/45">Look</span>
+                        <span className="type-chat-kicker text-white">{formatLookIndex(lightboxIndex)}</span>
                       </div>
-                      <div className="flex items-start justify-between gap-4 text-[11px] uppercase tracking-[0.14em]">
-                        <span className="text-white/45">Gallery</span>
-                        <span className="text-right text-white">{gallery.title}</span>
+                      <div className="flex items-start justify-between gap-4">
+                        <span className="type-chat-kicker text-white/45">Gallery</span>
+                        <span className="type-chat-kicker text-right text-white">{gallery.title}</span>
                       </div>
                       {formatImageDimensions(activeImage) && (
-                        <div className="flex items-start justify-between gap-4 text-[11px] uppercase tracking-[0.14em]">
-                          <span className="text-white/45">Format</span>
-                          <span className="text-white">{formatImageDimensions(activeImage)}</span>
+                        <div className="flex items-start justify-between gap-4">
+                          <span className="type-chat-kicker text-white/45">Format</span>
+                          <span className="type-chat-kicker text-white">{formatImageDimensions(activeImage)}</span>
                         </div>
                       )}
                     </div>
@@ -434,7 +455,7 @@ export function GalleryDetailPage() {
                             key={`${color.hex}-${index}`}
                             type="button"
                             onClick={() => handleColorSearch(color.hsv.h, color.hsv.s, color.hsv.v, color.hex)}
-                            className="h-9 w-9 border border-white/20 transition-transform hover:scale-110 hover:border-white"
+                            className="size-9 border border-white/20 transition-transform hover:scale-110 hover:border-white"
                             style={{ backgroundColor: color.hex }}
                             title={`HSV: ${color.hsv.h},${color.hsv.s},${color.hsv.v} (${color.percentage}%)`}
                           />
@@ -446,7 +467,7 @@ export function GalleryDetailPage() {
               </aside>
             </div>
 
-            <div className="border-t border-white/10 px-4 py-3 sm:px-6">
+            <div className="border-t border-white/10 px-4 py-3 sm:px-5">
               <div className="flex gap-3 overflow-x-auto pb-1">
                 {images.map((image, index) => {
                   const isActive = index === lightboxIndex
@@ -457,7 +478,7 @@ export function GalleryDetailPage() {
                       onClick={() => setLightboxIndex(index)}
                       className={`group shrink-0 border p-2 transition-colors ${isActive ? 'border-white bg-white/6' : 'border-white/12 hover:border-white/35'}`}
                     >
-                      <div className="flex h-24 w-20 items-center justify-center bg-white/4 sm:h-28 sm:w-24">
+                      <div className="flex w-20 items-center justify-center bg-white/4 sm:w-24" style={{ aspectRatio: '5 / 6' }}>
                         <img
                           src={image.image_url}
                           alt={image.caption || `${gallery.title} ${formatLookIndex(index)}`}
@@ -466,7 +487,7 @@ export function GalleryDetailPage() {
                         />
                       </div>
                       <div className="mt-2 text-left">
-                        <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">
+                        <p className="type-chat-kicker text-white/45">
                           {formatLookIndex(index)}
                         </p>
                       </div>
@@ -480,28 +501,28 @@ export function GalleryDetailPage() {
       )}
 
       {searchColors && (
-        <div className="fixed inset-0 z-[100] flex flex-col overflow-y-auto bg-background">
-          <div className="sticky top-0 z-10 border-b border-border bg-background px-4 py-4 sm:px-6">
+        <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-background">
+          <div className="sticky top-0 z-40 border-b border-border bg-background px-4 py-3 sm:px-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <div
-                  className="h-6 w-6 border border-border"
+                  className="size-6 border border-border"
                   style={{ backgroundColor: searchColors.hex }}
                 />
                 <div className="min-w-0">
                   <h2 className="type-section-title text-foreground">{t('globalColorTracking')}</h2>
-                  <span className="block text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  <span className="type-chat-kicker block text-muted-foreground">
                     {searchingColors ? t('searching') : t('searchResultCount', { count: similarImages.length })}
                   </span>
                 </div>
               </div>
               <Button variant="ghost" size="icon" className="rounded-none" onClick={() => setSearchColors(null)}>
-                <X className="h-5 w-5" />
+                <X className="size-5" />
               </Button>
             </div>
           </div>
 
-          <div className="mx-auto w-full max-w-[1680px] p-4 sm:p-6 md:p-8">
+          <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-5 md:p-6">
             {searchingColors ? (
               <div className="columns-1 gap-3 sm:columns-2 lg:columns-3 xl:columns-4">
                 {Array.from({ length: 8 }).map((_, index) => (
@@ -520,9 +541,9 @@ export function GalleryDetailPage() {
                         loading="lazy"
                       />
                       {image.similarity_score !== undefined && (
-                        <div className="absolute right-5 top-5 z-10 flex items-center gap-1.5 border border-border bg-background px-2 py-1 text-[10px] text-foreground">
+                        <div className="type-chat-kicker absolute right-5 top-5 z-40 flex items-center gap-1.5 border border-border bg-background px-2 py-1 text-foreground">
                           {image.matched_color?.hex && (
-                            <div className="h-2.5 w-2.5" style={{ backgroundColor: image.matched_color.hex }} />
+                            <div className="size-2.5" style={{ backgroundColor: image.matched_color.hex }} />
                           )}
                           {image.similarity_score}%
                         </div>
@@ -533,13 +554,13 @@ export function GalleryDetailPage() {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3 py-20 text-center text-muted-foreground">
-                <div className="h-12 w-12 border border-border" style={{ backgroundColor: searchColors.hex }} />
+                <div className="size-12 border border-border" style={{ backgroundColor: searchColors.hex }} />
                 {t('noStyleWithColor')}
               </div>
             )}
           </div>
         </div>
       )}
-    </section>
+    </PageFrame>
   )
 }

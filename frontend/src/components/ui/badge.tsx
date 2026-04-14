@@ -3,20 +3,20 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@/lib/utils'
 
 const badgeVariants = cva(
-  'type-chat-kicker inline-flex min-h-6 items-center gap-1 rounded-none border px-2.5 py-1 transition-[background-color,border-color,color,transform] duration-150',
+  'type-chat-kicker inline-flex min-h-5 items-center gap-1 rounded-none border px-2 py-0.5 transition-[background-color,border-color,color,transform] duration-150',
   {
     variants: {
       variant: {
         default: 'border-border/70 bg-background text-muted-foreground',
         primary: 'border-primary bg-primary text-primary-foreground',
-        success: 'border-transparent bg-[var(--badge-success-bg)] text-[var(--badge-success-text)]',
-        warning: 'border-transparent bg-[var(--badge-warning-bg)] text-[var(--badge-warning-text)]',
-        error: 'border-foreground bg-[var(--badge-error-bg)] text-[var(--badge-error-text)]',
+        success: 'border-transparent bg-success/12 text-success',
+        warning: 'border-transparent bg-warning/12 text-warning',
+        error: 'border-transparent bg-destructive text-primary-foreground',
       },
       size: {
-        sm: 'min-h-5 px-1.5 py-0.5',
-        default: 'min-h-6 px-2 py-1',
-        lg: 'min-h-7 px-2.5 py-1',
+        sm: 'min-h-4 px-1.5 py-0.5',
+        default: 'min-h-5 px-2 py-0.5',
+        lg: 'min-h-6 px-2.5 py-1',
       },
     },
     defaultVariants: {

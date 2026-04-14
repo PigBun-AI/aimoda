@@ -22,11 +22,14 @@ export function MembershipOverview({ showHeader = true, compact = false }: Membe
     reportsSummary,
     hasSubscription,
   } = useMembershipStatus()
+  const cardTitleClass = compact ? 'type-ed-title-sm max-w-[16ch] text-foreground' : 'type-editorial-inline max-w-[16ch] text-foreground'
+  const summaryClass = compact ? 'type-ed-title-sm text-foreground' : 'type-editorial-inline text-foreground'
+  const conciergeTitleClass = compact ? 'type-ed-title-sm text-foreground' : 'type-editorial-inline text-foreground'
 
   return (
-    <div className={compact ? 'space-y-6' : 'space-y-8'}>
+    <div className={compact ? 'space-y-5' : 'space-y-6'}>
       {showHeader && (
-        <header className="grid gap-6 border-t border-border pt-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(240px,0.75fr)] lg:gap-8 lg:pt-6">
+        <header className="grid gap-4 border-t border-border pt-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(220px,0.76fr)] xl:gap-6 xl:pt-5">
           <div className="space-y-3">
             <p className="type-kicker-wide text-muted-foreground">
               {t('membership.navLabel')}
@@ -39,7 +42,7 @@ export function MembershipOverview({ showHeader = true, compact = false }: Membe
             </p>
           </div>
 
-          <div className="flex flex-col justify-between gap-4 border-t border-border pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+          <div className="flex flex-col justify-between gap-3 border-t border-border pt-3 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
             <div className="type-meta space-y-3 text-muted-foreground">
               <div className="flex flex-col items-start justify-between gap-1.5 border-b border-border pb-3 sm:flex-row sm:items-center sm:gap-4">
                 <span>{t('membership.currentPlan')}</span>
@@ -60,15 +63,15 @@ export function MembershipOverview({ showHeader = true, compact = false }: Membe
         </header>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.65fr)]">
-        <div className="flex flex-col gap-6">
-          <article className={compact ? 'border border-border bg-card p-5' : 'border border-border bg-card p-5 sm:p-6'}>
-            <div className={compact ? 'flex flex-col gap-5 border-b border-border pb-5 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end' : 'flex flex-col gap-6 border-b border-border pb-6 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end'}>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.08fr)_minmax(260px,0.68fr)]">
+        <div className="flex flex-col gap-5">
+          <article className={compact ? 'border border-border bg-card p-5' : 'border border-border bg-card p-4 sm:p-5'}>
+            <div className={compact ? 'flex flex-col gap-5 border-b border-border pb-5 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end' : 'flex flex-col gap-5 border-b border-border pb-6 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end'}>
               <div className="space-y-3">
                 <p className="type-kicker-wide text-muted-foreground">
                   {t('membership.aiCardEyebrow')}
                 </p>
-                <h2 className={compact ? 'type-section-title max-w-[16ch] text-foreground sm:text-[1.95rem]' : 'type-section-title max-w-[16ch] text-foreground sm:text-[2.35rem]'}>
+                <h2 className={cardTitleClass}>
                   {t('membership.aiCardTitle')}
                 </h2>
               </div>
@@ -77,9 +80,9 @@ export function MembershipOverview({ showHeader = true, compact = false }: Membe
               </span>
             </div>
 
-            <div className="grid gap-5 pt-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <div className="grid gap-4 pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <div className="space-y-3">
-                <p className="font-serif text-[1.15rem] leading-[1.08] text-foreground">
+                <p className={summaryClass}>
                   {aiSummary}
                 </p>
                 <p className="type-body-muted max-w-[52ch]">
@@ -98,13 +101,13 @@ export function MembershipOverview({ showHeader = true, compact = false }: Membe
             </div>
           </article>
 
-          <article className={compact ? 'border border-border bg-card p-5' : 'border border-border bg-card p-5 sm:p-6'}>
-            <div className={compact ? 'flex flex-col gap-5 border-b border-border pb-5 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end' : 'flex flex-col gap-6 border-b border-border pb-6 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end'}>
+          <article className={compact ? 'border border-border bg-card p-5' : 'border border-border bg-card p-4 sm:p-5'}>
+            <div className={compact ? 'flex flex-col gap-5 border-b border-border pb-5 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end' : 'flex flex-col gap-5 border-b border-border pb-6 md:grid md:grid-cols-[minmax(0,1fr)_auto] md:items-end'}>
               <div className="space-y-3">
                 <p className="type-kicker-wide text-muted-foreground">
                   {t('membership.reportsCardEyebrow')}
                 </p>
-                <h2 className={compact ? 'type-section-title max-w-[16ch] text-foreground sm:text-[1.95rem]' : 'type-section-title max-w-[16ch] text-foreground sm:text-[2.35rem]'}>
+                <h2 className={cardTitleClass}>
                   {hasSubscription ? t('membership.reportsUnlockedTitle') : t('membership.reportsLockedTitle')}
                 </h2>
               </div>
@@ -113,9 +116,9 @@ export function MembershipOverview({ showHeader = true, compact = false }: Membe
               </span>
             </div>
 
-            <div className="grid gap-5 pt-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <div className="grid gap-4 pt-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <div className="space-y-3">
-                <p className="font-serif text-[1.15rem] leading-[1.08] text-foreground">
+                <p className={summaryClass}>
                   {reportsSummary}
                 </p>
                 <p className="type-body-muted max-w-[52ch]">
@@ -132,22 +135,22 @@ export function MembershipOverview({ showHeader = true, compact = false }: Membe
         <div className="space-y-6">
           <MembershipCard showActions={!compact} />
 
-          <div className={compact ? 'border border-border bg-card p-5 text-sm text-muted-foreground' : 'border border-border bg-card p-5 text-sm text-muted-foreground sm:p-6'}>
+          <div className={compact ? 'border border-border bg-card p-5 text-sm text-muted-foreground' : 'border border-border bg-card p-4 text-sm text-muted-foreground sm:p-5'}>
             <div className="space-y-3 border-b border-border pb-5">
               <p className="type-kicker-wide text-muted-foreground">
                 {t('membership.conciergeEyebrow')}
               </p>
-              <p className={compact ? 'type-section-title text-foreground sm:text-[1.4rem]' : 'type-section-title text-foreground sm:text-[1.55rem]'}>
+              <p className={conciergeTitleClass}>
                 {t('membership.conciergeTitle')}
               </p>
             </div>
-            <div className="mt-5 flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div className="mt-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
               <p className="type-body-muted max-w-[30ch]">
                 {t('membership.conciergeBody')}
               </p>
               <WechatQrCode size={132} />
             </div>
-            <div className="mt-5">
+            <div className="mt-4">
               <RedeemDialog />
             </div>
           </div>

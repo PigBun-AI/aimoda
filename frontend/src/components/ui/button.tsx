@@ -16,10 +16,10 @@ const buttonVariants = cva(
         ghostGlass: 'border-border/70 bg-background text-foreground hover:border-foreground/20 hover:bg-card',
       },
       size: {
-        default: 'min-h-11 px-5 py-3',
-        sm: 'min-h-10 px-4',
-        lg: 'min-h-12 px-6',
-        icon: 'h-11 w-11 px-0',
+        default: 'min-h-10 px-4 py-2.5',
+        sm: 'min-h-9 px-3.5 py-2',
+        lg: 'min-h-11 px-5 py-3',
+        icon: 'size-10 px-0',
       },
     },
     defaultVariants: {
@@ -36,7 +36,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, Va
 
 const spinnerNode = (
   <svg
-    className="h-4 w-4 animate-spin"
+    className="size-4 animate-spin"
     xmlns="http://www.w3.org/2000/svg"
     fill="none"
     viewBox="0 0 24 24"

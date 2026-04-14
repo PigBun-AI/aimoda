@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { PageFrame } from '@/components/layout/page-frame'
 import {
   Dialog,
   DialogContent,
@@ -45,16 +46,18 @@ import { LoginDialog } from '@/features/auth/login-dialog'
 import { useMembershipStatus } from '@/features/membership/use-membership'
 
 import { getSessionUser } from '@/features/auth/protected-route'
-import { BREAKPOINT_PX } from '@/lib/constants'
 import { useThemeStore } from '@/lib/theme-store'
 import { cn } from '@/lib/utils'
 import { getCurrentUser } from '@/lib/api'
+import { shouldPinAppShellSidebar } from '@/components/layout/app-shell-layout'
 
-const SIDEBAR_WIDTH = 250
+const SIDEBAR_WIDTH = 240
 const SIDEBAR_ICON_BUTTON_CLASS =
   'control-icon-sm flex items-center justify-center rounded-none border border-border/60 bg-background text-muted-foreground shadow-token-sm transition-[background-color,border-color,color,transform] cursor-pointer hover:-translate-y-px hover:border-foreground/20 hover:bg-card hover:text-foreground'
 const SIDEBAR_UTILITY_BUTTON_CLASS =
   'type-chat-action control-pill-md flex items-center justify-between gap-3 rounded-none border border-border/70 bg-background text-muted-foreground shadow-token-sm transition-[background-color,border-color,color,transform] cursor-pointer hover:-translate-y-px hover:border-foreground/20 hover:bg-card hover:text-foreground'
+const SIDEBAR_SESSION_ACTION_CLASS =
+  'flex size-6 items-center justify-center rounded-none border border-transparent transition-[background-color,border-color,color] hover:border-border/70 hover:bg-accent/70'
 
 function formatSidebarSessionTimestamp(value: string, language: string) {
   const locale = language === 'zh-CN' ? 'zh-CN' : 'en-US'
@@ -122,8 +125,9 @@ export function AppShell() {
   } = useSessionStore()
 
   const isFloating = !isSidebarOpen && isHovering && isLargeScreen
+  const isCoverRoute = location.pathname === '/'
   const isFullScreenRoute =
-    location.pathname === '/' ||
+    isCoverRoute ||
     location.pathname === '/chat' ||
     location.pathname === '/collections' ||
     location.pathname === '/profile' ||
@@ -163,7 +167,7 @@ export function AppShell() {
     const checkScreenSize = () => {
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(() => {
-        const isLarge = window.innerWidth >= BREAKPOINT_PX.lg
+        const isLarge = shouldPinAppShellSidebar(window.innerWidth)
         setIsLargeScreen(prev => {
           if (prev !== isLarge) {
             setIsSidebarOpen(isLarge)
@@ -288,7 +292,7 @@ export function AppShell() {
 
   const sidebarContent = (
     <>
-      <div className="shrink-0 border-b border-border/70 px-4 py-5">
+      <div className="shrink-0 border-b border-border/70 px-3 py-4">
         <div className="flex items-center justify-between gap-3">
           <Link className="flex items-center transition-opacity duration-fast hover:opacity-70" to="/">
             <img src="/aimoda-logo.svg" alt="aimoda" className="dark:hidden h-[22px]" />
@@ -318,13 +322,13 @@ export function AppShell() {
         </div>
       </div>
 
-      <div className="mt-5 space-y-3 px-4">
-        <Button className="type-chat-action h-12 w-full cursor-pointer justify-center px-5" onClick={handleCreateSession}>
+      <div className="mt-4 space-y-2.5 px-3">
+        <Button className="type-chat-action w-full cursor-pointer justify-center" onClick={handleCreateSession}>
           <span>{t('common:fashionSearch')}</span>
         </Button>
       </div>
 
-      <nav className="mt-6 space-y-1.5 px-4">
+      <nav className="mt-5 space-y-1 px-3">
         {navigation.map(item => {
           const Icon = item.icon
           return (
@@ -333,7 +337,7 @@ export function AppShell() {
               to={item.to}
               className={({ isActive }) =>
                 [
-                  'type-chat-label group flex items-center justify-between gap-3 rounded-none border px-4 py-3',
+                  'type-chat-label group flex items-center justify-between gap-2.5 rounded-none border px-3 py-2.5',
                   'transition-[background-color,border-color,color,transform] duration-fast cursor-pointer',
                   isActive
                     ? 'border-border bg-card/90 text-foreground shadow-token-sm'
@@ -345,23 +349,23 @@ export function AppShell() {
                 handleProtectedNavigate(item.to)
               }}
             >
-              <div className="flex items-center gap-3">
-                <Icon className="h-[16px] w-[16px] shrink-0" />
+              <div className="flex items-center gap-2.5">
+                <Icon className="size-4 shrink-0" />
                 <div className="flex flex-col gap-1">
                   <span>{item.label}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-55" />
+                <ChevronRight className="size-3.5 shrink-0 opacity-55" />
               </div>
             </NavLink>
           )
         })}
       </nav>
 
-      <div className="mt-6 px-4"><Separator /></div>
+      <div className="mt-5 px-3"><Separator /></div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-3">
         <button
           className="type-chat-kicker flex w-full items-center gap-2 px-1 text-muted-foreground cursor-pointer"
           onClick={() => setHistoryExpanded(value => !value)}
@@ -371,18 +375,18 @@ export function AppShell() {
           <span>{t('common:chatHistory')}</span>
           {hasRunningSession && (
             <Badge variant="warning" size="sm" className="ml-auto">
-              <LoaderCircle className="h-3 w-3 animate-spin" />
+              <LoaderCircle className="size-3 animate-spin" />
               {hasStoppingSession ? t('common:stopping') : t('common:running')}
             </Badge>
           )}
         </button>
 
         {historyExpanded && (
-          <div className="mt-4 space-y-2">
+          <div className="mt-3.5 space-y-1.5">
             {sessionsLoading ? (
-              <div className="type-chat-meta border border-border/60 bg-background px-4 py-4 text-center text-muted-foreground">{t('common:loading')}</div>
+              <div className="type-chat-meta border border-border/60 bg-background px-3 py-3 text-center text-muted-foreground">{t('common:loading')}</div>
             ) : chatSessions.length === 0 ? (
-              <div className="type-chat-meta border border-border/60 bg-background px-4 py-4 text-center text-muted-foreground">
+              <div className="type-chat-meta border border-border/60 bg-background px-3 py-3 text-center text-muted-foreground">
                 {t('common:noChatHistory')}
               </div>
             ) : (
@@ -395,15 +399,15 @@ export function AppShell() {
                   <div
                     key={session.id}
                     className={cn(
-                      'group rounded-none border border-border/55 bg-background px-3 py-3 shadow-token-sm transition-[background-color,border-color,color,transform] cursor-pointer',
+                      'group rounded-none border border-border/55 bg-background px-2.5 py-2.5 shadow-token-sm transition-[background-color,border-color,color,transform] cursor-pointer',
                       isActive
                         ? 'border-foreground/12 bg-card text-foreground shadow-token-md'
                         : 'text-muted-foreground hover:-translate-y-px hover:border-border hover:bg-card/72 hover:text-foreground',
                     )}
                     onClick={() => handleProtectedNavigate(`/chat?session=${session.id}`)}
                   >
-                    <div className="flex items-start gap-2.5">
-                      <MessageCircle className="mt-[3px] h-3.5 w-3.5 shrink-0 opacity-40" />
+                    <div className="flex items-start gap-2">
+                      <MessageCircle className="mt-[3px] size-3.5 shrink-0 opacity-40" />
 
                       <div className="min-w-0 flex-1">
                         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
@@ -413,20 +417,20 @@ export function AppShell() {
                                 {session.title}
                               </span>
                               {session.is_pinned && (
-                                <Pin className="h-3.5 w-3.5 shrink-0 text-foreground/65" />
+                                <Pin className="size-3.5 shrink-0 text-foreground/65" />
                               )}
                             </div>
 
                             <div className="type-chat-meta mt-1 flex min-w-0 items-center gap-2 whitespace-nowrap text-muted-foreground/88">
                               {(session.execution_status === 'running' || session.execution_status === 'stopping') && (
                                 <span className="inline-flex items-center gap-1 text-foreground/78">
-                                  <LoaderCircle className="h-3 w-3 animate-spin" />
+                                  <LoaderCircle className="size-3 animate-spin" />
                                   <span>{session.execution_status === 'stopping' ? t('common:stopping') : t('common:running')}</span>
                                 </span>
                               )}
                               {session.execution_status === 'error' && (
-                                <span className="inline-flex items-center gap-1 text-[var(--badge-error-text)]">
-                                  <AlertTriangle className="h-3 w-3" />
+                                <span className="inline-flex items-center gap-1 text-destructive">
+                                  <AlertTriangle className="size-3" />
                                   <span>{t('common:failed')}</span>
                                 </span>
                               )}
@@ -436,39 +440,42 @@ export function AppShell() {
 
                           <div
                             className={cn(
-                              'flex items-center justify-end gap-1 overflow-hidden transition-[width,opacity] duration-fast w-[84px] opacity-100',
+                              'flex items-center justify-end gap-1 transition-[opacity,transform] duration-fast md:w-[72px]',
                               isActive
-                                ? 'md:w-[84px] md:opacity-100'
-                                : 'md:w-0 md:opacity-0 md:group-hover:w-[84px] md:group-hover:opacity-100 md:group-focus-within:w-[84px] md:group-focus-within:opacity-100',
+                                ? 'opacity-100'
+                                : 'opacity-0 translate-x-1 pointer-events-none md:group-hover:pointer-events-auto md:group-hover:translate-x-0 md:group-hover:opacity-100 md:group-focus-within:pointer-events-auto md:group-focus-within:translate-x-0 md:group-focus-within:opacity-100',
                             )}
                           >
                             <button
-                              className="flex h-[28px] w-[28px] items-center justify-center rounded-none border border-transparent transition-[background-color,border-color,color] hover:border-border/70 hover:bg-accent/70"
+                              className={SIDEBAR_SESSION_ACTION_CLASS}
                               onClick={async event => {
                                 event.stopPropagation()
                                 await toggleSessionPinned(session.id, !session.is_pinned)
                               }}
+                              aria-label={session.is_pinned ? t('common:unpin') : t('common:pin')}
                               title={session.is_pinned ? t('common:unpin') : t('common:pin')}
                             >
                               {session.is_pinned ? <PinOff size={13} /> : <Pin size={13} />}
                             </button>
                             <button
-                              className="flex h-[28px] w-[28px] items-center justify-center rounded-none border border-transparent transition-[background-color,border-color,color] hover:border-border/70 hover:bg-accent/70"
+                              className={SIDEBAR_SESSION_ACTION_CLASS}
                               onClick={event => {
                                 event.stopPropagation()
                                 setRenameDialog({ sessionId: session.id, title: session.title })
                                 setRenameValue(session.title)
                               }}
+                              aria-label={t('common:rename')}
                               title={t('common:rename')}
                             >
                               <PencilLine size={13} />
                             </button>
                             <button
-                              className="flex h-[28px] w-[28px] items-center justify-center rounded-none border border-transparent transition-[background-color,border-color,color] hover:border-foreground hover:bg-foreground hover:text-background"
+                              className={cn(SIDEBAR_SESSION_ACTION_CLASS, 'hover:border-foreground hover:bg-foreground hover:text-background')}
                               onClick={event => {
                                 event.stopPropagation()
                                 setDeleteDialog({ sessionId: session.id, title: session.title })
                               }}
+                              aria-label={t('common:delete')}
                               title={t('common:delete')}
                             >
                               <Trash2 size={13} />
@@ -486,10 +493,10 @@ export function AppShell() {
       </div>
 
       <div className="mt-auto shrink-0">
-        <div className="px-4"><Separator /></div>
+        <div className="px-3"><Separator /></div>
 
-        <div className="px-4 py-4">
-          <div className="mb-3 grid grid-cols-2 gap-2">
+        <div className="px-3 py-3">
+          <div className="mb-2.5 grid grid-cols-2 gap-2">
             <button
               onClick={toggleTheme}
               className={cn(SIDEBAR_UTILITY_BUTTON_CLASS, 'justify-center')}
@@ -518,7 +525,7 @@ export function AppShell() {
               to="/profile"
               className={({ isActive }) =>
                 [
-                  'mt-3 flex items-center gap-3 rounded-none border border-border/70 bg-background px-4 py-3 shadow-token-sm transition-[background-color,border-color,transform] cursor-pointer',
+                  'mt-2.5 flex items-center gap-2.5 rounded-none border border-border/70 bg-background px-3 py-2.5 shadow-token-sm transition-[background-color,border-color,transform] cursor-pointer',
                   isActive ? 'border-foreground/20 bg-card shadow-token-md' : 'hover:-translate-y-px hover:border-foreground/18 hover:bg-card/80',
                 ].join(' ')
               }
@@ -527,7 +534,7 @@ export function AppShell() {
                 if (!isLargeScreen) setIsSidebarOpen(false)
               }}
             >
-              <CircleUserRound className="w-5 h-5 shrink-0 text-muted-foreground" />
+              <CircleUserRound className="size-5 shrink-0 text-muted-foreground" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="type-chat-label truncate text-foreground">
@@ -545,10 +552,10 @@ export function AppShell() {
           ) : (
             <Button
               onClick={openLogin}
-              className="type-chat-action flex h-12 w-full cursor-pointer items-center justify-between px-5"
+              className="type-chat-action flex w-full cursor-pointer items-center justify-between px-4"
             >
               <div className="flex items-center gap-1.5">
-                <CircleUserRound className="w-4 h-4" />
+                <CircleUserRound className="size-4" />
                 <span>{t('common:login')}</span>
               </div>
               <span className="type-caption opacity-70">{t('common:startJourney')}</span>
@@ -612,7 +619,7 @@ export function AppShell() {
       </Dialog>
 
       {notifications.length > 0 && (
-        <div className="fixed right-4 top-4 z-[80] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-3">
+        <div className="fixed right-4 top-4 z-toast flex w-[min(360px,calc(100vw-2rem))] flex-col gap-3">
           {notifications.slice(0, 4).map(item => {
             const Icon = item.kind === 'completed' ? CheckCircle2 : BellRing
             const iconClassName = item.kind === 'completed' ? 'text-foreground' : 'text-muted-foreground'
@@ -623,7 +630,7 @@ export function AppShell() {
                 className="w-full border border-border bg-background p-4 text-left shadow-lg"
               >
                 <div className="flex items-start gap-3">
-                  <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', iconClassName)} />
+                  <Icon className={cn('mt-0.5 size-5 shrink-0', iconClassName)} />
                   <button
                     className="min-w-0 flex-1 text-left"
                     onClick={() => {
@@ -640,7 +647,7 @@ export function AppShell() {
                       dismissSessionNotification(item.id)
                     }}
                   >
-                    <X size={14} />
+                    <X className="size-3.5" />
                   </button>
                 </div>
               </div>
@@ -701,19 +708,20 @@ export function AppShell() {
       {!isLargeScreen && isSidebarOpen && !isChatImmersive && (
         <button
           onClick={() => setIsSidebarOpen(false)}
-          className="fixed top-4 z-[60] cursor-pointer"
+          className="fixed top-4 z-popover cursor-pointer"
           style={{ left: `min(calc(100vw - 3rem), ${SIDEBAR_WIDTH + 16}px)` }}
+          aria-label={t('common:close')}
         >
-          <X className="w-5 h-5 text-muted-foreground" />
+          <X className="size-5 text-muted-foreground" />
         </button>
       )}
 
       <main
         className="min-h-dvh bg-transparent transition-all duration-normal ease-out"
-        style={{ marginLeft: isLargeScreen ? `${sidebarWidth}px` : 0 }}
+        style={{ marginLeft: isLargeScreen && !isCoverRoute ? `${sidebarWidth}px` : 0 }}
       >
         <header className={cn(
-          'sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background px-4 lg:hidden',
+          'sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background px-4 xl:hidden',
           isChatImmersive && 'hidden',
         )}>
           <div className="w-10 flex justify-start">
@@ -722,7 +730,7 @@ export function AppShell() {
               className="-ml-1 control-icon-sm flex items-center justify-center border border-transparent transition-colors cursor-pointer hover:border-border active:bg-accent"
               aria-label={t('common:openMenu')}
             >
-              <Menu className="w-5 h-5 text-foreground" />
+              <Menu className="size-5 text-foreground" />
             </button>
           </div>
 
@@ -759,21 +767,19 @@ export function AppShell() {
               onClick={() => setIsSidebarOpen(true)}
               className="control-icon-sm cursor-pointer border border-border bg-background p-0"
             >
-              <Menu className="w-4 h-4 text-muted-foreground" />
+              <Menu className="size-4 text-muted-foreground" />
             </Button>
           </div>
         )}
 
         {isFullScreenRoute ? (
-          <div className="h-[calc(100dvh-56px)] lg:h-dvh">
+          <div className="h-[calc(100dvh-56px)] xl:h-dvh">
             <Outlet />
           </div>
         ) : (
-          <div className="p-4 sm:p-6 lg:p-8">
-            <div className="max-w-6xl mx-auto">
-              <Outlet />
-            </div>
-          </div>
+          <PageFrame>
+            <Outlet />
+          </PageFrame>
         )}
       </main>
     </div>

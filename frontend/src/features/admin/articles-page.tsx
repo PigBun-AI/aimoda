@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { ExternalLink, PencilLine, Search, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
-import { ExternalLink, PencilLine, Search, Trash2 } from "lucide-react"
 
+import { SectionIntro } from "@/components/layout/section-intro"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { deleteReport, getAdminReportsPage, updateAdminReport } from "@/lib/api"
+
 import type { ReportSummary } from "@/lib/types"
 
 const PAGE_SIZE = 8
+const TEXTAREA_CLASS =
+  "min-h-32 w-full resize-y rounded-none border border-border/80 bg-background px-4 py-3 type-ui-body-sm text-foreground outline-none transition-colors hover:border-foreground/50 focus:border-foreground"
 
 function formatReportDate(date: string, language: string) {
   return new Date(date).toLocaleDateString(language === "zh-CN" ? "zh-CN" : "en-US", {
@@ -31,6 +35,11 @@ type ReportEditorState = {
   coverUrl: string
 }
 
+type DeleteTarget = {
+  id: string
+  title: string
+}
+
 export function ArticlesPage() {
   const { t, i18n } = useTranslation(["admin", "common"])
   const queryClient = useQueryClient()
@@ -38,6 +47,7 @@ export function ArticlesPage() {
   const [searchInput, setSearchInput] = useState("")
   const [query, setQuery] = useState("")
   const [editor, setEditor] = useState<ReportEditorState | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
 
   const adminReportsQuery = useQuery({
     queryKey: ["admin-reports", page, PAGE_SIZE, query],
@@ -45,14 +55,15 @@ export function ArticlesPage() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: (payload: ReportEditorState) => updateAdminReport(payload.id, {
-      title: payload.title,
-      brand: payload.brand,
-      season: payload.season,
-      year: Number(payload.year),
-      leadExcerpt: payload.leadExcerpt,
-      coverUrl: payload.coverUrl,
-    }),
+    mutationFn: (payload: ReportEditorState) =>
+      updateAdminReport(payload.id, {
+        title: payload.title,
+        brand: payload.brand,
+        season: payload.season,
+        year: Number(payload.year),
+        leadExcerpt: payload.leadExcerpt,
+        coverUrl: payload.coverUrl,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-reports"] })
       queryClient.invalidateQueries({ queryKey: ["reports"] })
@@ -65,6 +76,7 @@ export function ArticlesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-reports"] })
       queryClient.invalidateQueries({ queryKey: ["reports"] })
+      setDeleteTarget(null)
     },
   })
 
@@ -76,14 +88,7 @@ export function ArticlesPage() {
   const items = payload?.items ?? []
   const totalPages = payload?.totalPages ?? 1
   const total = payload?.total ?? 0
-
   const resultKicker = useMemo(() => String(total).padStart(2, "0"), [total])
-
-  function handleDelete(id: string) {
-    if (window.confirm(t("deleteConfirm"))) {
-      deleteMutation.mutate(id)
-    }
-  }
 
   function openEditor(report: ReportSummary) {
     setEditor({
@@ -99,30 +104,31 @@ export function ArticlesPage() {
 
   return (
     <section className="space-y-6 sm:space-y-8">
-      <header className="grid gap-6 border-t border-border/80 pt-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.85fr)] lg:gap-8 lg:pt-6">
-        <div className="space-y-3">
-          <p className="type-chat-kicker text-muted-foreground">{resultKicker}</p>
-          <h1 className="type-page-title max-w-[10ch] text-foreground">{t("articleManagement")}</h1>
-        </div>
-        <div className="flex flex-col justify-between gap-4 border-t border-border/80 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-          <p className="type-meta max-w-[34ch] text-muted-foreground">{t("articleManagementDesc")}</p>
-          <div className="type-meta flex items-center justify-between border-t border-border/80 pt-3 text-muted-foreground">
-            <span>{t("articleList")}</span>
-            <span>{String(page).padStart(2, "0")}</span>
+      <SectionIntro
+        eyebrow={resultKicker}
+        title={t("articleManagement")}
+        description={t("articleManagementDesc")}
+        aside={
+          <div className="flex h-full flex-col justify-between gap-4">
+            <p className="type-chat-meta max-w-[34ch] text-pretty text-muted-foreground">{t("articleManagementDesc")}</p>
+            <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
+              <span>{t("articleList")}</span>
+              <span className="tabular-nums text-foreground">{String(page).padStart(2, "0")}</span>
+            </div>
           </div>
-        </div>
-      </header>
+        }
+      />
 
-      <section className="border border-border/80 bg-background px-5 py-5 sm:px-6">
+      <section className="border border-border/80 bg-background px-4 py-4 sm:px-5 sm:py-5">
         <form
-          className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]"
+          className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]"
           onSubmit={(event) => {
             event.preventDefault()
             setQuery(searchInput.trim())
           }}
         >
           <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
@@ -131,14 +137,14 @@ export function ArticlesPage() {
             />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="outline" className="type-chat-action rounded-none">
+            <Button type="submit" variant="outline" className="rounded-none">
               {t("common:confirm")}
             </Button>
-            {query && (
+            {query ? (
               <Button
                 type="button"
                 variant="ghost"
-                className="type-chat-action rounded-none"
+                className="rounded-none"
                 onClick={() => {
                   setSearchInput("")
                   setQuery("")
@@ -146,16 +152,14 @@ export function ArticlesPage() {
               >
                 {t("clearSearch")}
               </Button>
-            )}
+            ) : null}
           </div>
         </form>
       </section>
 
       <div className="space-y-4">
         {adminReportsQuery.isLoading
-          ? Array.from({ length: 4 }).map((_, index) => (
-              <Skeleton key={index} className="h-[16rem] w-full rounded-none" />
-            ))
+          ? Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-[16rem] w-full rounded-none" />)
           : items.map((report) => (
               <article key={report.id} className="grid gap-4 border border-border/80 bg-background p-4 sm:grid-cols-[168px_minmax(0,1fr)_auto] sm:p-5">
                 <Link to={`/reports/${report.id}`} className="group block overflow-hidden border border-border/70 bg-background">
@@ -167,7 +171,7 @@ export function ArticlesPage() {
                     />
                   ) : (
                     <div className="flex h-[13rem] items-center justify-center text-muted-foreground sm:h-full">
-                      <ExternalLink className="h-5 w-5" />
+                      <ExternalLink className="size-5" />
                     </div>
                   )}
                 </Link>
@@ -176,72 +180,63 @@ export function ArticlesPage() {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                     <span className="type-chat-kicker text-muted-foreground">{report.brand}</span>
                     <span className="type-chat-meta text-muted-foreground">{report.season}</span>
-                    <span className="type-chat-meta text-muted-foreground">{formatReportDate(report.updatedAt, i18n.language)}</span>
+                    <span className="type-chat-meta tabular-nums text-muted-foreground">{formatReportDate(report.updatedAt, i18n.language)}</span>
                   </div>
-                  <h2 className="type-section-title line-clamp-2 text-foreground sm:text-[1.75rem]">{report.title}</h2>
+                  <h2 className="type-ed-title-sm line-clamp-2 text-foreground">{report.title}</h2>
                   <p className="type-body-muted line-clamp-4 max-w-[56ch] text-foreground/72">
                     {report.leadExcerpt || t("articleLeadFallback", { brand: report.brand, season: report.season })}
                   </p>
                 </div>
 
                 <div className="flex flex-row gap-2 sm:flex-col sm:items-end">
-                  <Button asChild variant="outline" size="sm" className="type-chat-action rounded-none">
+                  <Button asChild variant="outline" size="sm" className="rounded-none">
                     <Link to={`/reports/${report.id}`}>
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <ExternalLink className="size-3.5" />
                       {t("common:view")}
                     </Link>
                   </Button>
-                  <Button type="button" variant="outline" size="sm" className="type-chat-action rounded-none" onClick={() => openEditor(report)}>
-                    <PencilLine className="h-3.5 w-3.5" />
+                  <Button type="button" variant="outline" size="sm" className="rounded-none" onClick={() => openEditor(report)}>
+                    <PencilLine className="size-3.5" />
                     {t("common:edit")}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    className="type-chat-action rounded-none"
-                    onClick={() => handleDelete(report.id)}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
+                  <Button type="button" variant="destructive" size="sm" className="rounded-none" onClick={() => setDeleteTarget({ id: report.id, title: report.title })}>
+                    <Trash2 className="size-3.5" />
                     {t("common:delete")}
                   </Button>
                 </div>
               </article>
             ))}
 
-        {!adminReportsQuery.isLoading && items.length === 0 && (
-          <div className="border border-border/80 px-6 py-12 text-center text-muted-foreground">
-            {t("noArticles")}
-          </div>
-        )}
+        {!adminReportsQuery.isLoading && items.length === 0 ? (
+          <div className="border border-border/80 px-5 py-10 text-center text-muted-foreground">{t("noArticles")}</div>
+        ) : null}
       </div>
 
-      {totalPages > 1 && (
-        <nav className="flex items-center justify-between gap-3 border-t border-border/80 pt-5" aria-label={t("common:page")}> 
+      {totalPages > 1 ? (
+        <nav className="flex items-center justify-between gap-3 border-t border-border/80 pt-5" aria-label={t("common:page")}>
           <Button
             variant="outline"
             size="sm"
-            className="type-chat-action rounded-none"
+            className="rounded-none"
             disabled={page <= 1}
             onClick={() => setPage((current) => Math.max(1, current - 1))}
           >
             {t("common:previous")}
           </Button>
-          <p className="type-chat-meta text-muted-foreground">
+          <p className="type-chat-meta tabular-nums text-muted-foreground">
             {String(page).padStart(2, "0")} / {String(totalPages).padStart(2, "0")}
           </p>
           <Button
             variant="outline"
             size="sm"
-            className="type-chat-action rounded-none"
+            className="rounded-none"
             disabled={page >= totalPages}
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
           >
             {t("common:next")}
           </Button>
         </nav>
-      )}
+      ) : null}
 
       <Dialog open={Boolean(editor)} onOpenChange={(open) => !open && setEditor(null)}>
         <DialogContent className="max-w-2xl rounded-none border-border/80">
@@ -250,7 +245,7 @@ export function ArticlesPage() {
             <DialogDescription>{t("editArticleDesc")}</DialogDescription>
           </DialogHeader>
 
-          {editor && (
+          {editor ? (
             <div className="grid gap-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="grid gap-2">
@@ -281,23 +276,46 @@ export function ArticlesPage() {
                 <textarea
                   value={editor.leadExcerpt}
                   onChange={(event) => setEditor({ ...editor, leadExcerpt: event.target.value })}
-                  className="min-h-32 w-full resize-y rounded-none border border-border/80 bg-background px-4 py-3 text-[0.84375rem] leading-[1.6] tracking-[0.006em] text-foreground outline-none transition-colors hover:border-foreground/50 focus:border-foreground"
+                  className={TEXTAREA_CLASS}
                 />
               </label>
             </div>
-          )}
+          ) : null}
 
           <DialogFooter>
-            <Button variant="outline" className="type-chat-action rounded-none" onClick={() => setEditor(null)}>
+            <Button variant="outline" className="rounded-none" onClick={() => setEditor(null)}>
               {t("common:cancel")}
             </Button>
             <Button
-              className="type-chat-action rounded-none"
+              className="rounded-none"
               loading={updateMutation.isPending}
               onClick={() => editor && updateMutation.mutate(editor)}
               disabled={!editor?.title.trim() || !editor.brand.trim() || !editor.season.trim() || !editor.year.trim()}
             >
               {t("common:save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="max-w-lg rounded-none border-border/80">
+          <DialogHeader>
+            <DialogTitle>{t("common:delete")}</DialogTitle>
+            <DialogDescription>{t("deleteConfirm")}</DialogDescription>
+          </DialogHeader>
+          {deleteTarget ? <p className="type-chat-meta text-muted-foreground">{deleteTarget.title}</p> : null}
+          <DialogFooter>
+            <Button variant="outline" className="rounded-none" onClick={() => setDeleteTarget(null)}>
+              {t("common:cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              className="rounded-none"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              {t("common:delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

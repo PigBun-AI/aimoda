@@ -19,7 +19,7 @@ import { queryClient } from '@/main'
 import { saveSession } from './protected-route'
 
 const COUNTDOWN_SECONDS = 60
-const AUTH_INPUT_CLASS = 'type-chat-body h-12 rounded-none border border-border/80 bg-background px-4 leading-[1.45]'
+const AUTH_INPUT_CLASS = 'type-chat-body min-h-10 rounded-none border border-border/80 bg-background px-3.5 py-2.5 leading-[1.45]'
 
 export function LoginDialog() {
   const { t } = useTranslation(['auth', 'common'])
@@ -167,26 +167,26 @@ export function LoginDialog() {
 
   return (
     <Dialog open={isLoginOpen} onOpenChange={(open) => { if (open === false) handleClose() }}>
-      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[min(920px,calc(100%-1rem))] max-w-[920px] overflow-y-auto border border-border/80 bg-background p-0 shadow-[var(--shadow-xl)] sm:w-[min(920px,calc(100%-1.5rem))]">
+      <DialogContent className="max-h-[calc(100dvh-1rem)] w-[min(880px,calc(100%-1rem))] max-w-[880px] overflow-y-auto border border-border/80 bg-background p-0 shadow-[var(--shadow-xl)] sm:w-[min(880px,calc(100%-1.5rem))]">
         <DialogHeader className="sr-only">
           <DialogTitle>{t('common:loginRegister')}</DialogTitle>
           <DialogDescription>{t('auth:loginToView')}</DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-0 md:min-h-[560px] md:grid-cols-[minmax(300px,0.9fr)_minmax(360px,1fr)]">
-          <aside className="flex flex-col justify-between border-b border-border/80 bg-background px-6 py-6 md:border-b-0 md:border-r md:px-8 md:py-8">
-            <div className="space-y-8">
-              <div className="space-y-4 border-b border-border/80 pb-6">
+        <div className="grid min-h-0 xl:min-h-[520px] xl:grid-cols-[minmax(280px,0.84fr)_minmax(340px,1fr)]">
+          <aside className="flex flex-col justify-between border-b border-border/80 bg-background px-5 py-5 xl:border-b-0 xl:border-r xl:px-6 xl:py-6">
+            <div className="space-y-6">
+              <div className="space-y-3.5 border-b border-border/80 pb-5">
                 <p className="type-chat-kicker text-muted-foreground">
                   aimoda
                 </p>
                 <div className="space-y-4">
                   <img src="/aimoda-logo.svg" alt="aimoda" className="h-7 dark:hidden" />
                   <img src="/aimoda-logo-inverted.svg" alt="aimoda" className="hidden h-7 dark:block" />
-                  <h2 className="type-page-title max-w-[11ch] text-foreground sm:text-[2.7rem]">
+                  <h2 className="type-page-title max-w-[12ch] text-foreground">
                     {mode === 'sms' ? t('common:smsLogin') : t('common:emailLogin')}
                   </h2>
-                  <p className="type-body-muted max-w-[30ch] text-muted-foreground">
+                  <p className="type-body-muted max-w-[28ch] text-muted-foreground">
                     {mode === 'sms' ? t('auth:loginToView') : t('auth:welcomeBack')}
                   </p>
                 </div>
@@ -197,7 +197,7 @@ export function LoginDialog() {
                   <div
                     key={item}
                     className={cn(
-                      'type-chat-kicker flex items-center justify-between px-4 py-4 text-muted-foreground',
+                      'type-chat-kicker flex items-center justify-between px-3 py-3 text-muted-foreground',
                       index < productLines.length - 1 && 'border-b border-border/80',
                     )}
                   >
@@ -208,7 +208,7 @@ export function LoginDialog() {
               </div>
             </div>
 
-            <div className="grid gap-4 border-t border-border/80 pt-6">
+            <div className="grid gap-3.5 border-t border-border/80 pt-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-2 sm:pr-3">
                   <p className="type-chat-kicker text-muted-foreground">
@@ -223,9 +223,9 @@ export function LoginDialog() {
             </div>
           </aside>
 
-          <section className="flex flex-col justify-between px-6 py-6 md:px-8 md:py-8">
-            <div className="space-y-6 lg:max-w-[28rem] lg:pr-6">
-              <div className="space-y-5 border-b border-border/80 pb-5">
+          <section className="flex flex-col justify-between px-5 py-5 xl:px-6 xl:py-6">
+            <div className="space-y-5 xl:max-w-[27rem] xl:pr-4">
+              <div className="space-y-4 border-b border-border/80 pb-4">
                 <p className="type-chat-kicker text-muted-foreground">
                   {t('auth:authMethods')}
                 </p>
@@ -241,7 +241,7 @@ export function LoginDialog() {
                         key={value}
                         type="button"
                         className={cn(
-                          'type-chat-action h-11 border px-4 transition-colors',
+                          'type-chat-action min-h-10 border px-3.5 transition-colors',
                           active
                             ? 'border-foreground bg-foreground text-background'
                             : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
@@ -260,7 +260,7 @@ export function LoginDialog() {
               </div>
 
               {error && (
-                <div className="type-body-sm border border-border/80 bg-muted/[0.08] px-4 py-3 text-foreground">
+                <div className="type-body-sm border border-border/80 bg-muted/[0.08] px-3.5 py-2.5 text-foreground">
                   {error}
                 </div>
               )}

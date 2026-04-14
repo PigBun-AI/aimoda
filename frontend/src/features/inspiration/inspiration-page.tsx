@@ -4,6 +4,7 @@ import { ArrowUpRight, ChevronLeft, ChevronRight, Sparkles, TrendingUp, Camera, 
 import { useTranslation } from 'react-i18next'
 
 import { ArchiveSplitCard } from '@/components/cards/archive-split-card'
+import { PageIntro } from '@/components/layout/page-intro'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -85,28 +86,24 @@ export function InspirationPage() {
   }
 
   return (
-    <section className="space-y-9 sm:space-y-12">
-      <header className="grid gap-6 border-t border-border/70 pt-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(240px,0.75fr)] lg:gap-10 lg:pt-8">
-        <div className="space-y-3">
-          <p className="type-chat-kicker text-muted-foreground">
-            {String(total).padStart(2, '0')}
-          </p>
-          <h1 className="type-page-title max-w-[10ch] text-balance text-foreground">
-            {t('inspiration')}
-          </h1>
-        </div>
-        <div className="flex flex-col justify-between gap-4 border border-border/60 bg-card px-5 py-5 shadow-token-sm lg:pl-6">
-          <p className="type-meta max-w-[32ch] text-muted-foreground">
-            {t('inspirationSubtitle')}
-          </p>
-          <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
-            <span>{t('imageArchiveLabel')}</span>
-            <span>{String(page).padStart(2, '0')}</span>
+    <section className="space-y-7 sm:space-y-8">
+      <PageIntro
+        eyebrow={String(total).padStart(2, '0')}
+        title={t('inspiration')}
+        aside={(
+          <div className="flex h-full flex-col justify-between gap-4">
+            <p className="type-meta max-w-[32ch] text-pretty text-muted-foreground">
+              {t('inspirationSubtitle')}
+            </p>
+            <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
+              <span>{t('imageArchiveLabel')}</span>
+              <span className="tabular-nums">{String(page).padStart(2, '0')}</span>
+            </div>
           </div>
-        </div>
-      </header>
+        )}
+      />
 
-      <div className="-mx-4 overflow-x-auto border-t border-border/60 px-4 pt-5 sm:mx-0 sm:px-0">
+      <div className="-mx-4 overflow-x-auto border-t border-border/60 px-4 pt-4 sm:mx-0 sm:px-0">
         <div className="flex min-w-max gap-2 pb-1 sm:flex-wrap sm:pb-0">
           {CATEGORIES.map((cat) => {
             const Icon = cat.icon
@@ -119,7 +116,7 @@ export function InspirationPage() {
                 onClick={() => setCategory(cat.value)}
                 className="type-chat-action gap-2 px-4"
               >
-                <Icon className="h-3.5 w-3.5" />
+                <Icon className="size-3.5" />
                 {t(cat.labelKey)}
               </Button>
             )
@@ -128,7 +125,7 @@ export function InspirationPage() {
       </div>
 
       <div className="@container">
-        <div className="grid grid-cols-1 gap-5 sm:gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2">
           {loading
             ? Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-[24rem] w-full rounded-none" />
@@ -147,14 +144,14 @@ export function InspirationPage() {
                           />
                         ) : (
                           <div className="flex h-full items-center justify-center bg-accent/60">
-                            <Sparkles className="h-10 w-10 text-muted-foreground/40" />
+                            <Sparkles className="size-10 text-muted-foreground/40" />
                           </div>
                         )}
-                        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 bg-gradient-to-t from-background via-background/84 to-transparent px-4 pb-4 pt-10">
+                        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 border-t border-border/40 bg-background/88 px-4 pb-4 pt-4 backdrop-blur-sm">
                           <span className="type-chat-kicker text-foreground/82">
                             {getCategoryLabel(gallery.category, t)}
                           </span>
-                          <Badge variant="default" className="text-[9px]">
+                          <Badge variant="default" className="type-ui-label-xs">
                             {t('imageCount', { count: gallery.image_count })}
                           </Badge>
                         </div>
@@ -162,7 +159,7 @@ export function InspirationPage() {
                     )}
                     eyebrow={(
                       <div className="space-y-2">
-                        <p className="type-chat-kicker text-muted-foreground">
+                        <p className="type-chat-kicker tabular-nums text-muted-foreground">
                           {formatDate(gallery.updated_at, i18n.language)}
                         </p>
                       </div>
@@ -179,12 +176,12 @@ export function InspirationPage() {
                     chips={(
                       <>
                         {gallery.tags.slice(0, 3).map((tag) => (
-                          <Badge key={tag} variant="default" className="text-[9px]">
+                          <Badge key={tag} variant="default" className="type-ui-label-xs">
                             {tag}
                           </Badge>
                         ))}
                         {gallery.tags.length > 3 && (
-                          <Badge variant="default" className="text-[9px]">
+                          <Badge variant="default" className="type-ui-label-xs">
                             +{gallery.tags.length - 3}
                           </Badge>
                         )}
@@ -198,7 +195,7 @@ export function InspirationPage() {
                     footerEnd={(
                       <div className="flex items-center gap-2 text-foreground">
                         <span className="type-chat-action">{t('openArchive')}</span>
-                        <ArrowUpRight className="h-4 w-4 transition-transform duration-fast group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={1.6} />
+                        <ArrowUpRight className="size-4 transition-transform duration-fast group-hover:translate-x-0.5 group-hover:-translate-y-0.5" strokeWidth={1.6} />
                       </div>
                     )}
                   />
@@ -208,7 +205,7 @@ export function InspirationPage() {
       </div>
 
       {!loading && galleries.length === 0 && (
-        <div className="border border-border/70 bg-card px-6 py-12 text-center shadow-token-md sm:px-8 sm:py-16">
+        <div className="border border-border/70 bg-card px-5 py-10 text-center shadow-token-md sm:px-6 sm:py-12">
           <div className="mx-auto flex max-w-[18rem] flex-col items-center gap-4">
             <div className="type-chat-kicker border border-border/70 bg-background px-4 py-2 text-muted-foreground">
               00
@@ -224,22 +221,22 @@ export function InspirationPage() {
       )}
 
       {totalPages > 1 && (
-        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-6" aria-label="Inspiration pagination">
+        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-5" aria-label="Inspiration pagination">
           <Button
             variant="outline"
             size="sm"
             disabled={page <= 1}
             onClick={() => setPage(page - 1)}
-            className="type-chat-action min-h-[44px] min-w-[44px] px-4"
+            className="type-chat-action min-w-10 px-3.5"
           >
-            <ChevronLeft className="h-4 w-4" strokeWidth={1.75} />
+            <ChevronLeft className="size-4" strokeWidth={1.75} />
             <span className="hidden sm:inline">{t('previous')}</span>
           </Button>
           <div className="text-center">
             <p className="type-chat-kicker text-muted-foreground">
               {t('page')}
             </p>
-            <p className="mt-1 text-sm tabular-nums text-foreground">
+            <p className="type-chat-label mt-1 tabular-nums text-foreground">
               {String(page).padStart(2, '0')} / {String(totalPages).padStart(2, '0')}
             </p>
           </div>
@@ -248,10 +245,10 @@ export function InspirationPage() {
             size="sm"
             disabled={page >= totalPages}
             onClick={() => setPage(page + 1)}
-            className="type-chat-action min-h-[44px] min-w-[44px] px-4"
+            className="type-chat-action min-w-10 px-3.5"
           >
             <span className="hidden sm:inline">{t('next')}</span>
-            <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
+            <ChevronRight className="size-4" strokeWidth={1.75} />
           </Button>
         </nav>
       )}

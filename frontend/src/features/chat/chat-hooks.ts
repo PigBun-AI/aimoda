@@ -64,6 +64,10 @@ export function useChat(
 
     try {
       const msgs = await getSessionMessages(targetSessionId)
+      if (!Array.isArray(msgs)) {
+        return []
+      }
+
       const mapped: ChatMessage[] = msgs.map(m => ({
         id: m.id,
         role: m.role as 'user' | 'assistant',

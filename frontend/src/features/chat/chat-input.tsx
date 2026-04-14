@@ -3,6 +3,7 @@ import { ArrowUp, ImagePlus, Square, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 import type { ChatComposerInput, ContentBlock, ImageSourceBase64 } from "./chat-types"
 
@@ -26,6 +27,10 @@ interface PendingImage {
 }
 
 const MAX_IMAGE_SIZE_MB = 5
+const CHAT_INPUT_ICON_BUTTON_CLASS =
+  "control-icon-sm flex shrink-0 cursor-pointer items-center justify-center rounded-none border border-border/60 bg-background text-muted-foreground shadow-token-sm transition-[background-color,border-color,color,transform] hover:-translate-y-px hover:border-foreground/18 hover:bg-card hover:text-foreground"
+const CHAT_INPUT_COMPOSER_BUTTON_CLASS =
+  "flex h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-none px-5"
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -238,12 +243,12 @@ export function ChatInput({
                     <img
                       src={`data:${image.source.media_type};base64,${image.source.data}`}
                       alt={image.fileName}
-                      className="h-16 w-16 rounded-none border border-border/70 bg-muted object-cover shadow-token-sm"
+                      className="size-16 rounded-none border border-border/70 bg-muted object-cover shadow-token-sm"
                     />
                     <button
                       type="button"
                       onClick={() => removePendingImage(image.id)}
-                      className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-none border border-border/70 bg-background text-muted-foreground shadow-token-sm hover:text-foreground"
+                      className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-none border border-border/70 bg-background text-muted-foreground shadow-token-sm hover:text-foreground"
                       aria-label={t("removeImage", { fileName: image.fileName })}
                     >
                       <X size={12} />
@@ -268,7 +273,7 @@ export function ChatInput({
                   <button
                     type="button"
                     onClick={handlePickImages}
-                    className="control-icon-sm flex shrink-0 cursor-pointer items-center justify-center rounded-none border border-border/60 bg-background text-muted-foreground shadow-token-sm transition-[background-color,border-color,color,transform] hover:-translate-y-px hover:border-foreground/18 hover:bg-card hover:text-foreground"
+                    className={CHAT_INPUT_ICON_BUTTON_CLASS}
                     title={t("uploadImage")}
                   >
                     <ImagePlus size={18} />
@@ -283,10 +288,10 @@ export function ChatInput({
                   {isRunning ? (
                     <Button
                       type="button"
-                      className={[
-                        "flex h-11 min-w-[104px] shrink-0 cursor-pointer items-center justify-center gap-2 border border-border/70 bg-background px-5 text-foreground",
-                        "hover:bg-card disabled:cursor-not-allowed disabled:opacity-55",
-                      ].join(" ")}
+                      className={cn(
+                        CHAT_INPUT_COMPOSER_BUTTON_CLASS,
+                        "min-w-[104px] border border-border/70 bg-background text-foreground hover:bg-card disabled:cursor-not-allowed disabled:opacity-55",
+                      )}
                       disabled={isStopping}
                       onClick={onStop}
                     >
@@ -295,10 +300,11 @@ export function ChatInput({
                     </Button>
                   ) : (
                     <Button
-                      className={[
-                        "flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center p-0",
+                      className={cn(
+                        CHAT_INPUT_COMPOSER_BUTTON_CLASS,
+                        "w-11 px-0",
                         canSend ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground shadow-none",
-                      ].join(" ")}
+                      )}
                       disabled={!canSend}
                       onClick={handleSend}
                     >

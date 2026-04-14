@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import type { ToolStep as ToolStepType, ImageResult } from './chat-types'
 import { calculateBackgroundCropStyle } from './crop-utils'
 import { CHAT_THUMBNAIL_MAX_EDGE, getOssThumbnailUrl } from './oss-image'
+import { cn } from '@/lib/utils'
 
 const toolIcons: Record<string, typeof Search> = {
   search: Search,
@@ -30,6 +31,8 @@ const toolLabels: Record<string, string> = {
   peek_collection: 'toolPeekCollection',
   show_collection: 'toolShowCollection',
 }
+const TOOL_STEP_TONE_BADGE_CLASS =
+  'border px-2 py-0.5 type-chat-kicker'
 
 /** Format brand: capitalize each word */
 function formatBrand(brand: string): string {
@@ -74,23 +77,24 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
   return (
     <div className="py-1.5 animate-in fade-in slide-in-from-bottom-1 duration-normal">
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border border-border bg-background">
+        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center border border-border bg-background">
           <IconComp size={15} className="text-primary" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center flex-wrap gap-2">
-            <span className="text-sm font-medium text-foreground/80">{label}</span>
+            <span className="type-chat-label text-foreground/80">{label}</span>
             {summary && (
-              <span className="text-xs text-muted-foreground truncate max-w-[250px]">{summary}</span>
+              <span className="type-chat-meta truncate text-muted-foreground max-w-[250px]">{summary}</span>
             )}
             {step.resultCount !== undefined && (
-              <span className={`border px-2 py-0.5 text-xs font-medium ${
+              <span className={cn(
+                TOOL_STEP_TONE_BADGE_CLASS,
                 step.resultCount === 0
                   ? 'border-destructive/30 bg-destructive/10 text-destructive'
                   : step.matchLevel === 'partial'
-                    ? 'border-border bg-muted/40 text-warning dark:text-warning'
-                    : 'border-border bg-background text-primary'
-              }`}>
+                    ? 'border-border bg-muted/40 text-foreground'
+                    : 'border-border bg-background text-primary',
+              )}>
                 {t('toolResultCount', { count: step.resultCount })}
                 {step.matchLevel === 'exact' && ' ✓'}
                 {step.matchLevel === 'partial' && ' ≈'}
@@ -100,7 +104,7 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
             {canShowGallery && onShowImages && (
               <button
                 onClick={() => onShowImages(step)}
-                className="inline-flex items-center gap-1 border border-primary bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-all hover:bg-primary/90"
+                className="type-chat-action inline-flex items-center gap-1 rounded-none border border-primary bg-primary px-2.5 py-1 text-primary-foreground transition-all hover:bg-primary/90"
               >
                 <Image size={12} />
                 {t('viewAll')}
@@ -110,7 +114,7 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
             {hasArgs && step.type === 'call' && (
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5"
+                className="type-chat-meta hover:text-primary transition-colors flex items-center gap-0.5 text-muted-foreground"
               >
                 {expanded ? t('collapseArgs') : t('expandArgs')}
                 <ChevronDown
@@ -142,8 +146,8 @@ export function ToolStepView({ step, onShowImages }: ToolStepProps) {
                 if (val === null || val === undefined || (Array.isArray(val) && val.length === 0)) return null
                 return (
                   <div key={key} className="flex items-start gap-2">
-                    <span className="text-xs text-muted-foreground shrink-0 min-w-[80px] pt-0.5">{key}</span>
-                    <span className="border border-border bg-background px-1.5 py-0.5 text-xs text-primary">
+                    <span className="type-chat-meta shrink-0 min-w-[80px] pt-0.5 text-muted-foreground">{key}</span>
+                    <span className="type-chat-kicker border border-border bg-background px-1.5 py-0.5 text-primary">
                       {typeof val === 'object' ? JSON.stringify(val) : String(val)}
                     </span>
                   </div>
@@ -184,7 +188,7 @@ function ThumbnailCard({ img }: { img: ImageResult }) {
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
       </div>
       {img.brand && (
-        <div className="text-[10px] text-muted-foreground truncate w-[80px]">
+        <div className="type-chat-meta w-[80px] truncate text-muted-foreground">
           {formatBrand(img.brand)}
         </div>
       )}

@@ -177,6 +177,7 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
 
           {visibleTotal > 0 && data.search_request_id && (
             <button
+              type="button"
               onClick={() => onOpenDrawer(data.search_request_id)}
               className="type-chat-action inline-flex min-h-8 items-center gap-1 self-start border border-transparent px-2 py-1 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
             >
@@ -209,10 +210,7 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
         )}
 
         {previewImages.length > 0 && data.search_request_id && (
-          <div
-            className="cursor-pointer space-y-3"
-            onClick={() => onOpenDrawer(data.search_request_id)}
-          >
+          <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <span className="type-chat-kicker text-muted-foreground">{t('resultPreview')}</span>
               <span className="type-chat-meta text-muted-foreground">{t('topImageCount', { count: previewImages.length })}</span>
@@ -247,7 +245,7 @@ export function SearchResultCard({ data, onOpenDrawer, retrievalPreferences }: S
               {Array.from({ length: 4 }).map((_, index) => (
                 <div key={index} className="min-w-0 space-y-1.5">
                   <div className="animate-pulse border border-border bg-muted/60" style={{ aspectRatio: '1 / 2' }} />
-                  <div className="h-3 w-2/3 animate-pulse bg-muted/70" />
+                  <div className="h-3 w-2/3 rounded-none bg-muted/70" />
                 </div>
               ))}
             </div>

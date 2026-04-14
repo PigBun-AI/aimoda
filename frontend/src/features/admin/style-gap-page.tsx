@@ -1,24 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { Search, RefreshCw } from 'lucide-react'
+import { useEffect, useMemo, useState } from "react"
+import { RefreshCw, Search } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
-import { useStyleGapEvents, useStyleGapStats, useStyleGaps, useUpdateStyleGap } from '@/features/admin/use-style-gaps'
-import type { StyleGapSignal, StyleGapStatus } from '@/lib/types'
+import { SectionIntro } from "@/components/layout/section-intro"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useStyleGapEvents, useStyleGapStats, useStyleGaps, useUpdateStyleGap } from "@/features/admin/use-style-gaps"
 
-const statusBadgeVariant: Record<StyleGapStatus, 'default' | 'success' | 'warning'> = {
-  open: 'warning',
-  covered: 'success',
-  ignored: 'default',
+import type { StyleGapSignal, StyleGapStatus } from "@/lib/types"
+
+const statusBadgeVariant: Record<StyleGapStatus, "default" | "success" | "warning"> = {
+  open: "warning",
+  covered: "success",
+  ignored: "default",
 }
 
-const statusOptions: StyleGapStatus[] = ['open', 'covered', 'ignored']
-const sortOptions = ['total_hits', 'last_seen', 'first_seen'] as const
+const statusOptions: StyleGapStatus[] = ["open", "covered", "ignored"]
+const sortOptions = ["total_hits", "last_seen", "first_seen"] as const
+const TEXTAREA_CLASS =
+  "min-h-28 w-full resize-y rounded-none border border-input bg-background px-4 py-3 type-ui-body-sm text-foreground placeholder:text-muted-foreground/80 hover:border-foreground/30 focus:border-foreground focus:outline-none"
 
 type FilterState = {
   status: StyleGapStatus
@@ -28,11 +32,11 @@ type FilterState = {
 }
 
 function formatDate(value: string | null | undefined, language: string) {
-  if (!value) return '-'
-  return new Date(value).toLocaleString(language === 'zh-CN' ? 'zh-CN' : 'en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
+  if (!value) return "-"
+  return new Date(value).toLocaleString(language === "zh-CN" ? "zh-CN" : "en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   })
 }
 
@@ -52,41 +56,41 @@ function GapRow({
   isUpdating: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
-  const [linkedStyleName, setLinkedStyleName] = useState(gap.linkedStyleName ?? '')
-  const [resolutionNote, setResolutionNote] = useState(gap.resolutionNote ?? '')
-  const [resolvedBy, setResolvedBy] = useState(gap.resolvedBy ?? 'admin')
+  const [linkedStyleName, setLinkedStyleName] = useState(gap.linkedStyleName ?? "")
+  const [resolutionNote, setResolutionNote] = useState(gap.resolutionNote ?? "")
+  const [resolvedBy, setResolvedBy] = useState(gap.resolvedBy ?? "admin")
   const contextJson = useMemo(() => JSON.stringify(gap.latestContext ?? {}, null, 2), [gap.latestContext])
   const eventsQuery = useStyleGapEvents(gap.id, expanded)
 
   useEffect(() => {
-    setLinkedStyleName(gap.linkedStyleName ?? '')
-    setResolutionNote(gap.resolutionNote ?? '')
-    setResolvedBy(gap.resolvedBy ?? 'admin')
+    setLinkedStyleName(gap.linkedStyleName ?? "")
+    setResolutionNote(gap.resolutionNote ?? "")
+    setResolvedBy(gap.resolvedBy ?? "admin")
   }, [gap.id, gap.linkedStyleName, gap.resolutionNote, gap.resolvedBy])
 
   return (
-    <div className="rounded-lg border border-border bg-secondary/60 p-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <div className="min-w-0 space-y-2">
+    <article className="border border-border/70 bg-card px-4 py-4 sm:px-5 sm:py-5">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="min-w-0 space-y-2.5">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold text-foreground">{gap.queryRaw}</p>
+            <p className="type-label text-foreground">{gap.queryRaw}</p>
             <Badge variant={statusBadgeVariant[gap.status]} size="sm">
               {t(`admin:styleGapStatus.${gap.status}`)}
             </Badge>
-            <Badge variant="default" size="sm">{t('admin:styleGapHits', { count: gap.totalHits })}</Badge>
-            <Badge variant="default" size="sm">{t('admin:styleGapSessions', { count: gap.uniqueSessions })}</Badge>
+            <Badge variant="default" size="sm">{t("admin:styleGapHits", { count: gap.totalHits })}</Badge>
+            <Badge variant="default" size="sm">{t("admin:styleGapSessions", { count: gap.uniqueSessions })}</Badge>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t('admin:styleGapNormalized')}: {gap.queryNormalized}
+          <p className="type-chat-meta text-muted-foreground">
+            {t("admin:styleGapNormalized")}: {gap.queryNormalized}
           </p>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <span>{t('admin:styleGapStage')}: {gap.searchStage}</span>
-            <span>{t('admin:styleGapSource')}: {gap.source}</span>
-            <span>{t('admin:styleGapLastSeen')}: {formatDate(gap.lastSeenAt, language)}</span>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <span className="type-chat-meta text-muted-foreground">{t("admin:styleGapStage")}: {gap.searchStage}</span>
+            <span className="type-chat-meta text-muted-foreground">{t("admin:styleGapSource")}: {gap.source}</span>
+            <span className="type-chat-meta tabular-nums text-muted-foreground">{t("admin:styleGapLastSeen")}: {formatDate(gap.lastSeenAt, language)}</span>
           </div>
           {gap.linkedStyleName ? (
-            <p className="text-xs text-muted-foreground">
-              {t('admin:styleGapLinkedStyle')}: {gap.linkedStyleName}
+            <p className="type-chat-meta text-muted-foreground">
+              {t("admin:styleGapLinkedStyle")}: {gap.linkedStyleName}
             </p>
           ) : null}
         </div>
@@ -96,8 +100,9 @@ function GapRow({
             <Button
               key={status}
               type="button"
-              variant={gap.status === status ? 'secondary' : 'outline'}
+              variant={gap.status === status ? "secondary" : "outline"}
               size="sm"
+              className="rounded-none"
               loading={isUpdating && gap.status !== status}
               onClick={() => onChangeStatus(gap, status)}
               disabled={isUpdating || gap.status === status}
@@ -105,112 +110,104 @@ function GapRow({
               {t(`admin:styleGapAction.${status}`)}
             </Button>
           ))}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setExpanded((value) => !value)}
-          >
-            {expanded ? t('common:collapse') : t('common:expand')}
+          <Button type="button" variant="ghost" size="sm" className="rounded-none" onClick={() => setExpanded((value) => !value)}>
+            {expanded ? t("common:collapse") : t("common:expand")}
           </Button>
         </div>
       </div>
 
       {expanded ? (
-        <div className="mt-4 grid gap-4 rounded-lg border border-border bg-background/70 p-4 text-sm xl:grid-cols-3">
+        <div className="mt-4 grid gap-4 border-t border-border/60 pt-4 xl:grid-cols-3">
           <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {t('admin:styleGapContext')}
-            </p>
-            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-secondary p-3 text-xs text-foreground">
+            <p className="type-chat-kicker text-muted-foreground">{t("admin:styleGapContext")}</p>
+            <pre className="type-body-xs overflow-x-auto whitespace-pre-wrap break-all border border-border/70 bg-background px-4 py-3 text-foreground">
               {contextJson}
             </pre>
           </div>
-          <div className="space-y-3 text-xs">
-            <p className="text-muted-foreground">{t('admin:styleGapFirstSeen')}: {formatDate(gap.firstSeenAt, language)}</p>
-            <p className="text-muted-foreground">{t('admin:styleGapResolvedBy')}: {gap.resolvedBy || '-'}</p>
-            <p className="text-muted-foreground">{t('admin:styleGapCoveredAt')}: {formatDate(gap.coveredAt, language)}</p>
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('admin:styleGapEditLinkedStyle')}
-              </p>
+
+          <div className="space-y-3">
+            <p className="type-chat-meta tabular-nums text-muted-foreground">{t("admin:styleGapFirstSeen")}: {formatDate(gap.firstSeenAt, language)}</p>
+            <p className="type-chat-meta text-muted-foreground">{t("admin:styleGapResolvedBy")}: {gap.resolvedBy || "-"}</p>
+            <p className="type-chat-meta tabular-nums text-muted-foreground">{t("admin:styleGapCoveredAt")}: {formatDate(gap.coveredAt, language)}</p>
+
+            <label className="grid gap-2">
+              <span className="type-chat-kicker text-muted-foreground">{t("admin:styleGapEditLinkedStyle")}</span>
               <Input
                 value={linkedStyleName}
                 onChange={(event) => setLinkedStyleName(event.target.value)}
-                placeholder={t('admin:styleGapEditLinkedStylePlaceholder')}
+                placeholder={t("admin:styleGapEditLinkedStylePlaceholder")}
               />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('admin:styleGapEditResolvedBy')}
-              </p>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="type-chat-kicker text-muted-foreground">{t("admin:styleGapEditResolvedBy")}</span>
               <Input
                 value={resolvedBy}
                 onChange={(event) => setResolvedBy(event.target.value)}
-                placeholder={t('admin:styleGapEditResolvedByPlaceholder')}
+                placeholder={t("admin:styleGapEditResolvedByPlaceholder")}
               />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('admin:styleGapResolutionNote')}
-              </p>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="type-chat-kicker text-muted-foreground">{t("admin:styleGapResolutionNote")}</span>
               <textarea
                 value={resolutionNote}
                 onChange={(event) => setResolutionNote(event.target.value)}
                 rows={4}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
-                placeholder={t('admin:styleGapEditResolutionNotePlaceholder')}
+                className={TEXTAREA_CLASS}
+                placeholder={t("admin:styleGapEditResolutionNotePlaceholder")}
               />
-            </div>
+            </label>
+
             <Button
               type="button"
               size="sm"
+              className="rounded-none"
               loading={isUpdating}
               onClick={() => onSaveDetails(gap, { linkedStyleName, resolutionNote, resolvedBy })}
               disabled={isUpdating}
             >
-              {t('admin:styleGapSaveDetails')}
+              {t("admin:styleGapSaveDetails")}
             </Button>
           </div>
-          <div className="space-y-3 text-xs">
-            <p className="font-medium uppercase tracking-wide text-muted-foreground">
-              {t('admin:styleGapRecentEvents')}
-            </p>
+
+          <div className="space-y-3">
+            <p className="type-chat-kicker text-muted-foreground">{t("admin:styleGapRecentEvents")}</p>
             {eventsQuery.isLoading ? (
-              <Skeleton className="h-24 w-full rounded-md" />
+              <Skeleton className="h-24 w-full rounded-none" />
             ) : eventsQuery.data?.length ? (
               <div className="space-y-2">
                 {eventsQuery.data.map((event) => (
-                  <div key={event.id} className="rounded-md border border-border bg-secondary/60 p-2">
-                    <p className="text-foreground">{event.queryRaw}</p>
-                    <p className="text-muted-foreground">{event.searchStage} · {event.source}</p>
-                    <p className="text-muted-foreground">{formatDate(event.createdAt, language)}</p>
+                  <div key={event.id} className="border border-border/70 bg-background px-4 py-3">
+                    <p className="type-label text-foreground">{event.queryRaw}</p>
+                    <p className="mt-1 type-chat-meta text-muted-foreground">{event.searchStage} · {event.source}</p>
+                    <p className="mt-1 type-chat-meta tabular-nums text-muted-foreground">{formatDate(event.createdAt, language)}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-muted-foreground">{t('admin:styleGapNoEvents')}</p>
+              <p className="type-chat-meta text-muted-foreground">{t("admin:styleGapNoEvents")}</p>
             )}
           </div>
         </div>
       ) : null}
-    </div>
+    </article>
   )
 }
 
 export function StyleGapPage() {
-  const { t, i18n } = useTranslation(['admin', 'common'])
+  const { t, i18n } = useTranslation(["admin", "common"])
   const [draft, setDraft] = useState<FilterState>({
-    status: 'open',
-    q: '',
+    status: "open",
+    q: "",
     minHits: 1,
-    sort: 'total_hits',
+    sort: "total_hits",
   })
   const [filters, setFilters] = useState<FilterState>({
-    status: 'open',
-    q: '',
+    status: "open",
+    q: "",
     minHits: 1,
-    sort: 'total_hits',
+    sort: "total_hits",
   })
 
   const styleGapsQuery = useStyleGaps({
@@ -218,7 +215,7 @@ export function StyleGapPage() {
     q: filters.q,
     minHits: filters.minHits,
     sort: filters.sort,
-    order: 'desc',
+    order: "desc",
     limit: 50,
     offset: 0,
   })
@@ -257,33 +254,38 @@ export function StyleGapPage() {
   }
 
   return (
-    <section className="space-y-6 sm:space-y-8 font-sans">
-      <div>
-        <h1 className="font-serif text-2xl sm:text-3xl font-medium mb-2 text-foreground">
-          {t('admin:styleGapsTitle')}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {t('admin:styleGapsDesc')}
-        </p>
-      </div>
+    <section className="space-y-6 sm:space-y-8">
+      <SectionIntro
+        eyebrow={String(styleGapsQuery.data?.total ?? 0).padStart(2, "0")}
+        title={t("admin:styleGapsTitle")}
+        description={t("admin:styleGapsDesc")}
+        aside={
+          <div className="flex h-full flex-col justify-between gap-4">
+            <div className="space-y-2">
+              <p className="type-chat-kicker text-muted-foreground">{t("admin:styleGapsFilters")}</p>
+              <p className="type-chat-meta text-muted-foreground">{t("admin:styleGapsFiltersDesc")}</p>
+            </div>
+            <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
+              <span>{t("admin:styleGapStatsOpen")}</span>
+              <span className="tabular-nums text-foreground">{String(styleGapStatsQuery.data?.open ?? 0).padStart(2, "0")}</span>
+            </div>
+          </div>
+        }
+      />
 
-      <Card className="border">
+      <Card className="bg-background">
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-medium text-foreground">
-            {t('admin:styleGapsFilters')}
-          </CardTitle>
-          <CardDescription className="text-sm text-muted-foreground">
-            {t('admin:styleGapsFiltersDesc')}
-          </CardDescription>
+          <CardTitle>{t("admin:styleGapsFilters")}</CardTitle>
+          <CardDescription>{t("admin:styleGapsFiltersDesc")}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">{t('admin:styleGapFilterStatus')}</p>
+          <label className="grid gap-2">
+            <span className="type-chat-kicker text-muted-foreground">{t("admin:styleGapFilterStatus")}</span>
             <Select
               value={draft.status}
               onValueChange={(value) => setDraft((state) => ({ ...state, status: value as StyleGapStatus }))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="rounded-none border-border/80 bg-background">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -294,37 +296,39 @@ export function StyleGapPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </label>
 
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">{t('admin:styleGapFilterQuery')}</p>
+          <label className="grid gap-2">
+            <span className="type-chat-kicker text-muted-foreground">{t("admin:styleGapFilterQuery")}</span>
             <Input
               value={draft.q}
               onChange={(event) => setDraft((state) => ({ ...state, q: event.target.value }))}
-              placeholder={t('admin:styleGapFilterQueryPlaceholder')}
+              placeholder={t("admin:styleGapFilterQueryPlaceholder")}
             />
-          </div>
+          </label>
 
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">{t('admin:styleGapFilterMinHits')}</p>
+          <label className="grid gap-2">
+            <span className="type-chat-kicker text-muted-foreground">{t("admin:styleGapFilterMinHits")}</span>
             <Input
               type="number"
               min={1}
               value={draft.minHits}
-              onChange={(event) => setDraft((state) => ({
-                ...state,
-                minHits: Number(event.target.value || 1),
-              }))}
+              onChange={(event) =>
+                setDraft((state) => ({
+                  ...state,
+                  minHits: Number(event.target.value || 1),
+                }))
+              }
             />
-          </div>
+          </label>
 
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">{t('admin:styleGapFilterSort')}</p>
+          <label className="grid gap-2">
+            <span className="type-chat-kicker text-muted-foreground">{t("admin:styleGapFilterSort")}</span>
             <Select
               value={draft.sort}
-              onValueChange={(value) => setDraft((state) => ({ ...state, sort: value as FilterState['sort'] }))}
+              onValueChange={(value) => setDraft((state) => ({ ...state, sort: value as FilterState["sort"] }))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="rounded-none border-border/80 bg-background">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -335,55 +339,54 @@ export function StyleGapPage() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
+          </label>
 
           <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-4">
-            <Button type="button" onClick={handleSearch} className="min-w-[120px]">
-              <Search className="h-4 w-4" />
-              {t('admin:styleGapApplyFilters')}
+            <Button type="button" onClick={handleSearch} className="rounded-none">
+              <Search className="size-4" />
+              {t("admin:styleGapApplyFilters")}
             </Button>
             <Button
               type="button"
               variant="outline"
+              className="rounded-none"
               onClick={() => styleGapsQuery.refetch()}
               disabled={styleGapsQuery.isFetching}
             >
-              <RefreshCw className="h-4 w-4" />
-              {t('admin:styleGapRefresh')}
+              <RefreshCw className="size-4" />
+              {t("admin:styleGapRefresh")}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {styleGapStatsQuery.isLoading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <Skeleton key={index} className="h-24 w-full rounded-lg" />
-          ))
+          Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-28 w-full rounded-none" />)
         ) : (
           <>
-            <Card className="border">
-              <CardContent className="pt-5">
-                <p className="text-xs text-muted-foreground">{t('admin:styleGapStatsOpen')}</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">{styleGapStatsQuery.data?.open ?? 0}</p>
+            <Card className="bg-background">
+              <CardContent className="space-y-2 pt-5">
+                <p className="type-chat-kicker text-muted-foreground">{t("admin:styleGapStatsOpen")}</p>
+                <p className="type-ui-title-md tabular-nums text-foreground">{styleGapStatsQuery.data?.open ?? 0}</p>
               </CardContent>
             </Card>
-            <Card className="border">
-              <CardContent className="pt-5">
-                <p className="text-xs text-muted-foreground">{t('admin:styleGapStatsCovered')}</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">{styleGapStatsQuery.data?.covered ?? 0}</p>
+            <Card className="bg-background">
+              <CardContent className="space-y-2 pt-5">
+                <p className="type-chat-kicker text-muted-foreground">{t("admin:styleGapStatsCovered")}</p>
+                <p className="type-ui-title-md tabular-nums text-foreground">{styleGapStatsQuery.data?.covered ?? 0}</p>
               </CardContent>
             </Card>
-            <Card className="border">
-              <CardContent className="pt-5">
-                <p className="text-xs text-muted-foreground">{t('admin:styleGapStatsIgnored')}</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">{styleGapStatsQuery.data?.ignored ?? 0}</p>
+            <Card className="bg-background">
+              <CardContent className="space-y-2 pt-5">
+                <p className="type-chat-kicker text-muted-foreground">{t("admin:styleGapStatsIgnored")}</p>
+                <p className="type-ui-title-md tabular-nums text-foreground">{styleGapStatsQuery.data?.ignored ?? 0}</p>
               </CardContent>
             </Card>
-            <Card className="border">
-              <CardContent className="pt-5">
-                <p className="text-xs text-muted-foreground">{t('admin:styleGapStatsRecent')}</p>
-                <p className="mt-1 text-2xl font-semibold text-foreground">{styleGapStatsQuery.data?.recentNew ?? 0}</p>
+            <Card className="bg-background">
+              <CardContent className="space-y-2 pt-5">
+                <p className="type-chat-kicker text-muted-foreground">{t("admin:styleGapStatsRecent")}</p>
+                <p className="type-ui-title-md tabular-nums text-foreground">{styleGapStatsQuery.data?.recentNew ?? 0}</p>
               </CardContent>
             </Card>
           </>
@@ -391,19 +394,13 @@ export function StyleGapPage() {
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-medium text-foreground">{t('admin:styleGapsList')}</h2>
-            <p className="text-sm text-muted-foreground">
-              {t('admin:styleGapListCount', { count: styleGapsQuery.data?.total ?? 0 })}
-            </p>
-          </div>
+        <div>
+          <h2 className="type-ui-title-md text-foreground">{t("admin:styleGapsList")}</h2>
+          <p className="type-chat-meta text-muted-foreground">{t("admin:styleGapListCount", { count: styleGapsQuery.data?.total ?? 0 })}</p>
         </div>
 
         {styleGapsQuery.isLoading ? (
-          Array.from({ length: 3 }).map((_, index) => (
-            <Skeleton key={index} className="h-36 w-full rounded-lg" />
-          ))
+          Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-40 w-full rounded-none" />)
         ) : styleGapsQuery.data?.items.length ? (
           styleGapsQuery.data.items.map((gap) => (
             <GapRow
@@ -417,9 +414,9 @@ export function StyleGapPage() {
             />
           ))
         ) : (
-          <Card className="border">
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              {t('admin:styleGapEmpty')}
+          <Card className="bg-background">
+            <CardContent className="px-5 py-10 text-center">
+              <p className="type-chat-meta text-muted-foreground">{t("admin:styleGapEmpty")}</p>
             </CardContent>
           </Card>
         )}
