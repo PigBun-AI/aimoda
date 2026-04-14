@@ -17,6 +17,20 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('@tanstack/react-query')) return 'vendor-query'
+          if (id.includes('react-i18next') || id.includes('i18next')) return 'vendor-i18n'
+          if (id.includes('lucide-react')) return 'vendor-icons'
+          if (id.includes('@radix-ui') || id.includes('@floating-ui')) return 'vendor-radix'
+          return undefined
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
