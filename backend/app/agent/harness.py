@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
-from ..value_normalization import normalize_quarter_value
+from ..value_normalization import (
+    expand_season_groups_to_quarters,
+    normalize_image_type_list,
+    normalize_quarter_list,
+    normalize_site_list,
+    normalize_year_list,
+)
 
 
 class TurnContext(TypedDict, total=False):
@@ -26,7 +32,7 @@ class TurnContext(TypedDict, total=False):
 
 class RuntimeHardFilter(TypedDict, total=False):
     dimension: str
-    value: str | int
+    value: str | int | list[str] | list[int]
     source: str
     category: str
 
@@ -189,19 +195,34 @@ def get_runtime_plan_from_payload(payload: dict[str, Any] | RuntimePlan | None) 
         value = item.get("value")
         if not dimension or value in (None, ""):
             continue
-        normalized_value: str | int = value
+        normalized_value: str | int | list[str] | list[int] = value
         if dimension == "quarter":
-            quarter = normalize_quarter_value(value)
-            if not quarter:
+            quarters = normalize_quarter_list(value)
+            if not quarters:
                 continue
-            normalized_value = quarter
+            normalized_value = quarters[0] if len(quarters) == 1 else quarters
+        elif dimension == "year":
+            years = normalize_year_list(value)
+            if not years:
+                continue
+            normalized_value = years[0] if len(years) == 1 else years
         elif dimension == "year_min":
             try:
                 normalized_value = int(value)
             except (TypeError, ValueError):
                 continue
+        elif dimension == "source_site":
+            sites = normalize_site_list(value)
+            if not sites:
+                continue
+            normalized_value = sites[0] if len(sites) == 1 else sites
+        elif dimension == "image_type":
+            image_types = normalize_image_type_list(value)
+            if not image_types:
+                continue
+            normalized_value = image_types[0] if len(image_types) == 1 else image_types
         else:
-            normalized_value = str(value).strip().lower() if dimension in {"category", "gender", "brand", "image_type"} else str(value).strip()
+            normalized_value = str(value).strip().lower() if dimension in {"category", "gender", "brand"} else str(value).strip()
             if normalized_value == "":
                 continue
         normalized: RuntimeHardFilter = {
@@ -400,7 +421,7 @@ def _append_runtime_hard_filter(
     hard_filters: list[RuntimeHardFilter],
     *,
     dimension: str,
-    value: str | int,
+    value: str | int | list[str] | list[int],
     source: str,
     category: str | None = None,
 ) -> None:
@@ -408,18 +429,33 @@ def _append_runtime_hard_filter(
     if not normalized_dimension or value in ("", None):
         return
 
-    normalized_value: str | int = value
+    normalized_value: str | int | list[str] | list[int] = value
     if normalized_dimension == "quarter":
-        quarter = normalize_quarter_value(value)
-        if not quarter:
+        quarters = normalize_quarter_list(value)
+        if not quarters:
             return
-        normalized_value = quarter
+        normalized_value = quarters[0] if len(quarters) == 1 else quarters
+    elif normalized_dimension == "year":
+        years = normalize_year_list(value)
+        if not years:
+            return
+        normalized_value = years[0] if len(years) == 1 else years
     elif normalized_dimension == "year_min":
         try:
             normalized_value = int(value)
         except (TypeError, ValueError):
             return
-    elif normalized_dimension in {"category", "gender", "brand", "image_type"}:
+    elif normalized_dimension == "source_site":
+        sites = normalize_site_list(value)
+        if not sites:
+            return
+        normalized_value = sites[0] if len(sites) == 1 else sites
+    elif normalized_dimension == "image_type":
+        image_types = normalize_image_type_list(value)
+        if not image_types:
+            return
+        normalized_value = image_types[0] if len(image_types) == 1 else image_types
+    elif normalized_dimension in {"category", "gender", "brand"}:
         normalized_value = str(value).strip().lower()
     else:
         normalized_value = str(value).strip()
@@ -455,7 +491,7 @@ def _collect_stable_session_filters(session_filters: list[dict] | None) -> list[
         if item_type != "meta":
             continue
         key = str(item.get("key", "")).strip().lower()
-        if key not in {"brand", "gender", "quarter", "year_min", "image_type"}:
+        if key not in {"brand", "gender", "quarter", "year", "year_min", "image_type", "source_site"}:
             continue
         _append_runtime_hard_filter(
             hard_filters,
@@ -497,21 +533,43 @@ def build_runtime_plan(
             source="session_preference",
         )
 
-    preference_quarter = normalize_quarter_value((session_preferences or {}).get("quarter"))
-    if preference_quarter:
+    preference_quarters = expand_season_groups_to_quarters((session_preferences or {}).get("season_groups"))
+    if not preference_quarters and (session_preferences or {}).get("quarter") not in (None, ""):
+        preference_quarters = normalize_quarter_list((session_preferences or {}).get("quarter"))
+    if preference_quarters:
         _append_runtime_hard_filter(
             hard_filters,
             dimension="quarter",
-            value=preference_quarter,
+            value=preference_quarters,
             source="session_preference",
         )
 
-    preference_year = (session_preferences or {}).get("year")
-    if preference_year not in (None, ""):
+    preference_years = normalize_year_list((session_preferences or {}).get("years"))
+    if not preference_years and (session_preferences or {}).get("year") not in (None, ""):
+        preference_years = normalize_year_list((session_preferences or {}).get("year"))
+    if preference_years:
         _append_runtime_hard_filter(
             hard_filters,
-            dimension="year_min",
-            value=preference_year,
+            dimension="year",
+            value=preference_years,
+            source="session_preference",
+        )
+
+    preference_sources = normalize_site_list((session_preferences or {}).get("sources"))
+    if preference_sources:
+        _append_runtime_hard_filter(
+            hard_filters,
+            dimension="source_site",
+            value=preference_sources,
+            source="session_preference",
+        )
+
+    preference_image_types = normalize_image_type_list((session_preferences or {}).get("image_types"))
+    if preference_image_types:
+        _append_runtime_hard_filter(
+            hard_filters,
+            dimension="image_type",
+            value=preference_image_types,
             source="session_preference",
         )
 
@@ -611,7 +669,7 @@ def format_runtime_plan(plan: RuntimePlan | None) -> str:
     hard_filters = normalized.get("hard_filters", [])
     if hard_filters:
         lines.append("hard_filters=" + ", ".join(
-            f"{item['dimension']}:{item['value']}"
+            f"{item['dimension']}:{'/'.join(str(part) for part in item['value']) if isinstance(item.get('value'), list) else item['value']}"
             for item in hard_filters
         ))
     soft_cues = normalized.get("soft_cues", [])

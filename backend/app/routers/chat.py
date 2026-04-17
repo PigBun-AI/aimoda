@@ -70,7 +70,7 @@ from ..services.chat_service import (
     clear_compaction_bootstrap,
     reset_session_runtime_checkpoint,
 )
-from ..services.taste_profile_service import apply_taste_profile_to_query, rerank_image_candidates
+from ..services.taste_profile_service import apply_taste_profile_to_query
 from ..services.oss_service import get_oss_service
 from ..services.websocket_manager import ws_manager
 from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registry
@@ -79,7 +79,13 @@ from ..repositories.session_repo import is_session_valid
 from ..agent.graph import get_agent
 from ..agent.sse import stream_agent_response, StreamResult, sse_event
 from ..agent.qdrant_utils import get_qdrant, format_result, get_collection, encode_image
-from ..value_normalization import normalize_quarter_value
+from ..value_normalization import (
+    CANONICAL_SEASON_GROUPS,
+    normalize_image_type_list,
+    normalize_quarter_value,
+    normalize_site_list,
+    normalize_year_list,
+)
 from ..agent.session_state import (
     count_session,
     get_session_page,
@@ -135,8 +141,12 @@ class ChatRequest(BaseModel):
 
 class SessionPreferencesPayload(BaseModel):
     gender: str | None = None
-    quarter: str | None = None
-    year: int | None = None
+    quarter: str | list[str] | None = None
+    year: int | list[int] | None = None
+    season_groups: list[str] | None = None
+    years: list[int] | None = None
+    sources: list[str] | None = None
+    image_types: list[str] | None = None
     taste_profile_id: str | None = None
     taste_profile_weight: float | None = None
 
@@ -183,6 +193,89 @@ class ResolveSearchPlanRefRequest(BaseModel):
     year_min: int | None = None
     image_type: str | None = None
     source: str | None = None
+
+
+def _facet_preference_values(
+    *,
+    client,
+    field: str,
+    limit: int = 64,
+) -> list[dict[str, Any]]:
+    try:
+        response = client.facet(
+            collection_name=get_collection(),
+            key=field,
+            limit=limit,
+            exact=False,
+        )
+    except Exception:
+        return []
+
+    hits = getattr(response, "hits", []) or []
+    return [dict(value=getattr(hit, "value", None), count=int(getattr(hit, "count", 0) or 0)) for hit in hits]
+
+
+def _serialize_chat_preference_options() -> dict[str, Any]:
+    client = get_qdrant()
+
+    raw_site_hits = _facet_preference_values(client=client, field="source_site")
+    if not raw_site_hits:
+        raw_site_hits = _facet_preference_values(client=client, field="source")
+    raw_image_type_hits = _facet_preference_values(client=client, field="image_type")
+    raw_year_hits = _facet_preference_values(client=client, field="year")
+
+    sites: list[dict[str, Any]] = []
+    seen_sites: set[str] = set()
+    for item in raw_site_hits:
+        site_values = normalize_site_list(item.get("value"))
+        if not site_values:
+            continue
+        site = site_values[0]
+        if site in seen_sites:
+            continue
+        seen_sites.add(site)
+        sites.append({"value": site, "count": int(item.get("count", 0) or 0)})
+
+    image_type_order = {"model_photo": 0, "flat_lay": 1}
+    image_types: list[dict[str, Any]] = []
+    seen_image_types: set[str] = set()
+    for item in raw_image_type_hits:
+        values = normalize_image_type_list(item.get("value"))
+        if not values:
+            continue
+        image_type = values[0]
+        if image_type in seen_image_types:
+            continue
+        seen_image_types.add(image_type)
+        image_types.append({"value": image_type, "count": int(item.get("count", 0) or 0)})
+    image_types.sort(key=lambda item: (image_type_order.get(str(item.get("value")), 99), str(item.get("value"))))
+
+    years: list[dict[str, Any]] = []
+    seen_years: set[int] = set()
+    for item in raw_year_hits:
+        normalized_years = normalize_year_list(item.get("value"))
+        if not normalized_years:
+            continue
+        year = normalized_years[0]
+        if year in seen_years:
+            continue
+        seen_years.add(year)
+        years.append({"value": year, "count": int(item.get("count", 0) or 0)})
+    years.sort(key=lambda item: int(item.get("value", 0) or 0), reverse=True)
+
+    season_groups = []
+    for season_group in CANONICAL_SEASON_GROUPS:
+        season_groups.append({
+            "value": season_group,
+            "label": season_group,
+        })
+
+    return {
+        "sites": sites,
+        "image_types": image_types,
+        "years": years,
+        "season_groups": season_groups,
+    }
 
 
 def _normalize_message_content(content: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1807,7 +1900,18 @@ async def search_similar_endpoint(
             except Exception as e:
                 print(f"[search_similar] Failed to retrieve vector for {req.image_id}: {e}")
 
+        effective_query_vector = query_vector
+        effective_vector_name = vector_name
         if query_vector:
+            effective_query_vector, effective_vector_name = apply_taste_profile_to_query(
+                user.id,
+                req.taste_profile_id,
+                query_vector=list(query_vector),
+                query_vector_type=vector_name,
+                blend_weight=req.taste_profile_weight if req.taste_profile_weight is not None else 0.24,
+            )
+
+        if effective_query_vector:
             # KNN similarity search using the named vector
             count_result = client.count(
                 collection_name=collection,
@@ -1815,14 +1919,13 @@ async def search_similar_endpoint(
                 exact=True,
             )
             total = count_result.count
-            requested_limit = _candidate_limit(total, offset, req.page_size) if req.taste_profile_id else req.page_size
             query_response = client.query_points(
                 collection_name=collection,
-                query=query_vector,
-                using=vector_name,
+                query=effective_query_vector,
+                using=effective_vector_name,
                 query_filter=qdrant_filter,
-                limit=requested_limit,
-                offset=0 if req.taste_profile_id else offset,
+                limit=req.page_size,
+                offset=offset,
                 with_payload=True,
             )
             results = query_response.points
@@ -1835,30 +1938,19 @@ async def search_similar_endpoint(
                 exact=True,
             )
             total = count_result.count
-            requested_limit = _candidate_limit(total, offset, req.page_size) if req.taste_profile_id else req.page_size
             results = _scroll_filtered_page(
                 client=client,
                 collection_name=collection,
                 scroll_filter=qdrant_filter,
-                offset=0 if req.taste_profile_id else offset,
-                limit=requested_limit,
+                offset=offset,
+                limit=req.page_size,
                 with_payload=True,
             )
             print(f"[search_similar] Scroll fallback found {len(results)} results (total: {total})")
 
-        candidate_payloads = _payload_candidates_from_points(results)
-        if req.taste_profile_id:
-            candidate_payloads = rerank_image_candidates(
-                user.id,
-                req.taste_profile_id,
-                candidate_payloads,
-                blend_weight=req.taste_profile_weight if req.taste_profile_weight is not None else 0.24,
-            )
-            candidate_payloads = candidate_payloads[offset:offset + req.page_size]
-
         formatted = []
-        for candidate in candidate_payloads:
-            item = _format_result(candidate["payload"], candidate.get("base_score") or 0)
+        for point in results:
+            item = _format_result(point.payload, getattr(point, "score", 0) or 0)
             item.pop("garments_raw", None)
             item.pop("extracted_colors_raw", None)
             formatted.append(item)
@@ -1896,49 +1988,19 @@ async def search_by_color_endpoint(
     from ..agent.qdrant_utils import format_result as _format_result
 
     color_index = get_color_index()
-    requested_page_size = (
-        _candidate_limit(req.page * req.page_size, (req.page - 1) * req.page_size, req.page_size)
-        if req.taste_profile_id
-        else req.page_size
-    )
     result = color_index.search(
         target_hex=req.hex.strip(),
         threshold=req.threshold,
         min_percentage=req.min_percentage,
         gender=req.gender,
         quarter=normalize_quarter_value(req.quarter),
-        page=1 if req.taste_profile_id else req.page,
-        page_size=requested_page_size,
+        page=req.page,
+        page_size=req.page_size,
     )
 
-    color_candidates: list[dict[str, Any]] = []
-    for index, (_pct, _dist, payload) in enumerate(result["results"]):
-        image_id = str(payload.get("image_id") or "")
-        if not image_id:
-            continue
-        color_payload = dict(payload)
-        color_payload.setdefault("image_id", image_id)
-        color_candidates.append(
-            {
-                "image_id": image_id,
-                "payload": color_payload,
-                "base_rank": index,
-            }
-        )
-
-    if req.taste_profile_id:
-        offset = (req.page - 1) * req.page_size
-        color_candidates = rerank_image_candidates(
-            user.id,
-            req.taste_profile_id,
-            color_candidates,
-            blend_weight=req.taste_profile_weight if req.taste_profile_weight is not None else 0.24,
-        )
-        color_candidates = color_candidates[offset:offset + req.page_size]
-
     formatted = []
-    for candidate in color_candidates:
-        item = _format_result(candidate["payload"], 0)
+    for _pct, _dist, payload in result["results"]:
+        item = _format_result(payload, 0)
         item.pop("garments_raw", None)
         item.pop("extracted_colors_raw", None)
         formatted.append(item)
@@ -1946,8 +2008,8 @@ async def search_by_color_endpoint(
     return {
         "images": _annotate_catalog_images_for_user(user.id, formatted),
         "total": result["total"],
-        "page": result["page"],
-        "page_size": result["page_size"],
+        "page": req.page,
+        "page_size": req.page_size,
         "has_more": result["has_more"],
     }
 
@@ -1961,6 +2023,15 @@ async def get_sessions(
     """Get all chat sessions for the authenticated user."""
     sessions = list_sessions(user.id)
     return {"success": True, "data": sessions}
+
+
+@router.get("/preferences/options")
+async def list_chat_preference_options_endpoint(
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+):
+    """Expose live retrieval preference options derived from the current Qdrant catalog."""
+    _ = user
+    return {"success": True, "data": _serialize_chat_preference_options()}
 
 
 @router.post("/sessions")

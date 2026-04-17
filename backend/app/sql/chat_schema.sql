@@ -185,6 +185,28 @@ CREATE TRIGGER favorite_collections_updated_at
 CREATE INDEX IF NOT EXISTS idx_favorite_collections_user_updated
     ON favorite_collections(user_id, updated_at DESC, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS system_taste_profiles (
+    key                 TEXT PRIMARY KEY,
+    source_type         TEXT NOT NULL DEFAULT 'brand_curation',
+    profile_status      TEXT NOT NULL DEFAULT 'empty'
+                        CHECK (profile_status IN ('empty', 'ready', 'unavailable')),
+    profile_vector      JSONB,
+    profile_vector_type TEXT NOT NULL DEFAULT 'fashion_clip',
+    metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION system_taste_profiles_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS system_taste_profiles_updated_at ON system_taste_profiles;
+CREATE TRIGGER system_taste_profiles_updated_at
+    BEFORE UPDATE ON system_taste_profiles
+    FOR EACH ROW EXECUTE FUNCTION system_taste_profiles_set_updated_at();
+
 CREATE TABLE IF NOT EXISTS favorite_collection_items (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     collection_id   UUID NOT NULL,

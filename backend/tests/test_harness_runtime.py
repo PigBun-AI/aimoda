@@ -375,15 +375,23 @@ class HarnessRuntimeTest(unittest.TestCase):
         plan = build_runtime_plan(
             query_text="我想看连衣裙",
             has_images=False,
-            session_preferences={"gender": "female", "quarter": "fw", "year": 2023},
+            session_preferences={
+                "gender": "female",
+                "season_groups": ["秋冬"],
+                "years": [2023, 2024],
+                "sources": ["wwd", "vogue"],
+                "image_types": ["model_photo", "flat_lay"],
+            },
         )
 
-        hard_filters = {(item["dimension"], item["value"]) for item in plan["hard_filters"]}
+        hard_filters = plan["hard_filters"]
         self.assertEqual(plan["default_category"], "dress")
-        self.assertIn(("category", "dress"), hard_filters)
-        self.assertIn(("gender", "female"), hard_filters)
-        self.assertIn(("quarter", "秋冬"), hard_filters)
-        self.assertIn(("year_min", 2023), hard_filters)
+        self.assertIn({"dimension": "category", "value": "dress", "source": "category_inference"}, hard_filters)
+        self.assertIn({"dimension": "gender", "value": "female", "source": "session_preference"}, hard_filters)
+        self.assertIn({"dimension": "quarter", "value": ["早秋", "秋冬"], "source": "session_preference"}, hard_filters)
+        self.assertIn({"dimension": "year", "value": [2024, 2023], "source": "session_preference"}, hard_filters)
+        self.assertIn({"dimension": "source_site", "value": ["wwd", "vogue"], "source": "session_preference"}, hard_filters)
+        self.assertIn({"dimension": "image_type", "value": ["model_photo", "flat_lay"], "source": "session_preference"}, hard_filters)
         self.assertEqual(plan["next_step_hint"], "start_collection")
 
     @patch("backend.app.agent.tools.count_session", return_value=18)

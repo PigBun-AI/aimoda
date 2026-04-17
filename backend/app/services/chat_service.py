@@ -24,7 +24,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..config import settings
 from ..llm_factory import build_llm_with_fallback
-from ..value_normalization import normalize_quarter_value
+from ..value_normalization import (
+    CANONICAL_SEASON_GROUPS,
+    normalize_image_type_list,
+    normalize_season_group_list,
+    normalize_site_list,
+    normalize_year_list,
+)
 
 DEFAULT_SESSION_TITLE = "新对话"
 IMAGE_SEARCH_SESSION_TITLE = "图片检索"
@@ -222,18 +228,33 @@ def _normalize_preference_gender(value: Any) -> str | None:
     return None
 
 
-def _normalize_preference_quarter(value: Any) -> str | None:
-    return normalize_quarter_value(value)
+def _normalize_preference_season_groups(preferences: dict[str, Any]) -> list[str]:
+    if preferences.get("quarter") not in (None, ""):
+        return sorted(
+            normalize_season_group_list(preferences.get("quarter")),
+            key=lambda item: CANONICAL_SEASON_GROUPS.index(item) if item in CANONICAL_SEASON_GROUPS else 99,
+        )
+    values = preferences.get("season_groups")
+    normalized = normalize_season_group_list(values)
+    return sorted(
+        normalized,
+        key=lambda item: CANONICAL_SEASON_GROUPS.index(item) if item in CANONICAL_SEASON_GROUPS else 99,
+    )
 
 
-def _normalize_preference_year(value: Any) -> int | None:
-    if value in (None, ""):
-        return None
-    try:
-        year = int(value)
-    except (TypeError, ValueError):
-        return None
-    return year if 1900 <= year <= 2100 else None
+def _normalize_preference_years(preferences: dict[str, Any]) -> list[int]:
+    if preferences.get("year") not in (None, ""):
+        return normalize_year_list(preferences.get("year"))
+    values = preferences.get("years")
+    return normalize_year_list(values)
+
+
+def _normalize_preference_sources(preferences: dict[str, Any]) -> list[str]:
+    return sorted(normalize_site_list(preferences.get("sources")))
+
+
+def _normalize_preference_image_types(preferences: dict[str, Any]) -> list[str]:
+    return normalize_image_type_list(preferences.get("image_types"))
 
 
 def _normalize_preference_taste_profile_id(value: Any) -> str | None:
@@ -261,8 +282,10 @@ def _normalize_session_preferences(preferences: dict | None) -> dict[str, Any]:
     taste_profile_id = _normalize_preference_taste_profile_id(payload.get("taste_profile_id"))
     return {
         "gender": _normalize_preference_gender(payload.get("gender")),
-        "quarter": _normalize_preference_quarter(payload.get("quarter")),
-        "year": _normalize_preference_year(payload.get("year")),
+        "season_groups": _normalize_preference_season_groups(payload),
+        "years": _normalize_preference_years(payload),
+        "sources": _normalize_preference_sources(payload),
+        "image_types": _normalize_preference_image_types(payload),
         "taste_profile_id": taste_profile_id,
         "taste_profile_weight": _normalize_preference_taste_weight(payload.get("taste_profile_weight")),
     }

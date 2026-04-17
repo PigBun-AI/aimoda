@@ -1,19 +1,57 @@
 from __future__ import annotations
 
+import json
 import math
+import time
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
+
+from qdrant_client.models import FieldCondition, Filter, MatchAny
 
 from ..agent.qdrant_utils import get_collection as get_qdrant_collection_name
 from ..agent.qdrant_utils import get_qdrant
-from ..repositories import favorite_repo
-from ..value_normalization import normalize_qdrant_point_id
+from ..config import settings
+from ..repositories import favorite_repo, system_taste_profile_repo
+from ..value_normalization import normalize_brand_key
 
 DEFAULT_TASTE_BLEND_WEIGHT = 0.24
 DEFAULT_TASTE_VECTOR_TYPE = "fashion_clip"
+DEFAULT_SYSTEM_TASTE_BLEND_WEIGHT = 0.18
+SYSTEM_TASTE_PROFILE_CACHE_TTL_SECONDS = 60.0
+_SYSTEM_DNA_BRANDS_PATH = Path(__file__).resolve().parents[2] / "data" / "aimoda_system_dna_brands.json"
+_SYSTEM_TASTE_PROFILE_CACHE: dict[str, tuple[float, list[float]]] = {}
 
 
 class TasteProfileNotReadyError(RuntimeError):
     pass
+
+
+@lru_cache(maxsize=1)
+def _load_system_dna_brand_order() -> dict[str, int]:
+    try:
+        raw_payload = json.loads(_SYSTEM_DNA_BRANDS_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+    if not isinstance(raw_payload, list):
+        return {}
+
+    ordered: dict[str, int] = {}
+    for index, item in enumerate(raw_payload):
+        brand_key = normalize_brand_key(item)
+        if brand_key and brand_key not in ordered:
+            ordered[brand_key] = index
+    return ordered
+
+
+def clear_system_taste_profile_cache(vector_type: str | None = None) -> None:
+    if vector_type is None:
+        _SYSTEM_TASTE_PROFILE_CACHE.clear()
+        return
+    normalized_vector_type = str(vector_type or "").strip()
+    if normalized_vector_type:
+        _SYSTEM_TASTE_PROFILE_CACHE.pop(normalized_vector_type, None)
 
 
 def normalize_taste_blend_weight(value: Any, *, default: float = DEFAULT_TASTE_BLEND_WEIGHT) -> float:
@@ -48,23 +86,201 @@ def _blend_vectors(
     return _normalize_vector(fused)
 
 
-def _cosine_similarity(left: list[float], right: list[float]) -> float:
-    if len(left) != len(right) or not left:
-        return 0.0
-    return sum(a * b for a, b in zip(left, right))
+def _collect_brand_value_variants(client) -> dict[str, list[str]]:
+    brand_order = _load_system_dna_brand_order()
+    if not brand_order:
+        return {}
+
+    try:
+        response = client.facet(
+            collection_name=get_qdrant_collection_name(),
+            key="brand",
+            limit=max(int(getattr(settings, "AIMODA_SYSTEM_DNA_FACET_LIMIT", 4096) or 4096), 1),
+            exact=False,
+        )
+    except Exception:
+        return {}
+
+    variants: dict[str, list[str]] = {}
+    for hit in getattr(response, "hits", []) or []:
+        value = getattr(hit, "value", None)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        brand_key = normalize_brand_key(value)
+        if not brand_key or brand_key not in brand_order:
+            continue
+        brand_variants = variants.setdefault(brand_key, [])
+        if value not in brand_variants:
+            brand_variants.append(value)
+    return variants
 
 
-def _normalize_base_scores(candidates: list[dict[str, Any]]) -> list[float]:
-    explicit_scores = [candidate.get("base_score") for candidate in candidates]
-    if all(isinstance(score, (int, float)) for score in explicit_scores):
-        numeric_scores = [float(score) for score in explicit_scores]
-        score_min = min(numeric_scores)
-        score_max = max(numeric_scores)
-        if score_max - score_min > 1e-9:
-            return [(score - score_min) / (score_max - score_min) for score in numeric_scores]
+def _collect_brand_vectors(
+    client,
+    *,
+    collection_name: str,
+    brand_values: list[str],
+    vector_type: str,
+) -> list[list[float]]:
+    if not brand_values:
+        return []
 
-    total = max(len(candidates) - 1, 1)
-    return [1.0 - (index / total) for index in range(len(candidates))]
+    scroll_batch_size = max(int(getattr(settings, "AIMODA_SYSTEM_DNA_SCROLL_BATCH_SIZE", 128) or 128), 1)
+    scroll_filter = Filter(must=[FieldCondition(key="brand", match=MatchAny(any=brand_values))])
+
+    vectors: list[list[float]] = []
+    next_offset: str | int | None = None
+    while True:
+        points, next_offset = client.scroll(
+            collection_name=collection_name,
+            scroll_filter=scroll_filter,
+            limit=scroll_batch_size,
+            offset=next_offset,
+            with_payload=False,
+            with_vectors=[vector_type],
+        )
+        if not points:
+            break
+
+        for point in points:
+            point_vectors = getattr(point, "vector", None)
+            if not isinstance(point_vectors, dict):
+                continue
+            raw_vector = point_vectors.get(vector_type)
+            if not isinstance(raw_vector, list) or not raw_vector:
+                continue
+            vectors.append(_normalize_vector([float(value) for value in raw_vector]))
+
+        if next_offset is None:
+            break
+
+    return vectors
+
+
+def _centroid(vectors: list[list[float]]) -> list[float] | None:
+    if not vectors:
+        return None
+
+    dimension = len(vectors[0])
+    if dimension <= 0:
+        return None
+
+    centroid = [0.0] * dimension
+    valid_count = 0
+    for vector in vectors:
+        if len(vector) != dimension:
+            continue
+        valid_count += 1
+        for index, value in enumerate(vector):
+            centroid[index] += value
+
+    if valid_count <= 0:
+        return None
+
+    return _normalize_vector([value / valid_count for value in centroid])
+
+
+def build_system_taste_profile(*, preferred_vector_type: str | None = None) -> tuple[list[float], str, dict[str, Any]]:
+    vector_type = str(preferred_vector_type or DEFAULT_TASTE_VECTOR_TYPE).strip() or DEFAULT_TASTE_VECTOR_TYPE
+    brand_order = _load_system_dna_brand_order()
+    if not brand_order:
+        raise TasteProfileNotReadyError("system taste profile missing")
+
+    client = get_qdrant()
+    collection_name = get_qdrant_collection_name()
+    brand_variants = _collect_brand_value_variants(client)
+    brand_centroids: list[list[float]] = []
+    matched_brands = 0
+    matched_images = 0
+
+    for brand_key, _rank in sorted(brand_order.items(), key=lambda item: item[1]):
+        variants = brand_variants.get(brand_key)
+        if not variants:
+            continue
+        vectors = _collect_brand_vectors(
+            client,
+            collection_name=collection_name,
+            brand_values=variants,
+            vector_type=vector_type,
+        )
+        centroid = _centroid(vectors)
+        if centroid is None:
+            continue
+        matched_brands += 1
+        matched_images += len(vectors)
+        brand_centroids.append(centroid)
+
+    system_profile = _centroid(brand_centroids)
+    if system_profile is None:
+        raise TasteProfileNotReadyError("system taste profile unavailable")
+
+    metadata = {
+        "curated_brand_count": len(brand_order),
+        "matched_brand_count": matched_brands,
+        "matched_image_count": matched_images,
+        "vector_dimension": len(system_profile),
+    }
+    return system_profile, vector_type, metadata
+
+
+def rebuild_system_taste_profile(*, preferred_vector_type: str | None = None) -> dict[str, Any]:
+    vector_type = str(preferred_vector_type or DEFAULT_TASTE_VECTOR_TYPE).strip() or DEFAULT_TASTE_VECTOR_TYPE
+    try:
+        profile_vector, profile_vector_type, metadata = build_system_taste_profile(
+            preferred_vector_type=vector_type,
+        )
+        row = system_taste_profile_repo.upsert_system_taste_profile(
+            profile_status="ready",
+            profile_vector=profile_vector,
+            profile_vector_type=profile_vector_type,
+            metadata=metadata,
+        )
+    except TasteProfileNotReadyError:
+        row = system_taste_profile_repo.upsert_system_taste_profile(
+            profile_status="unavailable",
+            profile_vector=None,
+            profile_vector_type=vector_type,
+            metadata={
+                "curated_brand_count": len(_load_system_dna_brand_order()),
+                "matched_brand_count": 0,
+                "matched_image_count": 0,
+            },
+        )
+        clear_system_taste_profile_cache(vector_type)
+        raise
+
+    clear_system_taste_profile_cache(profile_vector_type)
+    _SYSTEM_TASTE_PROFILE_CACHE[profile_vector_type] = (time.monotonic(), profile_vector)
+    return row
+
+
+def get_system_taste_profile_status() -> dict[str, Any] | None:
+    return system_taste_profile_repo.get_system_taste_profile()
+
+
+def get_system_taste_profile(*, preferred_vector_type: str | None = None) -> tuple[list[float], str]:
+    vector_type = str(preferred_vector_type or DEFAULT_TASTE_VECTOR_TYPE).strip() or DEFAULT_TASTE_VECTOR_TYPE
+    cache_ttl_seconds = max(
+        float(getattr(settings, "AIMODA_SYSTEM_DNA_CACHE_TTL_SECONDS", SYSTEM_TASTE_PROFILE_CACHE_TTL_SECONDS) or SYSTEM_TASTE_PROFILE_CACHE_TTL_SECONDS),
+        0.0,
+    )
+    cached = _SYSTEM_TASTE_PROFILE_CACHE.get(vector_type)
+    if cached and (cache_ttl_seconds <= 0 or (time.monotonic() - cached[0]) < cache_ttl_seconds):
+        return cached[1], vector_type
+
+    row = system_taste_profile_repo.get_system_taste_profile()
+    if not row or row.get("profile_status") != "ready":
+        raise TasteProfileNotReadyError("system taste profile not ready")
+    if str(row.get("profile_vector_type") or DEFAULT_TASTE_VECTOR_TYPE) != vector_type:
+        raise TasteProfileNotReadyError("system taste profile vector mismatch")
+
+    raw_vector = row.get("profile_vector")
+    if not isinstance(raw_vector, list) or not raw_vector:
+        raise TasteProfileNotReadyError("system taste profile empty")
+
+    normalized_vector = _normalize_vector([float(value) for value in raw_vector])
+    _SYSTEM_TASTE_PROFILE_CACHE[vector_type] = (time.monotonic(), normalized_vector)
+    return normalized_vector, vector_type
 
 
 def get_taste_profile(user_id: int, taste_profile_id: str) -> tuple[list[float], str]:
@@ -95,37 +311,62 @@ def apply_taste_profile_to_query(
     query_vector: list[float] | None,
     query_vector_type: str | None,
     blend_weight: float = DEFAULT_TASTE_BLEND_WEIGHT,
+    system_blend_weight: float | None = None,
 ) -> tuple[list[float] | None, str | None]:
-    """Condition the query embedding with the user's collection DNA.
-
-    This is retrieval-time query steering, not post-retrieval reranking.
-    If the base query has no vector, the taste vector itself becomes the
-    ranking query. If vector spaces mismatch, the original query is kept.
-    """
-    if not taste_profile_id:
+    """Blend either the system DNA or the user DNA into the raw query embedding."""
+    if query_vector is None:
         return query_vector, query_vector_type
+
+    effective_vector = _normalize_vector([float(value) for value in query_vector])
+    effective_vector_type = str(query_vector_type or "").strip() or DEFAULT_TASTE_VECTOR_TYPE
+
+    if taste_profile_id:
+        try:
+            taste_vector, taste_vector_type = get_taste_profile(user_id, taste_profile_id)
+        except TasteProfileNotReadyError:
+            return effective_vector, effective_vector_type
+
+        if effective_vector_type != taste_vector_type:
+            return effective_vector, effective_vector_type
+
+        fused_vector = _blend_vectors(
+            effective_vector,
+            taste_vector,
+            blend_weight=blend_weight,
+        )
+        if fused_vector is None:
+            return effective_vector, effective_vector_type
+        return fused_vector, effective_vector_type
+
+    default_system_weight = float(
+        getattr(settings, "AIMODA_SYSTEM_DNA_BLEND_WEIGHT", DEFAULT_SYSTEM_TASTE_BLEND_WEIGHT)
+        or DEFAULT_SYSTEM_TASTE_BLEND_WEIGHT
+    )
+    system_weight = normalize_taste_blend_weight(
+        system_blend_weight,
+        default=default_system_weight,
+    )
+    if system_weight <= 0:
+        return effective_vector, effective_vector_type
 
     try:
-        taste_vector, taste_vector_type = get_taste_profile(user_id, taste_profile_id)
+        system_vector, system_vector_type = get_system_taste_profile(
+            preferred_vector_type=effective_vector_type,
+        )
     except TasteProfileNotReadyError:
-        return query_vector, query_vector_type
+        return effective_vector, effective_vector_type
 
-    if query_vector is None:
-        return taste_vector, taste_vector_type
-
-    normalized_query_vector = _normalize_vector([float(value) for value in query_vector])
-    normalized_query_type = str(query_vector_type or "").strip() or taste_vector_type
-    if normalized_query_type != taste_vector_type:
-        return normalized_query_vector, normalized_query_type
+    if system_vector_type != effective_vector_type:
+        return effective_vector, effective_vector_type
 
     fused_vector = _blend_vectors(
-        normalized_query_vector,
-        taste_vector,
-        blend_weight=blend_weight,
+        effective_vector,
+        system_vector,
+        blend_weight=system_weight,
     )
     if fused_vector is None:
-        return normalized_query_vector, normalized_query_type
-    return fused_vector, normalized_query_type
+        return effective_vector, effective_vector_type
+    return fused_vector, effective_vector_type
 
 
 def rerank_image_candidates(
@@ -135,57 +376,9 @@ def rerank_image_candidates(
     *,
     blend_weight: float = DEFAULT_TASTE_BLEND_WEIGHT,
 ) -> list[dict[str, Any]]:
-    if not taste_profile_id or not candidates:
-        return candidates
-    blend_weight = normalize_taste_blend_weight(blend_weight)
+    """Legacy compatibility wrapper.
 
-    try:
-        taste_vector, vector_type = get_taste_profile(user_id, taste_profile_id)
-    except TasteProfileNotReadyError:
-        return candidates
-
-    point_ids = [point_id for candidate in candidates if (point_id := normalize_qdrant_point_id(candidate.get("image_id"))) is not None]
-    if not point_ids:
-        return candidates
-
-    client = get_qdrant()
-    collection_name = get_qdrant_collection_name()
-    points = client.retrieve(
-        collection_name=collection_name,
-        ids=point_ids,
-        with_vectors=[vector_type],
-        with_payload=False,
-    )
-    vector_map: dict[str, list[float]] = {}
-    for point in points:
-        raw_vectors = getattr(point, "vector", None)
-        if not isinstance(raw_vectors, dict):
-            continue
-        raw_vector = raw_vectors.get(vector_type)
-        if not isinstance(raw_vector, list) or not raw_vector:
-            continue
-        vector_map[str(point.id)] = _normalize_vector([float(value) for value in raw_vector])
-
-    if not vector_map:
-        return candidates
-
-    base_scores = _normalize_base_scores(candidates)
-    weighted_candidates: list[dict[str, Any]] = []
-    for index, candidate in enumerate(candidates):
-        image_id = str(candidate.get("image_id") or "")
-        candidate_vector = vector_map.get(image_id)
-        similarity = _cosine_similarity(taste_vector, candidate_vector) if candidate_vector else 0.0
-        candidate["taste_similarity"] = similarity
-        similarity_normalized = max(0.0, min(1.0, (similarity + 1.0) / 2.0))
-        final_score = (base_scores[index] * (1.0 - blend_weight)) + (similarity_normalized * blend_weight)
-        candidate["taste_rank_score"] = final_score
-        weighted_candidates.append(candidate)
-
-    weighted_candidates.sort(
-        key=lambda candidate: (
-            -float(candidate.get("taste_rank_score") or 0.0),
-            -float(candidate.get("base_score") or 0.0),
-            int(candidate.get("base_rank") or 0),
-        )
-    )
-    return weighted_candidates
+    DNA preferences now apply at query-embedding time instead of post-retrieval,
+    so candidate ordering is left unchanged here.
+    """
+    return candidates

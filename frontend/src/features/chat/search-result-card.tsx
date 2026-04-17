@@ -15,6 +15,7 @@ import type { SearchResultData, ImageResult, ChatSessionPreferences } from './ch
 import { FashionImage } from './fashion-image'
 import { CHAT_THUMBNAIL_MAX_EDGE } from './oss-image'
 import { AdminImageDeleteButton } from './admin-image-delete-button'
+import { formatChatPreferenceSiteLabel, getChatPreferenceImageTypeLabel } from './chat-preference-utils'
 
 interface SearchResultCardProps {
   data: SearchResultData
@@ -38,8 +39,15 @@ function formatFilterTag(filter: string, t: (key: string, options?: Record<strin
   const parts = filter.split('=')
   if (parts.length === 2) {
     let [dim, val] = parts
+    const segments = val.split(',').map(item => item.trim()).filter(Boolean)
     if (dim === 'quarter') {
-      val = normalizeQuarterLabel(val, t)
+      val = segments.map(item => normalizeQuarterLabel(item, t)).join(' / ')
+    } else if (dim === 'site') {
+      val = segments.map(item => formatChatPreferenceSiteLabel(item)).join(' / ')
+    } else if (dim === 'image_type') {
+      val = segments.map(item => getChatPreferenceImageTypeLabel(item, t)).join(' / ')
+    } else if (dim === 'year') {
+      val = segments.join(' / ')
     }
     // Show dimension:value for garment tags, just value for simple ones
     if (dim === 'category') return val

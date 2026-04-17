@@ -6,11 +6,11 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { ChatInput } from './chat-input'
-import { getChatArtifact, resolveSearchPlanRef } from './chat-api'
+import { getChatArtifact, getChatPreferenceOptions, resolveSearchPlanRef } from './chat-api'
 import { ImageDrawer } from './image-drawer'
 import { MessageBubble } from './message-bubble'
 import { ChatPreferencesBar } from './chat-preferences-bar'
-import type { ChatComposerInput, ChatSessionPreferences } from './chat-types'
+import type { ChatComposerInput, ChatPreferenceOptions, ChatSessionPreferences } from './chat-types'
 import type { MessageRefTarget } from './message-refs'
 import { useChat } from './chat-hooks'
 import { useChatLayoutStore } from './chat-layout-store'
@@ -20,60 +20,23 @@ import { useMembershipStatus } from '@/features/membership/use-membership'
 import { listFavoriteCollections, type FavoriteCollection } from '@/features/favorites/favorites-api'
 import { cn } from '@/lib/utils'
 import { useIsDesktop } from '@/lib/use-breakpoint'
+import {
+  areChatPreferencesEqual,
+  buildDefaultChatPreferenceOptions,
+  DEFAULT_CHAT_PREFERENCE_WEIGHT,
+  hasActiveChatPreferences,
+  normalizeChatPreferences,
+  summarizeChatPreferences,
+} from './chat-preference-utils'
 
 const EMPTY_CHAT_PREFERENCES: ChatSessionPreferences = {
   gender: null,
-  quarter: null,
-  year: null,
+  season_groups: [],
+  years: [],
+  sources: [],
+  image_types: [],
   taste_profile_id: null,
-  taste_profile_weight: 0.24,
-}
-
-function normalizeChatPreferences(preferences?: ChatSessionPreferences | null): ChatSessionPreferences {
-  return {
-    gender: preferences?.gender ?? null,
-    quarter: preferences?.quarter ?? null,
-    year: preferences?.year ?? null,
-    taste_profile_id: preferences?.taste_profile_id ?? null,
-    taste_profile_weight: preferences?.taste_profile_weight ?? 0.24,
-  }
-}
-
-function hasActiveChatPreferences(preferences: ChatSessionPreferences) {
-  return Boolean(
-    preferences.gender
-    || preferences.quarter
-    || preferences.year
-    || preferences.taste_profile_id,
-  )
-}
-
-function areChatPreferencesEqual(left: ChatSessionPreferences, right: ChatSessionPreferences) {
-  return (
-    (left.gender ?? null) === (right.gender ?? null)
-    && (left.quarter ?? null) === (right.quarter ?? null)
-    && (left.year ?? null) === (right.year ?? null)
-    && (left.taste_profile_id ?? null) === (right.taste_profile_id ?? null)
-    && (left.taste_profile_weight ?? 0.24) === (right.taste_profile_weight ?? 0.24)
-  )
-}
-
-function getQuarterPreferenceLabel(
-  quarter: ChatSessionPreferences['quarter'],
-  t: (key: string, options?: Record<string, unknown>) => string,
-) {
-  switch (quarter) {
-    case '早春':
-      return t('chatPreferenceQuarterResort')
-    case '春夏':
-      return t('chatPreferenceQuarterSS')
-    case '早秋':
-      return t('chatPreferenceQuarterPreFall')
-    case '秋冬':
-      return t('chatPreferenceQuarterFW')
-    default:
-      return ''
-  }
+  taste_profile_weight: DEFAULT_CHAT_PREFERENCE_WEIGHT,
 }
 
 function LoadingIndicator() {
@@ -134,6 +97,7 @@ export function ChatPage() {
   const chatInputDisabled = membershipBlocked || isLimitExceeded
   const [isCreatingParallelSession, setIsCreatingParallelSession] = useState(false)
   const [preferenceCollections, setPreferenceCollections] = useState<FavoriteCollection[]>([])
+  const [preferenceOptions, setPreferenceOptions] = useState<ChatPreferenceOptions>(() => buildDefaultChatPreferenceOptions())
   const [draftPreferences, setDraftPreferences] = useState<ChatSessionPreferences>(EMPTY_CHAT_PREFERENCES)
   const [preferenceEditor, setPreferenceEditor] = useState<ChatSessionPreferences>(EMPTY_CHAT_PREFERENCES)
   const [isPreferencesDialogOpen, setIsPreferencesDialogOpen] = useState(false)
@@ -177,7 +141,7 @@ export function ChatPage() {
     activeSessionId,
     {
       taste_profile_id: draftPreferences.taste_profile_id ?? null,
-      taste_profile_weight: draftPreferences.taste_profile_weight ?? 0.24,
+      taste_profile_weight: draftPreferences.taste_profile_weight ?? DEFAULT_CHAT_PREFERENCE_WEIGHT,
     },
   )
   const isSessionRunning = activeSession?.execution_status === 'running'
@@ -234,6 +198,16 @@ export function ChatPage() {
       })
       .catch(() => {
         setPreferenceCollections([])
+      })
+  }, [])
+
+  useEffect(() => {
+    getChatPreferenceOptions()
+      .then(result => {
+        setPreferenceOptions(result)
+      })
+      .catch(() => {
+        setPreferenceOptions(buildDefaultChatPreferenceOptions())
       })
   }, [])
 
@@ -423,25 +397,10 @@ export function ChatPage() {
     </div>
   ) : null
 
-  const preferenceSummary = useMemo(() => {
-    const parts: string[] = []
-    if (draftPreferences.gender) {
-      parts.push(t(draftPreferences.gender === 'female' ? 'chatPreferenceFemale' : 'chatPreferenceMale'))
-    }
-    if (draftPreferences.quarter) {
-      parts.push(getQuarterPreferenceLabel(draftPreferences.quarter, t))
-    }
-    if (draftPreferences.year) {
-      parts.push(String(draftPreferences.year))
-    }
-    if (draftPreferences.taste_profile_id) {
-      const matchedCollection = preferenceCollections.find(collection => collection.id === draftPreferences.taste_profile_id)
-      if (matchedCollection?.name) {
-        parts.push(matchedCollection.name)
-      }
-    }
-    return parts.length > 0 ? parts.join(' · ') : t('chatPreferenceAll')
-  }, [draftPreferences, preferenceCollections, t])
+  const preferenceSummary = useMemo(
+    () => summarizeChatPreferences(draftPreferences, preferenceCollections, t),
+    [draftPreferences, preferenceCollections, t],
+  )
 
   const hasPendingPreferenceChanges = !areChatPreferencesEqual(draftPreferences, preferenceEditor)
 
@@ -615,6 +574,7 @@ export function ChatPage() {
 
           <ChatPreferencesBar
             value={preferenceEditor}
+            options={preferenceOptions}
             collections={preferenceCollections}
             onChange={handlePreferencesChange}
             showHeader={false}

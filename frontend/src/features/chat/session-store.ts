@@ -7,6 +7,7 @@ import { useSyncExternalStore } from 'react'
 import i18n from '@/i18n'
 import type { ChatSession, ChatSessionPreferences } from './chat-types'
 import { removeSessionMessages, resetChatMessageStore } from './chat-message-store'
+import { areChatPreferencesEqual, normalizeChatPreferences } from './chat-preference-utils'
 import {
   listSessions as apiListSessions,
   createSession as apiCreateSession,
@@ -142,31 +143,6 @@ function mergeNotifications(current: SessionNotification[], incoming: SessionNot
   return nextItems.length > 0 ? [...nextItems, ...current] : current
 }
 
-function normalizePreferences(preferences: ChatSessionPreferences | null | undefined): ChatSessionPreferences {
-  return {
-    gender: preferences?.gender ?? null,
-    quarter: preferences?.quarter ?? null,
-    year: preferences?.year ?? null,
-    taste_profile_id: preferences?.taste_profile_id ?? null,
-    taste_profile_weight: preferences?.taste_profile_weight ?? 0.24,
-  }
-}
-
-function arePreferencesEqual(
-  left: ChatSessionPreferences | null | undefined,
-  right: ChatSessionPreferences | null | undefined,
-): boolean {
-  const normalizedLeft = normalizePreferences(left)
-  const normalizedRight = normalizePreferences(right)
-  return (
-    normalizedLeft.gender === normalizedRight.gender
-    && normalizedLeft.quarter === normalizedRight.quarter
-    && normalizedLeft.year === normalizedRight.year
-    && normalizedLeft.taste_profile_id === normalizedRight.taste_profile_id
-    && normalizedLeft.taste_profile_weight === normalizedRight.taste_profile_weight
-  )
-}
-
 function reconcileFetchedSession(previous: ChatSession | undefined, incoming: ChatSession): ChatSession {
   if (!previous) return incoming
 
@@ -201,19 +177,19 @@ function reconcileFetchedSession(previous: ChatSession | undefined, incoming: Ch
   const pendingPreferenceMutation = pendingSessionPreferenceMutations.get(incoming.id)
   const shouldPreserveOptimisticPreferences = (
     Boolean(pendingPreferenceMutation)
-    && !arePreferencesEqual(
+    && !areChatPreferencesEqual(
       previous.preferences,
       incoming.preferences,
     )
   ) || (
     previousUpdatedAt > incomingUpdatedAt
-    && !arePreferencesEqual(previous.preferences, incoming.preferences)
+    && !areChatPreferencesEqual(previous.preferences, incoming.preferences)
   )
 
   if (shouldPreserveOptimisticPreferences) {
     next = {
       ...next,
-      preferences: normalizePreferences(
+      preferences: normalizeChatPreferences(
         pendingPreferenceMutation?.preferences ?? previous.preferences,
       ),
       updated_at: pendingPreferenceMutation?.updatedAt ?? previous.updated_at,
@@ -359,7 +335,7 @@ export async function updateSessionChatPreferences(
   preferences: ChatSessionPreferences,
 ): Promise<ChatSession | null> {
   const now = new Date().toISOString()
-  const normalizedPreferences = normalizePreferences(preferences)
+  const normalizedPreferences = normalizeChatPreferences(preferences)
   const optimisticSessions = sortSessions(store.sessions.map(session => (
     session.id === id
       ? { ...session, preferences: normalizedPreferences, updated_at: now }

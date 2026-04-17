@@ -14,7 +14,14 @@ from qdrant_client.models import (
     Filter, FieldCondition, MatchValue, MatchAny, PayloadSchemaType, Range,
 )
 
-from ..value_normalization import normalize_quarter_list, normalize_quarter_value, normalize_text_value
+from ..value_normalization import (
+    normalize_image_type_list,
+    normalize_quarter_list,
+    normalize_quarter_value,
+    normalize_site_list,
+    normalize_text_value,
+    normalize_year_list,
+)
 
 # ═══════════════════════════════════════════════════════════════
 #  Qdrant Client Singleton
@@ -31,6 +38,8 @@ _QDRANT_PAYLOAD_INDEXES: dict[str, PayloadSchemaType] = {
     "quarter": PayloadSchemaType.KEYWORD,
     "season": PayloadSchemaType.KEYWORD,
     "year": PayloadSchemaType.INTEGER,
+    "source_site": PayloadSchemaType.KEYWORD,
+    "image_type": PayloadSchemaType.KEYWORD,
     "categories": PayloadSchemaType.KEYWORD,
     "garment_tags": PayloadSchemaType.KEYWORD,
 }
@@ -228,7 +237,8 @@ def apply_aesthetic_boost(v_pos: list[float]) -> list[float]:
 
 def build_qdrant_filter(
     categories=None, brand=None, gender=None, top_categories=None,
-    quarter=None, year_min=None, image_type=None,
+    quarter=None, year_min=None, years=None, image_type=None, image_types=None,
+    source_site=None, source_sites=None,
     garment_tags=None,
 ) -> Filter | None:
     """Build Qdrant filter using ALL available database indexes."""
@@ -237,8 +247,22 @@ def build_qdrant_filter(
         conditions.append(FieldCondition(key="brand", match=MatchValue(value=brand.lower())))
     if gender:
         conditions.append(FieldCondition(key="gender", match=MatchValue(value=gender.lower())))
-    if image_type:
-        conditions.append(FieldCondition(key="image_type", match=MatchValue(value=image_type)))
+    normalized_image_types = normalize_image_type_list(
+        image_types if image_types is not None else image_type
+    )
+    if normalized_image_types:
+        conditions.append(FieldCondition(
+            key="image_type",
+            match=MatchAny(any=normalized_image_types),
+        ))
+    normalized_source_sites = normalize_site_list(
+        source_sites if source_sites is not None else source_site
+    )
+    if normalized_source_sites:
+        conditions.append(FieldCondition(
+            key="source_site",
+            match=MatchAny(any=normalized_source_sites),
+        ))
     if categories and not garment_tags:
         conditions.append(FieldCondition(
             key="categories", match=MatchAny(any=[c.lower() for c in categories])
@@ -251,6 +275,12 @@ def build_qdrant_filter(
     if normalized_quarters:
         conditions.append(FieldCondition(
             key="quarter", match=MatchAny(any=normalized_quarters)
+        ))
+    normalized_years = normalize_year_list(years)
+    if normalized_years:
+        conditions.append(FieldCondition(
+            key="year",
+            match=MatchAny(any=normalized_years),
         ))
     if year_min:
         conditions.append(FieldCondition(key="year", range=Range(gte=year_min)))

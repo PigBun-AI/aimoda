@@ -55,6 +55,10 @@ class Settings(BaseSettings):
 
     EMBEDDING_URL: str = "http://183.62.232.22:18730"
     EMBEDDING_MODEL: str = "Marqo/marqo-fashionSigLIP"
+    AIMODA_SYSTEM_DNA_BLEND_WEIGHT: float = 0.18
+    AIMODA_SYSTEM_DNA_CACHE_TTL_SECONDS: int = 60
+    AIMODA_SYSTEM_DNA_FACET_LIMIT: int = 4096
+    AIMODA_SYSTEM_DNA_SCROLL_BATCH_SIZE: int = 128
     STYLE_KNOWLEDGE_COLLECTION: str = "style_knowledge"
     STYLE_KNOWLEDGE_EMBEDDING_URL: str = "http://183.62.232.22:18730"
     STYLE_KNOWLEDGE_EMBEDDING_MODEL: str = "infgrad/stella-mrl-large-zh-v3.5-1792d"

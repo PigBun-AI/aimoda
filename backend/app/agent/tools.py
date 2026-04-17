@@ -58,7 +58,14 @@ from ..services.fashion_vision_service import (
 )
 from ..services.style_knowledge_service import search_style_knowledge
 from ..services.style_feedback_service import record_style_gap_feedback
-from ..value_normalization import normalize_quarter_list, normalize_quarter_value, normalize_string_list_value
+from ..value_normalization import (
+    normalize_image_type_list,
+    normalize_quarter_list,
+    normalize_quarter_value,
+    normalize_site_list,
+    normalize_string_list_value,
+    normalize_year_list,
+)
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
 from .query_context import remember_session_style, remember_session_vision, set_query_context, merge_query_contexts
 from ..config import settings
@@ -263,7 +270,7 @@ def _runtime_plan_filter_entries(thread_id: str) -> list[dict]:
             continue
         if dimension == "category":
             entry = {"type": "category", "key": "category", "value": str(value).strip().lower()}
-        elif dimension in {"brand", "gender", "quarter", "year_min", "image_type"}:
+        elif dimension in {"brand", "gender", "quarter", "year", "year_min", "image_type", "source_site"}:
             entry = {"type": "meta", "key": dimension, "value": value}
         else:
             continue
@@ -395,11 +402,24 @@ def _format_filter_entry(filter_item: dict) -> str:
 
     key = str(filter_item.get("key", "")).strip()
     value = filter_item.get("value", "")
-    if key == "quarter":
+    if isinstance(value, list):
+        if key == "quarter":
+            serialized = normalize_quarter_list(value)
+        elif key == "year":
+            serialized = normalize_year_list(value)
+        elif key == "image_type":
+            serialized = normalize_image_type_list(value)
+        elif key == "source_site":
+            serialized = normalize_site_list(value)
+        else:
+            serialized = [str(item).strip() for item in value if str(item).strip()]
+        value = ",".join(str(item) for item in serialized)
+    elif key == "quarter":
         normalized = normalize_quarter_value(value)
         if normalized:
             value = normalized
-    return f"{key}={value}"
+    display_key = "site" if key == "source_site" else key
+    return f"{display_key}={value}"
 
 
 def _build_trend_cache_key(
