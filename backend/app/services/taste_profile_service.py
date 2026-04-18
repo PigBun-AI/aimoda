@@ -19,7 +19,7 @@ DEFAULT_TASTE_BLEND_WEIGHT = 0.24
 DEFAULT_TASTE_VECTOR_TYPE = "fashion_clip"
 DEFAULT_SYSTEM_TASTE_BLEND_WEIGHT = 0.18
 SYSTEM_TASTE_PROFILE_CACHE_TTL_SECONDS = 60.0
-_SYSTEM_DNA_BRANDS_PATH = Path(__file__).resolve().parents[2] / "data" / "aimoda_system_dna_brands.json"
+_SYSTEM_DNA_BRANDS_PATH = Path(__file__).resolve().parents[1] / "assets" / "aimoda_system_dna_brands.json"
 _SYSTEM_TASTE_PROFILE_CACHE: dict[str, tuple[float, list[float]]] = {}
 
 

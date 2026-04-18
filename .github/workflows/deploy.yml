@@ -40,7 +40,7 @@ jobs:
             TARGET_DIR="${{ secrets.PIXELSURGE_DEPLOY_DIR_DEV }}"
           fi
 
-          rsync -az \
+          rsync -az --delete \
             --exclude ".git/" \
             --exclude ".github/" \
             --exclude ".playwright-mcp/" \
