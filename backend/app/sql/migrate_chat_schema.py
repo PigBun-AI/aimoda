@@ -179,6 +179,64 @@ def run_migration():
 
     CREATE INDEX IF NOT EXISTS idx_context_summaries_session_version
         ON session_context_summaries(session_id, version DESC);
+
+    -- ── 5. retrieval_sessions ──
+    CREATE TABLE IF NOT EXISTS retrieval_sessions (
+        id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        actor_type          TEXT NOT NULL DEFAULT 'user'
+                            CHECK (actor_type IN ('user', 'agent')),
+        actor_id            TEXT NOT NULL DEFAULT '',
+        user_id             INTEGER,
+        chat_session_id     UUID,
+        source              TEXT NOT NULL DEFAULT 'langgraph'
+                            CHECK (source IN ('langgraph', 'mcp')),
+        status              TEXT NOT NULL DEFAULT 'active'
+                            CHECK (status IN ('active', 'archived', 'closed')),
+        query               TEXT NOT NULL DEFAULT '',
+        vector_type         TEXT NOT NULL DEFAULT 'fashion_clip',
+        q_emb               JSONB NOT NULL DEFAULT '[]'::jsonb,
+        active_filters      JSONB NOT NULL DEFAULT '[]'::jsonb,
+        search_artifact_ref UUID,
+        metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT retrieval_sessions_chat_session_fkey
+            FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id) ON DELETE SET NULL
+    );
+
+    ALTER TABLE retrieval_sessions ADD COLUMN IF NOT EXISTS actor_type TEXT NOT NULL DEFAULT 'user';
+    ALTER TABLE retrieval_sessions ADD COLUMN IF NOT EXISTS actor_id TEXT NOT NULL DEFAULT '';
+    ALTER TABLE retrieval_sessions ALTER COLUMN user_id DROP NOT NULL;
+
+    UPDATE retrieval_sessions
+    SET actor_type = COALESCE(NULLIF(actor_type, ''), 'user'),
+        actor_id = CASE
+            WHEN COALESCE(NULLIF(actor_id, ''), '') <> '' THEN actor_id
+            WHEN user_id IS NOT NULL THEN user_id::text
+            ELSE actor_id
+        END
+    WHERE COALESCE(NULLIF(actor_type, ''), '') = ''
+       OR COALESCE(NULLIF(actor_id, ''), '') = '';
+
+    CREATE OR REPLACE FUNCTION retrieval_sessions_set_updated_at()
+    RETURNS TRIGGER AS $$
+    BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+    $$ LANGUAGE plpgsql;
+
+    DROP TRIGGER IF EXISTS retrieval_sessions_updated_at ON retrieval_sessions;
+    CREATE TRIGGER retrieval_sessions_updated_at
+        BEFORE UPDATE ON retrieval_sessions
+        FOR EACH ROW EXECUTE FUNCTION retrieval_sessions_set_updated_at();
+
+    ALTER TABLE retrieval_sessions DROP CONSTRAINT IF EXISTS retrieval_sessions_actor_type_check;
+    ALTER TABLE retrieval_sessions
+        ADD CONSTRAINT retrieval_sessions_actor_type_check
+        CHECK (actor_type IN ('user', 'agent'));
+
+    CREATE INDEX IF NOT EXISTS idx_retrieval_sessions_user_updated
+        ON retrieval_sessions(user_id, updated_at DESC, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_retrieval_sessions_actor_updated
+        ON retrieval_sessions(actor_type, actor_id, updated_at DESC, created_at DESC);
     """
 
     with get_pg_conn() as conn:

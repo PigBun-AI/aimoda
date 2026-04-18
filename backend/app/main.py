@@ -10,7 +10,7 @@ from .config import settings
 from .database import initialize_database
 from .exceptions import AppError
 from .postgres import close_pg_pool
-from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries, report_mcp_internal, favorites
+from .routers import auth, users, reports, admin, redemption_codes, mcp, chat, oss, galleries, report_mcp_internal, agent_mcp_internal, favorites
 from .services.favorite_upload_job_service import recover_favorite_upload_jobs
 from .services.oss_service import get_oss_service
 from .services.report_upload_job_service import recover_report_upload_jobs
@@ -286,6 +286,7 @@ app.include_router(redemption_codes.admin_router, prefix="/api")
 app.include_router(redemption_codes.user_router, prefix="/api")
 app.include_router(mcp.router, prefix="/api")
 app.include_router(report_mcp_internal.router, prefix="/api")
+app.include_router(agent_mcp_internal.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(favorites.router, prefix="/api")
 app.include_router(oss.router, prefix="/api")

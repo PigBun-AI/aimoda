@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     UPLOAD_TMP_DIR: str = "/tmp/fashion-report-uploads"
     REPORT_MCP_INTERNAL_TOKEN: str = "aimoda-report-mcp-internal-token"
     REPORT_MCP_SERVICE_USER_ID: int = 1
+    AGENT_MCP_INTERNAL_TOKEN: str = "aimoda-agent-mcp-internal-token"
 
     # --- Agent / Chat ---
     QDRANT_URL: str = "http://220.168.84.134:16333"

@@ -41,6 +41,34 @@ def require_report_mcp_internal_service(
     return x_internal_service or "unknown"
 
 
+def require_agent_mcp_internal_service(
+    x_internal_token: Annotated[str | None, Header(alias="X-Internal-Token")] = None,
+    x_internal_service: Annotated[str | None, Header(alias="X-Internal-Service")] = None,
+    x_mcp_agent_id: Annotated[str | None, Header(alias="X-MCP-Agent-Id")] = None,
+    x_mcp_agent_name: Annotated[str | None, Header(alias="X-MCP-Agent-Name")] = None,
+    x_mcp_agent_permissions: Annotated[str | None, Header(alias="X-MCP-Agent-Permissions")] = None,
+) -> dict:
+    """Dependency: verify service-to-service token for the agent MCP adapter."""
+    if not x_internal_token or x_internal_token != settings.AGENT_MCP_INTERNAL_TOKEN:
+        raise AppError("无效的内部服务令牌", 401)
+
+    agent_id = (x_mcp_agent_id or "").strip()
+    if not agent_id:
+        raise AppError("缺少 MCP Agent 身份", 401)
+
+    permissions = [
+        item.strip()
+        for item in (x_mcp_agent_permissions or "").split(",")
+        if item.strip()
+    ]
+    return {
+        "service_name": x_internal_service or "unknown",
+        "agent_id": agent_id,
+        "agent_name": (x_mcp_agent_name or "").strip() or agent_id,
+        "permissions": permissions,
+    }
+
+
 def require_role(allowed_roles: list[UserRole]):
     """Dependency factory: require specific user roles."""
 
