@@ -2,7 +2,16 @@
 
 import { ApiError, fetchWithAuth } from '@/lib/api'
 import { registerDeletedCatalogImage } from '@/features/images/image-lifecycle'
-import type { ChatArtifact, ChatSession, ChatSessionPreferences, ContentBlock, ImageResult, SearchSessionState, SSEEvent } from './chat-types'
+import type {
+  ChatArtifact,
+  ChatPreferenceOptions,
+  ChatSession,
+  ChatSessionPreferences,
+  ContentBlock,
+  ImageResult,
+  SearchSessionState,
+  SSEEvent,
+} from './chat-types'
 import type { SearchPlanMessageRef } from './message-refs'
 
 export const DEFAULT_DRAWER_PAGE_SIZE = 50
@@ -310,6 +319,13 @@ export async function listSessions(): Promise<ChatSession[]> {
   if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
   const data = await resp.json()
   return data.data ?? []
+}
+
+export async function getChatPreferenceOptions(): Promise<ChatPreferenceOptions> {
+  const resp = await fetchWithAuth('/api/chat/preferences/options')
+  if (!resp.ok) { throw new Error(`HTTP ${resp.status}`) }
+  const data = await resp.json()
+  return data.data
 }
 
 export async function createSession(title = '新对话', preferences?: ChatSessionPreferences | null): Promise<ChatSession> {

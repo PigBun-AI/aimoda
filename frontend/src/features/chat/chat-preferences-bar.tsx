@@ -1,12 +1,20 @@
-import { type ReactNode, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import type { ChatSessionPreferences } from './chat-types'
 import type { FavoriteCollection } from '@/features/favorites/favorites-api'
+
+import {
+  DEFAULT_CHAT_PREFERENCE_WEIGHT,
+  formatChatPreferenceSiteLabel,
+  getChatPreferenceImageTypeLabel,
+} from './chat-preference-utils'
+import type { ChatPreferenceOptions, ChatSessionPreferences } from './chat-types'
 
 interface ChatPreferencesBarProps {
   value: ChatSessionPreferences
+  options: ChatPreferenceOptions
   collections: FavoriteCollection[]
   onChange: (next: ChatSessionPreferences) => void
   showHeader?: boolean
@@ -21,23 +29,34 @@ export const CHAT_PREFERENCE_WEIGHT_OPTIONS = [
 ]
 
 export function normalizeChatPreferenceWeightValue(value: number | null | undefined) {
-  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 0.24
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : DEFAULT_CHAT_PREFERENCE_WEIGHT
   const matched = CHAT_PREFERENCE_WEIGHT_OPTIONS.find(option => Math.abs(option.value - numeric) < 0.001)
-  return String(matched?.value ?? 0.24)
+  return String(matched?.value ?? DEFAULT_CHAT_PREFERENCE_WEIGHT)
+}
+
+function toggleStringValue(list: string[] | null | undefined, value: string) {
+  const values = Array.isArray(list) ? [...list] : []
+  return values.includes(value)
+    ? values.filter(item => item !== value)
+    : [...values, value]
+}
+
+function toggleNumberValue(list: number[] | null | undefined, value: number) {
+  const values = Array.isArray(list) ? [...list] : []
+  return values.includes(value)
+    ? values.filter(item => item !== value)
+    : [...values, value].sort((left, right) => right - left)
 }
 
 export function ChatPreferencesBar({
   value,
+  options,
   collections,
   onChange,
   showHeader = true,
   className,
 }: ChatPreferencesBarProps) {
   const { t } = useTranslation('common')
-  const yearOptions = useMemo(() => {
-    const currentYear = new Date().getFullYear()
-    return Array.from({ length: 10 }, (_, index) => currentYear - index)
-  }, [])
 
   return (
     <div className={className ?? 'flex flex-col gap-5'}>
@@ -66,97 +85,113 @@ export function ChatPreferencesBar({
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <PreferenceField label={t('chatPreferenceGender')}>
-          <Select
-            value={value.gender ?? 'none'}
-            onValueChange={next => onChange({ ...value, gender: next === 'none' ? null : next as 'female' | 'male' })}
-          >
-            <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="rounded-none border-border/80">
-              <SelectItem value="none">{t('chatPreferenceAll')}</SelectItem>
-              <SelectItem value="female">{t('chatPreferenceFemale')}</SelectItem>
-              <SelectItem value="male">{t('chatPreferenceMale')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </PreferenceField>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)]">
+        <div className="grid gap-4 md:grid-cols-2">
+          <PreferenceField label={t('chatPreferenceGender')}>
+            <Select
+              value={value.gender ?? 'none'}
+              onValueChange={next => onChange({ ...value, gender: next === 'none' ? null : next as 'female' | 'male' })}
+            >
+              <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-none border-border/80">
+                <SelectItem value="none">{t('chatPreferenceAll')}</SelectItem>
+                <SelectItem value="female">{t('chatPreferenceFemale')}</SelectItem>
+                <SelectItem value="male">{t('chatPreferenceMale')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </PreferenceField>
 
-        <PreferenceField label={t('chatPreferenceQuarter')}>
-          <Select
-            value={value.quarter ?? 'none'}
-            onValueChange={next => onChange({ ...value, quarter: next === 'none' ? null : next as '早春' | '春夏' | '早秋' | '秋冬' })}
-          >
-            <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="rounded-none border-border/80">
-              <SelectItem value="none">{t('chatPreferenceAll')}</SelectItem>
-              <SelectItem value="早春">{t('chatPreferenceQuarterResort')}</SelectItem>
-              <SelectItem value="春夏">{t('chatPreferenceQuarterSS')}</SelectItem>
-              <SelectItem value="早秋">{t('chatPreferenceQuarterPreFall')}</SelectItem>
-              <SelectItem value="秋冬">{t('chatPreferenceQuarterFW')}</SelectItem>
-            </SelectContent>
-          </Select>
-        </PreferenceField>
+          <PreferenceField label={t('chatPreferenceTasteProfile')}>
+            <Select
+              value={value.taste_profile_id ?? 'none'}
+              onValueChange={next => onChange({ ...value, taste_profile_id: next === 'none' ? null : next })}
+            >
+              <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
+                <SelectValue placeholder={t('favoriteDrawerSelect')} />
+              </SelectTrigger>
+              <SelectContent className="rounded-none border-border/80">
+                <SelectItem value="none">{t('chatPreferenceAll')}</SelectItem>
+                {collections.map(collection => (
+                  <SelectItem key={collection.id} value={collection.id}>
+                    {collection.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </PreferenceField>
 
-        <PreferenceField label={t('chatPreferenceYear')}>
-          <Select
-            value={value.year != null ? String(value.year) : 'none'}
-            onValueChange={next => onChange({ ...value, year: next === 'none' ? null : Number(next) })}
-          >
-            <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="rounded-none border-border/80">
-              <SelectItem value="none">{t('chatPreferenceAll')}</SelectItem>
-              {yearOptions.map(year => (
-                <SelectItem key={year} value={String(year)}>
-                  {year}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </PreferenceField>
+          <PreferenceField label={t('chatPreferenceTasteWeight')}>
+            <Select
+              value={normalizeChatPreferenceWeightValue(value.taste_profile_weight)}
+              onValueChange={next => onChange({ ...value, taste_profile_weight: Number(next) })}
+              disabled={!value.taste_profile_id}
+            >
+              <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="rounded-none border-border/80">
+                {CHAT_PREFERENCE_WEIGHT_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={String(option.value)}>
+                    {t(option.labelKey)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </PreferenceField>
+        </div>
 
-        <PreferenceField label={t('chatPreferenceTasteProfile')}>
-          <Select
-            value={value.taste_profile_id ?? 'none'}
-            onValueChange={next => onChange({ ...value, taste_profile_id: next === 'none' ? null : next })}
-          >
-            <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
-              <SelectValue placeholder={t('favoriteDrawerSelect')} />
-            </SelectTrigger>
-            <SelectContent className="rounded-none border-border/80">
-              <SelectItem value="none">{t('chatPreferenceAll')}</SelectItem>
-              {collections.map(collection => (
-                <SelectItem key={collection.id} value={collection.id}>
-                  {collection.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </PreferenceField>
+        <div className="grid gap-4">
+          <PreferenceField label={t('chatPreferenceSeasonGroup')}>
+            <ToggleGrid
+              items={options.season_groups}
+              isActive={item => (value.season_groups ?? []).includes(item.value)}
+              getLabel={item => (item.value === '春夏' ? t('seasonSpringSummer') : t('seasonFallWinter'))}
+              onToggle={item => onChange({
+                ...value,
+                season_groups: toggleStringValue(value.season_groups, item.value) as Array<'春夏' | '秋冬'>,
+              })}
+            />
+          </PreferenceField>
 
-        <PreferenceField label={t('chatPreferenceTasteWeight')}>
-          <Select
-            value={normalizeChatPreferenceWeightValue(value.taste_profile_weight)}
-            onValueChange={next => onChange({ ...value, taste_profile_weight: Number(next) })}
-            disabled={!value.taste_profile_id}
-          >
-            <SelectTrigger className="h-10 rounded-none border-border/80 bg-background type-chat-meta">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="rounded-none border-border/80">
-              {CHAT_PREFERENCE_WEIGHT_OPTIONS.map(option => (
-                <SelectItem key={option.value} value={String(option.value)}>
-                  {t(option.labelKey)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </PreferenceField>
+          <PreferenceField label={t('chatPreferenceYear')}>
+            <ToggleGrid
+              items={options.years}
+              isActive={item => (value.years ?? []).includes(item.value)}
+              getLabel={item => String(item.value)}
+              onToggle={item => onChange({
+                ...value,
+                years: toggleNumberValue(value.years, item.value),
+              })}
+            />
+          </PreferenceField>
+
+          <PreferenceField label={t('chatPreferenceSite')}>
+            <ToggleGrid
+              items={options.sites}
+              isActive={item => (value.sources ?? []).includes(item.value)}
+              getLabel={item => formatChatPreferenceSiteLabel(item.value)}
+              onToggle={item => onChange({
+                ...value,
+                sources: toggleStringValue(value.sources, item.value),
+              })}
+              emptyHint={t('chatPreferenceAll')}
+            />
+          </PreferenceField>
+
+          <PreferenceField label={t('chatPreferenceImageType')}>
+            <ToggleGrid
+              items={options.image_types}
+              isActive={item => (value.image_types ?? []).includes(item.value)}
+              getLabel={item => getChatPreferenceImageTypeLabel(item.value, t)}
+              onToggle={item => onChange({
+                ...value,
+                image_types: toggleStringValue(value.image_types, item.value),
+              })}
+            />
+          </PreferenceField>
+        </div>
       </div>
     </div>
   )
@@ -174,5 +209,55 @@ function PreferenceField({
       <span className="type-chat-kicker text-muted-foreground/78">{label}</span>
       {children}
     </label>
+  )
+}
+
+function ToggleGrid<T extends string | number>({
+  items,
+  isActive,
+  getLabel,
+  onToggle,
+  emptyHint,
+}: {
+  items: Array<{ value: T; count?: number }>
+  isActive: (item: { value: T; count?: number }) => boolean
+  getLabel: (item: { value: T; count?: number }) => string
+  onToggle: (item: { value: T; count?: number }) => void
+  emptyHint?: string
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="type-chat-meta flex min-h-10 items-center border border-dashed border-border/70 px-3 text-muted-foreground/72">
+        {emptyHint ?? '—'}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map(item => {
+        const active = isActive(item)
+        return (
+          <Button
+            key={String(item.value)}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onToggle(item)}
+            className={[
+              'h-9 rounded-none px-3 type-chat-meta',
+              active ? 'border-foreground/55 bg-foreground/6 text-foreground' : 'border-border/80 bg-background text-muted-foreground',
+            ].join(' ')}
+          >
+            {getLabel(item)}
+            {typeof item.count === 'number' && item.count > 0 && (
+              <span className="ml-2 text-[11px] text-muted-foreground/72">
+                {item.count}
+              </span>
+            )}
+          </Button>
+        )
+      })}
+    </div>
   )
 }

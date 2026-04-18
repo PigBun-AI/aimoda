@@ -263,6 +263,37 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  aimoda-agent-mcp:
+    build:
+      context: ./services/aimoda-agent-mcp
+      dockerfile: Dockerfile
+    environment:
+      PORT: '18780'
+      BACKEND_URL: http://api:3000
+      BACKEND_INTERNAL_TOKEN: ${AGENT_MCP_INTERNAL_TOKEN:-aimoda-agent-mcp-internal-token}
+      BACKEND_INTERNAL_SERVICE_NAME: aimoda-agent-mcp
+    depends_on:
+      api:
+        condition: service_healthy
+    cpus: ${AGENT_MCP_CPUS:-0.5}
+    mem_limit: ${AGENT_MCP_MEM_LIMIT:-256m}
+    mem_reservation: ${AGENT_MCP_MEM_RESERVATION:-128m}
+    deploy:
+      resources:
+        limits:
+          cpus: '${AGENT_MCP_CPUS:-0.5}'
+          memory: ${AGENT_MCP_MEM_LIMIT:-256m}
+        reservations:
+          cpus: '${AGENT_MCP_CPU_RESERVATION:-0.25}'
+          memory: ${AGENT_MCP_MEM_RESERVATION:-128m}
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18780/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
   nginx:
     image: nginx:1.27-alpine
     depends_on:

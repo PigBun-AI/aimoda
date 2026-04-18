@@ -49,7 +49,7 @@ from .harness import (
     update_session_semantics,
 )
 from .color_utils import COLOR_KEYWORDS, color_matches
-from ..services.chat_service import create_artifact, set_session_agent_runtime
+from ..services.chat_service import create_artifact, get_session as get_chat_session, set_session_agent_runtime
 from ..services.chat_run_registry import ChatRunCancelledError, chat_run_registry
 from ..services.fashion_vision_service import (
     analyze_fashion_images,
@@ -58,10 +58,19 @@ from ..services.fashion_vision_service import (
 )
 from ..services.style_knowledge_service import search_style_knowledge
 from ..services.style_feedback_service import record_style_gap_feedback
-from ..value_normalization import normalize_quarter_list, normalize_quarter_value, normalize_string_list_value
+from ..value_normalization import (
+    normalize_image_type_list,
+    normalize_quarter_list,
+    normalize_quarter_value,
+    normalize_site_list,
+    normalize_string_list_value,
+    normalize_year_list,
+)
 from .query_context import get_query_context, average_embeddings, get_session_image_blocks
 from .query_context import remember_session_style, remember_session_vision, set_query_context, merge_query_contexts
 from ..config import settings
+from .tool_registry import ToolActor, ToolExecutionContext, execute_registered_tool, list_tool_specs
+from ..services.retrieval_session_engine import RetrievalSessionEngineError
 
 def _structured_filter_error(
     *,
@@ -251,6 +260,389 @@ def _persist_runtime_semantics(
         return
 
 
+def _build_registered_tool_context(
+    *,
+    config: RunnableConfig | None,
+) -> ToolExecutionContext:
+    thread_id = get_thread_id(config or {"configurable": {}})
+    chat_session_id = _session_id_from_config(config)
+    actor_user_id = None
+    if chat_session_id:
+        try:
+            session_record = get_chat_session(chat_session_id)
+            if session_record and session_record.get("user_id") is not None:
+                actor_user_id = int(session_record["user_id"])
+        except Exception:
+            actor_user_id = None
+
+    return ToolExecutionContext(
+        actor=ToolActor(user_id=actor_user_id),
+        source="langgraph",
+        thread_id=thread_id,
+        chat_session_id=chat_session_id,
+        run_id=_run_id_from_config(config),
+        cancel_check=_cancel_check_from_config(config, stage="registered_tool:compute"),
+        current_search_session=get_session(config or {"configurable": {"thread_id": thread_id}}),
+        query_context=get_query_context(thread_id) or {},
+        runtime_plan=get_runtime_plan(thread_id) or {},
+    )
+
+
+def _apply_registered_tool_result(
+    *,
+    config: RunnableConfig | None,
+    result,
+) -> str:
+    if result.search_session is not None:
+        set_session(config or {"configurable": {"thread_id": get_thread_id(config or {"configurable": {}})}}, result.search_session)
+        _persist_agent_runtime_state(
+            config=config,
+            thread_id=get_thread_id(config or {"configurable": {}}),
+            session=result.search_session,
+        )
+    return json.dumps(result.payload, ensure_ascii=False)
+
+
+def _legacy_add_filter(
+    *,
+    dimension: Optional[str],
+    value: Optional[str],
+    category: Optional[str],
+    config: RunnableConfig | None,
+) -> str:
+    session = get_session(config)
+    if not session.get("active"):
+        return json.dumps({"error": "No active collection. Call start_collection first."})
+
+    client = get_qdrant()
+    thread_id = get_thread_id(config)
+    cancel_check = _cancel_check_from_config(config, stage="add_filter:compute")
+
+    dimension = _canonicalize_temporal_dimension(dimension)
+    value = _normalize_optional_tool_string(value)
+    if not dimension and _should_autobind_brand_dimension(thread_id, value=value):
+        dimension = "brand"
+    if not dimension:
+        return _structured_argument_error(
+            dimension="",
+            value=value,
+            reason="Filter dimension must be a non-empty string.",
+        )
+    if value is None:
+        return _structured_argument_error(
+            dimension=dimension,
+            value=value,
+            reason=f'Filter "{dimension}" requires a concrete non-empty value.',
+        )
+    if category:
+        category = (_normalize_optional_tool_string(category) or "").lower() or None
+    if dimension == "quarter":
+        value = normalize_quarter_value(value)
+        if value is None:
+            return _structured_argument_error(
+                dimension="quarter",
+                value="",
+                reason='Filter "quarter" requires a valid quarter value such as 早春 / 春夏 / 早秋 / 秋冬 / Resort / SS / FW.',
+            )
+
+    garment_tag_dims = {"color", "fabric", "pattern", "silhouette"}
+    garment_nested_dims = {"sleeve_length", "sleeve", "garment_length", "length", "collar"}
+    meta_dims = {"brand", "gender", "quarter", "year_min", "image_type"}
+    abstract_style_dims = {"style", "mood", "vibe"}
+
+    dim_to_field = {"sleeve_length": "sleeve", "sleeve": "sleeve", "garment_length": "length", "length": "length", "collar": "collar"}
+    dim_normalized = dimension
+    if dimension == "sleeve":
+        dim_normalized = "sleeve_length"
+    elif dimension == "length":
+        dim_normalized = "garment_length"
+
+    inferred_category = None
+    if settings.AGENT_RUNTIME_HARNESS_ENABLED and not category and dimension in (garment_tag_dims | garment_nested_dims):
+        inferred_category = infer_active_category(thread_id=thread_id, session_filters=session.get("filters", []))
+        if inferred_category:
+            category = inferred_category
+
+    if dimension in abstract_style_dims:
+        return _structured_filter_error(
+            dimension=dimension,
+            value=value,
+            reason=(
+                f'"{dimension}" is not a supported filter dimension. '
+                "Abstract style goals should be translated into a richer query or concrete filters first."
+            ),
+            error_type="unsupported_dimension",
+            suggested_strategy=(
+                "Call search_style first for abstract style goals, then use its retrieval_query_en to "
+                "start a semantic collection before adding concrete garment filters."
+            ),
+            suggested_next_actions=[
+                f'search_style("{value}")',
+                'start_collection("<style-enriched semantic query>")',
+            ],
+        )
+
+    if dimension == "category":
+        entry = {"type": "category", "key": "category", "value": value}
+    elif dimension in garment_tag_dims and category:
+        entry = {"type": "garment_tag", "key": f"{category}:{dimension}", "value": f"{category.lower()}:{value.lower()}"}
+    elif dimension in garment_nested_dims and category:
+        entry = {"type": "garment_attr", "key": f"{category}:{dim_normalized}", "field": dim_to_field[dimension], "value": value}
+    elif dimension in meta_dims:
+        entry = {"type": "meta", "key": dimension, "value": value}
+    else:
+        if dimension in (garment_tag_dims | garment_nested_dims):
+            attempts = note_invalid_filter_attempt(thread_id=thread_id, dimension=dimension, value=value, category=category)
+            if settings.AGENT_RUNTIME_HARNESS_ENABLED and attempts > settings.AGENT_RUNTIME_HARNESS_MAX_SAME_ERROR_RETRIES:
+                return _structured_filter_error(
+                    dimension=dimension,
+                    value=value,
+                    reason=(
+                        f"Repeated invalid '{dimension}' request blocked by runtime harness. "
+                        "Resolve the garment category first, then continue filtering."
+                    ),
+                    inferred_category=inferred_category,
+                    error_type="retry_blocked",
+                    blocked_by_harness=True,
+                    suggested_strategy=(
+                        "Do not retry the same invalid call. Bind the garment attribute to a concrete category, "
+                        "or repair the search query before continuing."
+                    ),
+                    suggested_next_actions=_build_recovery_actions(
+                        dimension=dimension,
+                        value=value,
+                        category=inferred_category,
+                    ),
+                )
+            return _structured_filter_error(
+                dimension=dimension,
+                value=value,
+                reason=(
+                    f"For '{dimension}' filter, specify which garment category. "
+                    f'Example: add_filter("{dimension}", "{value}", category="dress")'
+                ),
+                inferred_category=inferred_category,
+                suggested_strategy="First resolve the garment category, then retry the attribute filter.",
+                suggested_next_actions=_build_recovery_actions(
+                    dimension=dimension,
+                    value=value,
+                    category=inferred_category,
+                ),
+            )
+        return _structured_filter_error(
+            dimension=dimension,
+            value=value,
+            reason=f"Unknown dimension: {dimension}",
+            error_type="unsupported_dimension",
+            suggested_strategy=(
+                "Only use supported retrieval dimensions. If the request is abstract, translate it into "
+                "query text or concrete garment/image filters."
+            ),
+        )
+
+    test_session = dict(session)
+    test_session["filters"] = session["filters"] + [entry]
+    count = count_session(client, test_session, cancel_check=cancel_check, exact=True)
+
+    if count > 0:
+        clear_invalid_filter_attempt(thread_id=thread_id, dimension=dimension, value=value, category=category)
+        policy = _current_runtime_policy(thread_id)
+        if policy.get("duplicate_filters_are_noop") and entry in session["filters"]:
+            remaining = count_session(client, session, cancel_check=cancel_check, exact=True)
+            _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
+            filter_summary = [_format_filter_entry(item) for item in session["filters"]]
+            return json.dumps({
+                "action": "filter_already_active",
+                "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
+                "remaining": remaining,
+                "active_filters": filter_summary,
+                "message": f"{dimension}={value} is already active. Keeping the current collection unchanged.",
+                "resolved_category": inferred_category,
+            })
+
+        session["filters"].append(entry)
+        set_session(config, session)
+        _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
+        filter_summary = [_format_filter_entry(item) for item in session["filters"]]
+        return json.dumps({
+            "action": "filter_added",
+            "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
+            "remaining": count,
+            "active_filters": filter_summary,
+            "message": f"Added {dimension}={value}. {count} images remaining.",
+            "resolved_category": inferred_category,
+        })
+
+    available = available_values(client, dimension, category, session["filters"], cancel_check=cancel_check)
+    return json.dumps({
+        "action": "filter_rejected",
+        "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
+        "remaining": 0,
+        "message": f"Adding {dimension}={value} would result in 0 images. Filter NOT added.",
+        "available_values": available,
+        "suggestion": "Try one of the available values instead, or skip this dimension.",
+    })
+
+
+def _legacy_start_collection(
+    *,
+    query: str,
+    config: RunnableConfig | None,
+) -> str:
+    client = get_qdrant()
+    cancel_check = _cancel_check_from_config(config, stage="start_collection:compute")
+
+    thread_id = get_thread_id(config)
+    query_context = get_query_context(thread_id) or {}
+    image_vectors = query_context.get("image_embeddings", [])
+    image_vector = average_embeddings(image_vectors) if image_vectors else None
+    style_retrieval_query = str(query_context.get("style_retrieval_query", "")).strip()
+    vision_retrieval_query = str(query_context.get("vision_retrieval_query", "")).strip()
+    runtime_seed_filters = _runtime_plan_filter_entries(thread_id)
+
+    text_vector = encode_text(query, cancel_check=cancel_check) if query else None
+    style_semantic_text = _compose_semantic_grounding_text(query_context)
+    style_vector = encode_text(style_semantic_text, cancel_check=cancel_check) if style_semantic_text else None
+    fused_vector = _fuse_query_vectors(
+        text_vector=text_vector,
+        style_vector=style_vector,
+        image_vector=image_vector,
+    )
+    if fused_vector is not None:
+        fused_vector = apply_aesthetic_boost(fused_vector)
+
+    effective_query = query or style_retrieval_query or vision_retrieval_query
+    session = {
+        "query": effective_query,
+        "vector_type": "fashion_clip",
+        "q_emb": fused_vector,
+        "filters": runtime_seed_filters,
+        "active": True,
+    }
+
+    set_session(config, session)
+    _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
+    count = count_session(client, session, cancel_check=cancel_check)
+    seeded_filter_summary = _format_runtime_seeded_filters(runtime_seed_filters)
+    recommended_next_step = _post_collection_next_step(
+        thread_id,
+        style_retrieval_query=style_retrieval_query,
+    )
+    return json.dumps({
+        "status": "collection_started",
+        "total": count,
+        "query": effective_query or "(all images)",
+        "style_retrieval_query": style_retrieval_query or None,
+        "vision_retrieval_query": vision_retrieval_query or None,
+        "seeded_filters": seeded_filter_summary,
+        "recommended_next_step": recommended_next_step,
+        "message": (
+            f"Collection started with {count} images. Use add_filter to narrow down."
+            if not image_vectors and not style_retrieval_query and not vision_retrieval_query
+            else (
+                f"Collection started with {count} images using {len(image_vectors)} uploaded image(s). Use add_filter to narrow down."
+                if image_vectors and not style_retrieval_query and not vision_retrieval_query
+                else (
+                    f"Collection started with {count} images using semantic grounding. Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
+                    if (style_retrieval_query or vision_retrieval_query) and not image_vectors
+                    else (
+                        f"Collection started with {count} images using {len(image_vectors)} uploaded image(s) and semantic grounding. "
+                        "Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
+                    )
+                )
+            )
+        ) + (
+            f" Default hard filters applied: {', '.join(seeded_filter_summary)}."
+            if seeded_filter_summary
+            else ""
+        ),
+    })
+
+
+def _legacy_remove_filter(
+    *,
+    dimension: str,
+    category: Optional[str],
+    config: RunnableConfig | None,
+) -> str:
+    session = get_session(config)
+    if not session.get("active"):
+        return json.dumps({"error": "No active collection."})
+
+    client = get_qdrant()
+    cancel_check = _cancel_check_from_config(config, stage="remove_filter:compute")
+
+    removed = []
+    new_filters = []
+    for filter_item in session["filters"]:
+        match = False
+        if dimension == "category" and filter_item["type"] == "category":
+            match = True
+        elif filter_item["type"] in ("garment_tag", "garment_attr") and category:
+            if filter_item["key"].startswith(f"{category}:{dimension}"):
+                match = True
+        elif filter_item["type"] == "meta" and filter_item["key"] == dimension:
+            match = True
+        if match:
+            removed.append(filter_item)
+        else:
+            new_filters.append(filter_item)
+
+    session["filters"] = new_filters
+    set_session(config, session)
+    _persist_agent_runtime_state(config=config, thread_id=get_thread_id(config), session=session)
+    count = count_session(client, session, cancel_check=cancel_check, exact=False)
+
+    return json.dumps({
+        "action": "filter_removed",
+        "removed": [f"{item.get('key', '')}={item.get('value', '')}" for item in removed],
+        "remaining": count,
+        "message": f"Removed {len(removed)} filter(s). {count} images remaining.",
+    })
+
+
+def _legacy_show_collection(
+    *,
+    config: RunnableConfig | None,
+) -> str:
+    session = get_session(config)
+    if not session.get("active"):
+        return json.dumps({"error": "No active collection. Call start_collection first."})
+
+    client = get_qdrant()
+    cancel_check = _cancel_check_from_config(config, stage="show_collection:compute")
+    count = count_session(client, session, cancel_check=cancel_check)
+    filter_summary = [_format_filter_entry(item) for item in session["filters"]]
+    thread_id = get_thread_id(config) if config else ""
+
+    serializable_session = _serialize_search_session(session)
+    session_id = _session_id_from_config(config)
+    search_request_id = None
+    if session_id:
+        artifact = create_artifact(
+            session_id=session_id,
+            artifact_type="collection_result",
+            storage_type="database",
+            metadata={
+                "search_session": serializable_session,
+                "total": count,
+                "filters_applied": filter_summary,
+            },
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        search_request_id = artifact["id"]
+
+    return json.dumps({
+        "action": "show_collection",
+        "search_request_id": search_request_id,
+        "total": count,
+        "query": str(session.get("query", "") or ""),
+        "filters_applied": filter_summary,
+        "recommended_next_step": _current_runtime_next_step(thread_id) or "done",
+        "message": f"Showing {count} matching images in paginated results. Filters applied: {len(filter_summary)}.",
+    }, ensure_ascii=False)
+
+
 def _runtime_plan_filter_entries(thread_id: str) -> list[dict]:
     plan = get_runtime_plan(thread_id) or {}
     entries: list[dict] = []
@@ -263,7 +655,7 @@ def _runtime_plan_filter_entries(thread_id: str) -> list[dict]:
             continue
         if dimension == "category":
             entry = {"type": "category", "key": "category", "value": str(value).strip().lower()}
-        elif dimension in {"brand", "gender", "quarter", "year_min", "image_type"}:
+        elif dimension in {"brand", "gender", "quarter", "year", "year_min", "image_type", "source_site"}:
             entry = {"type": "meta", "key": dimension, "value": value}
         else:
             continue
@@ -395,11 +787,24 @@ def _format_filter_entry(filter_item: dict) -> str:
 
     key = str(filter_item.get("key", "")).strip()
     value = filter_item.get("value", "")
-    if key == "quarter":
+    if isinstance(value, list):
+        if key == "quarter":
+            serialized = normalize_quarter_list(value)
+        elif key == "year":
+            serialized = normalize_year_list(value)
+        elif key == "image_type":
+            serialized = normalize_image_type_list(value)
+        elif key == "source_site":
+            serialized = normalize_site_list(value)
+        else:
+            serialized = [str(item).strip() for item in value if str(item).strip()]
+        value = ",".join(str(item) for item in serialized)
+    elif key == "quarter":
         normalized = normalize_quarter_value(value)
         if normalized:
             value = normalized
-    return f"{key}={value}"
+    display_key = "site" if key == "source_site" else key
+    return f"{display_key}={value}"
 
 
 def _build_trend_cache_key(
@@ -966,75 +1371,18 @@ def start_collection(
     Returns: Total number of images in the initial collection.
     """
     _ensure_run_active(config, stage="start_collection:start")
-    client = get_qdrant()
-    cancel_check = _cancel_check_from_config(config, stage="start_collection:compute")
-
-    thread_id = get_thread_id(config)
-    query_context = get_query_context(thread_id) or {}
-    image_vectors = query_context.get("image_embeddings", [])
-    image_vector = average_embeddings(image_vectors) if image_vectors else None
-    style_retrieval_query = str(query_context.get("style_retrieval_query", "")).strip()
-    vision_retrieval_query = str(query_context.get("vision_retrieval_query", "")).strip()
-    runtime_seed_filters = _runtime_plan_filter_entries(thread_id)
-
-    text_vector = encode_text(query, cancel_check=cancel_check) if query else None
-    style_semantic_text = _compose_semantic_grounding_text(query_context)
-    style_vector = encode_text(style_semantic_text, cancel_check=cancel_check) if style_semantic_text else None
-    fused_vector = _fuse_query_vectors(
-        text_vector=text_vector,
-        style_vector=style_vector,
-        image_vector=image_vector,
-    )
-    if fused_vector is not None:
-        fused_vector = apply_aesthetic_boost(fused_vector)
-
-    effective_query = query or style_retrieval_query or vision_retrieval_query
-
-    session = {
-        "query": effective_query,
-        "vector_type": "fashion_clip",
-        "q_emb": fused_vector,
-        "filters": runtime_seed_filters,
-        "active": True,
-    }
-
-    set_session(config, session)
-    _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
-    count = count_session(client, session, cancel_check=cancel_check)
-    seeded_filter_summary = _format_runtime_seeded_filters(runtime_seed_filters)
-    recommended_next_step = _post_collection_next_step(
-        thread_id,
-        style_retrieval_query=style_retrieval_query,
-    )
-    return json.dumps({
-        "status": "collection_started",
-        "total": count,
-        "query": effective_query or "(all images)",
-        "style_retrieval_query": style_retrieval_query or None,
-        "vision_retrieval_query": vision_retrieval_query or None,
-        "seeded_filters": seeded_filter_summary,
-        "recommended_next_step": recommended_next_step,
-        "message": (
-            f"Collection started with {count} images. Use add_filter to narrow down."
-            if not image_vectors and not style_retrieval_query and not vision_retrieval_query
-            else (
-                f"Collection started with {count} images using {len(image_vectors)} uploaded image(s). Use add_filter to narrow down."
-                if image_vectors and not style_retrieval_query and not vision_retrieval_query
-                else (
-                    f"Collection started with {count} images using semantic grounding. Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
-                    if (style_retrieval_query or vision_retrieval_query) and not image_vectors
-                    else (
-                        f"Collection started with {count} images using {len(image_vectors)} uploaded image(s) and semantic grounding. "
-                        "Inspect or show this pool first; only add filters if the user explicitly wants tighter precision or the pool is still too broad."
-                    )
-                )
-            )
-        ) + (
-            f" Default hard filters applied: {', '.join(seeded_filter_summary)}."
-            if seeded_filter_summary
-            else ""
-        ),
-    })
+    tool_ctx = _build_registered_tool_context(config=config)
+    if tool_ctx.actor.user_id is None:
+        return _legacy_start_collection(query=query, config=config)
+    try:
+        result = execute_registered_tool(
+            "start_collection",
+            tool_ctx,
+            {"query": query},
+        )
+    except RetrievalSessionEngineError as exc:
+        return json.dumps({"error": exc.message}, ensure_ascii=False)
+    return _apply_registered_tool_result(config=config, result=result)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1061,215 +1409,28 @@ def add_filter(
     Returns: remaining count. If 0, suggests available values — DO NOT add this filter.
     """
     _ensure_run_active(config, stage="add_filter:start")
-    session = get_session(config)
-    if not session.get("active"):
-        return json.dumps({"error": "No active collection. Call start_collection first."})
-
-    client = get_qdrant()
-    thread_id = get_thread_id(config)
-    cancel_check = _cancel_check_from_config(config, stage="add_filter:compute")
-
-    dimension = _canonicalize_temporal_dimension(dimension)
-    value = _normalize_optional_tool_string(value)
-    if not dimension and _should_autobind_brand_dimension(thread_id, value=value):
-        dimension = "brand"
-    if not dimension:
-        return _structured_argument_error(
-            dimension="",
-            value=value,
-            reason="Filter dimension must be a non-empty string.",
-        )
-    if value is None:
-        return _structured_argument_error(
-            dimension=dimension,
-            value=value,
-            reason=f'Filter "{dimension}" requires a concrete non-empty value.',
-        )
-    if category:
-        category = (_normalize_optional_tool_string(category) or "").lower() or None
-    if dimension == "quarter":
-        value = normalize_quarter_value(value)
-        if value is None:
-            return _structured_argument_error(
-                dimension="quarter",
-                value="",
-                reason='Filter "quarter" requires a valid quarter value such as 早春 / 春夏 / 早秋 / 秋冬 / Resort / SS / FW.',
-            )
-
-    GARMENT_TAG_DIMS = {"color", "fabric", "pattern", "silhouette"}
-    GARMENT_NESTED_DIMS = {"sleeve_length", "sleeve", "garment_length", "length", "collar"}
-    meta_dims = {"brand", "gender", "quarter", "year_min", "image_type"}
-    abstract_style_dims = {"style", "mood", "vibe"}
-
-    DIM_TO_FIELD = {"sleeve_length": "sleeve", "sleeve": "sleeve",
-                    "garment_length": "length", "length": "length",
-                    "collar": "collar"}
-
-    dim_normalized = dimension
-    if dimension == "sleeve":
-        dim_normalized = "sleeve_length"
-    elif dimension == "length":
-        dim_normalized = "garment_length"
-
-    inferred_category = None
-    if (
-        settings.AGENT_RUNTIME_HARNESS_ENABLED
-        and not category
-        and dimension in (GARMENT_TAG_DIMS | GARMENT_NESTED_DIMS)
-    ):
-        inferred_category = infer_active_category(
-            thread_id=thread_id,
-            session_filters=session.get("filters", []),
-        )
-        if inferred_category:
-            category = inferred_category
-
-    if dimension in abstract_style_dims:
-        return _structured_filter_error(
-            dimension=dimension,
-            value=value,
-            reason=(
-                f'"{dimension}" is not a supported filter dimension. '
-                "Abstract style goals should be translated into a richer query or concrete filters first."
-            ),
-            error_type="unsupported_dimension",
-            suggested_strategy=(
-                "Call search_style first for abstract style goals, then use its retrieval_query_en to "
-                "start a semantic collection before adding concrete garment filters."
-            ),
-            suggested_next_actions=[
-                f'search_style("{value}")',
-                'start_collection("<style-enriched semantic query>")',
-            ],
-        )
-
-    if dimension == "category":
-        entry = {"type": "category", "key": "category", "value": value}
-    elif dimension in GARMENT_TAG_DIMS and category:
-        tag_value = f"{category.lower()}:{value.lower()}"
-        entry = {"type": "garment_tag", "key": f"{category}:{dimension}", "value": tag_value}
-    elif dimension in GARMENT_NESTED_DIMS and category:
-        field = DIM_TO_FIELD[dimension]
-        entry = {"type": "garment_attr", "key": f"{category}:{dim_normalized}",
-                 "field": field, "value": value}
-    elif dimension in meta_dims:
-        entry = {"type": "meta", "key": dimension, "value": value}
-    else:
-        if dimension in (GARMENT_TAG_DIMS | GARMENT_NESTED_DIMS):
-            attempts = note_invalid_filter_attempt(
-                thread_id=thread_id,
-                dimension=dimension,
-                value=value,
-                category=category,
-            )
-            if (
-                settings.AGENT_RUNTIME_HARNESS_ENABLED
-                and attempts > settings.AGENT_RUNTIME_HARNESS_MAX_SAME_ERROR_RETRIES
-            ):
-                return _structured_filter_error(
-                    dimension=dimension,
-                    value=value,
-                    reason=(
-                        f"Repeated invalid '{dimension}' request blocked by runtime harness. "
-                        "Resolve the garment category first, then continue filtering."
-                    ),
-                    inferred_category=inferred_category,
-                    error_type="retry_blocked",
-                    blocked_by_harness=True,
-                    suggested_strategy=(
-                        "Do not retry the same invalid call. Bind the garment attribute to a concrete category, "
-                        "or repair the search query before continuing."
-                    ),
-                    suggested_next_actions=_build_recovery_actions(
-                        dimension=dimension,
-                        value=value,
-                        category=inferred_category,
-                    ),
-                )
-            return _structured_filter_error(
-                dimension=dimension,
-                value=value,
-                reason=(
-                    f"For '{dimension}' filter, specify which garment category. "
-                    f'Example: add_filter("{dimension}", "{value}", category="dress")'
-                ),
-                inferred_category=inferred_category,
-                suggested_strategy=(
-                    "First resolve the garment category, then retry the attribute filter."
-                ),
-                suggested_next_actions=_build_recovery_actions(
-                    dimension=dimension,
-                    value=value,
-                    category=inferred_category,
-                ),
-            )
-        return _structured_filter_error(
-            dimension=dimension,
-            value=value,
-            reason=f"Unknown dimension: {dimension}",
-            error_type="unsupported_dimension",
-            suggested_strategy=(
-                "Only use supported retrieval dimensions. If the request is abstract, translate it into "
-                "query text or concrete garment/image filters."
-            ),
-        )
-
-    test_filters = session["filters"] + [entry]
-    test_session = dict(session)
-    test_session["filters"] = test_filters
-    # Validation must use an exact count. Qdrant's approximate count is fast, but
-    # it can over-report matches for nested garment filters and falsely accept
-    # impossible add_filter requests.
-    count = count_session(client, test_session, cancel_check=cancel_check, exact=True)
-
-    if count > 0:
-        clear_invalid_filter_attempt(
-            thread_id=thread_id,
+    current_session = get_session(config)
+    if current_session.get("active") and not current_session.get("retrieval_session_id"):
+        return _legacy_add_filter(
             dimension=dimension,
             value=value,
             category=category,
+            config=config,
         )
-        policy = _current_runtime_policy(thread_id)
-        if policy.get("duplicate_filters_are_noop") and entry in session["filters"]:
-            remaining = count_session(
-                client,
-                session,
-                cancel_check=cancel_check,
-                exact=True,
-            )
-            _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
-            filter_summary = [_format_filter_entry(f) for f in session["filters"]]
-            return json.dumps({
-                "action": "filter_already_active",
-                "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
-                "remaining": remaining,
-                "active_filters": filter_summary,
-                "message": f"{dimension}={value} is already active. Keeping the current collection unchanged.",
-                "resolved_category": inferred_category,
-            })
-        session["filters"].append(entry)
-        set_session(config, session)
-        _persist_agent_runtime_state(config=config, thread_id=thread_id, session=session)
-        filter_summary = [_format_filter_entry(f) for f in session["filters"]]
-
-        return json.dumps({
-            "action": "filter_added",
-            "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
-            "remaining": count,
-            "active_filters": filter_summary,
-            "message": f"Added {dimension}={value}. {count} images remaining.",
-            "resolved_category": inferred_category,
-        })
-    else:
-        available = available_values(client, dimension, category, session["filters"], cancel_check=cancel_check)
-        return json.dumps({
-            "action": "filter_rejected",
-            "filter": f"{dimension}={value}" + (f" (on {category})" if category else ""),
-            "remaining": 0,
-            "message": f"Adding {dimension}={value} would result in 0 images. Filter NOT added.",
-            "available_values": available,
-            "suggestion": "Try one of the available values instead, or skip this dimension.",
-        })
+    try:
+        result = execute_registered_tool(
+            "add_filter",
+            _build_registered_tool_context(config=config),
+            {
+                "retrieval_session_id": current_session.get("retrieval_session_id"),
+                "dimension": dimension,
+                "value": value,
+                "category": category,
+            },
+        )
+    except RetrievalSessionEngineError as exc:
+        return json.dumps({"error": exc.message}, ensure_ascii=False)
+    return _apply_registered_tool_result(config=config, result=result)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1284,40 +1445,26 @@ def remove_filter(
 ) -> str:
     """Remove a previously added filter. Undoes the narrowing for that dimension."""
     _ensure_run_active(config, stage="remove_filter:start")
-    session = get_session(config)
-    if not session.get("active"):
-        return json.dumps({"error": "No active collection."})
-
-    client = get_qdrant()
-    cancel_check = _cancel_check_from_config(config, stage="remove_filter:compute")
-
-    removed = []
-    new_filters = []
-    for f in session["filters"]:
-        match = False
-        if dimension == "category" and f["type"] == "category":
-            match = True
-        elif f["type"] in ("garment_tag", "garment_attr") and category:
-            if f["key"].startswith(f"{category}:{dimension}"):
-                match = True
-        elif f["type"] == "meta" and f["key"] == dimension:
-            match = True
-        if match:
-            removed.append(f)
-        else:
-            new_filters.append(f)
-
-    session["filters"] = new_filters
-    set_session(config, session)
-    _persist_agent_runtime_state(config=config, thread_id=get_thread_id(config), session=session)
-    count = count_session(client, session, cancel_check=cancel_check, exact=False)
-
-    return json.dumps({
-        "action": "filter_removed",
-        "removed": [f"{f.get('key', '')}={f.get('value', '')}" for f in removed],
-        "remaining": count,
-        "message": f"Removed {len(removed)} filter(s). {count} images remaining.",
-    })
+    current_session = get_session(config)
+    if current_session.get("active") and not current_session.get("retrieval_session_id"):
+        return _legacy_remove_filter(
+            dimension=dimension,
+            category=category,
+            config=config,
+        )
+    try:
+        result = execute_registered_tool(
+            "remove_filter",
+            _build_registered_tool_context(config=config),
+            {
+                "retrieval_session_id": current_session.get("retrieval_session_id"),
+                "dimension": dimension,
+                "category": category,
+            },
+        )
+    except RetrievalSessionEngineError as exc:
+        return json.dumps({"error": exc.message}, ensure_ascii=False)
+    return _apply_registered_tool_result(config=config, result=result)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1387,44 +1534,20 @@ def show_collection(
     Call this ONLY when you are completely finished filtering.
     """
     _ensure_run_active(config, stage="show_collection:start")
-    session = get_session(config)
-    if not session.get("active"):
-        return json.dumps({"error": "No active collection. Call start_collection first."})
-
-    client = get_qdrant()
-    cancel_check = _cancel_check_from_config(config, stage="show_collection:compute")
-    count = count_session(client, session, cancel_check=cancel_check)
-
-    filter_summary = [_format_filter_entry(f) for f in session["filters"]]
-    thread_id = get_thread_id(config) if config else ""
-
-    serializable_session = _serialize_search_session(session)
-    session_id = _session_id_from_config(config)
-
-    search_request_id = None
-    if session_id:
-        artifact = create_artifact(
-            session_id=session_id,
-            artifact_type="collection_result",
-            storage_type="database",
-            metadata={
-                "search_session": serializable_session,
-                "total": count,
-                "filters_applied": filter_summary,
+    current_session = get_session(config)
+    if current_session.get("active") and not current_session.get("retrieval_session_id"):
+        return _legacy_show_collection(config=config)
+    try:
+        result = execute_registered_tool(
+            "show_collection",
+            _build_registered_tool_context(config=config),
+            {
+                "retrieval_session_id": current_session.get("retrieval_session_id"),
             },
-            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
         )
-        search_request_id = artifact["id"]
-
-    return json.dumps({
-        "action": "show_collection",
-        "search_request_id": search_request_id,
-        "total": count,
-        "query": str(session.get("query", "") or ""),
-        "filters_applied": filter_summary,
-        "recommended_next_step": _current_runtime_next_step(thread_id) or "done",
-        "message": f"Showing {count} matching images in paginated results. Filters applied: {len(filter_summary)}.",
-    }, ensure_ascii=False)
+    except RetrievalSessionEngineError as exc:
+        return json.dumps({"error": exc.message}, ensure_ascii=False)
+    return _apply_registered_tool_result(config=config, result=result)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1712,10 +1835,16 @@ def get_image_details(
     return json.dumps(results[0][0].payload, ensure_ascii=False, default=str)
 
 
+def _build_all_tools_from_registry() -> list:
+    """Build LangGraph tool list from the shared registry single source of truth."""
+    exported_tools: list = []
+    for spec in list_tool_specs(visibility="internal"):
+        tool_obj = globals().get(spec.name)
+        if tool_obj is None:
+            raise RuntimeError(f"Registry references missing LangGraph tool: {spec.name}")
+        exported_tools.append(tool_obj)
+    return exported_tools
+
+
 # ── Export ──
-ALL_TOOLS = [
-    search_style,
-    fashion_vision,
-    start_collection, add_filter, remove_filter, peek_collection, show_collection,
-    explore_colors, analyze_trends, get_image_details,
-]
+ALL_TOOLS = _build_all_tools_from_registry()

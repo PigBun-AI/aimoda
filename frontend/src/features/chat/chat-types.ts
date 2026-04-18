@@ -27,10 +27,26 @@ export interface ChatSession {
 
 export interface ChatSessionPreferences {
   gender?: 'female' | 'male' | null
+  season_groups?: Array<'春夏' | '秋冬'> | null
+  years?: number[] | null
+  sources?: string[] | null
+  image_types?: Array<'model_photo' | 'flat_lay' | string> | null
   quarter?: '早春' | '春夏' | '早秋' | '秋冬' | null
   year?: number | null
   taste_profile_id?: string | null
   taste_profile_weight?: number | null
+}
+
+export interface ChatPreferenceOptionItem<T extends string | number = string> {
+  value: T
+  count?: number
+}
+
+export interface ChatPreferenceOptions {
+  sites: Array<ChatPreferenceOptionItem<string>>
+  image_types: Array<ChatPreferenceOptionItem<'model_photo' | 'flat_lay' | string>>
+  years: Array<ChatPreferenceOptionItem<number>>
+  season_groups: Array<ChatPreferenceOptionItem<'春夏' | '秋冬'>>
 }
 
 export interface ImageSourceBase64 {

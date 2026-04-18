@@ -79,3 +79,20 @@ def test_preference_change_resets_agent_runtime_and_bumps_thread_version():
     assert reset["runtime"]["agent_state"] == {}
     assert reset["runtime"]["compaction"]["thread_version"] == 4
     assert reset["runtime"]["compaction"]["pending_bootstrap_thread_version"] is None
+
+
+def test_normalize_session_preferences_merges_legacy_temporal_fields_into_compact_multi_selects():
+    normalized = chat_service._merge_session_state(
+        {},
+        preferences={
+            "quarter": "早秋",
+            "year": 2026,
+            "sources": ["wwd", "vogue"],
+            "image_types": ["model", "flat lay"],
+        },
+    )["preferences"]
+
+    assert normalized["season_groups"] == ["秋冬"]
+    assert normalized["years"] == [2026]
+    assert normalized["sources"] == ["vogue", "wwd"]
+    assert normalized["image_types"] == ["model_photo", "flat_lay"]

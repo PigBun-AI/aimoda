@@ -13,7 +13,13 @@ from langchain_core.runnables import RunnableConfig
 from qdrant_client.models import Filter, FieldCondition, MatchValue, MatchAny, Range
 
 from .qdrant_utils import get_collection, iter_scroll, scroll_all
-from ..value_normalization import normalize_quarter_value
+from ..value_normalization import (
+    normalize_image_type_list,
+    normalize_quarter_list,
+    normalize_quarter_value,
+    normalize_site_list,
+    normalize_year_list,
+)
 
 # ═══════════════════════════════════════════════════════════════
 #  Session State Storage
@@ -105,13 +111,30 @@ def build_session_filter(session):
             key = f["key"]
             val = f["value"]
             if key == "quarter":
-                quarter = normalize_quarter_value(val)
-                if quarter:
-                    must_conditions.append(FieldCondition(key="quarter", match=MatchAny(any=[quarter])))
+                quarters = normalize_quarter_list(val)
+                if quarters:
+                    must_conditions.append(FieldCondition(key="quarter", match=MatchAny(any=quarters)))
+            elif key == "year":
+                years = normalize_year_list(val)
+                if years:
+                    must_conditions.append(FieldCondition(key="year", match=MatchAny(any=years)))
             elif key == "year_min":
                 must_conditions.append(FieldCondition(key="year", range=Range(gte=int(val))))
+            elif key == "source_site":
+                source_sites = normalize_site_list(val)
+                if source_sites:
+                    must_conditions.append(FieldCondition(key="source_site", match=MatchAny(any=source_sites)))
+            elif key == "image_type":
+                image_types = normalize_image_type_list(val)
+                if image_types:
+                    must_conditions.append(FieldCondition(key="image_type", match=MatchAny(any=image_types)))
             else:
-                must_conditions.append(FieldCondition(key=key, match=MatchValue(value=val.lower())))
+                if isinstance(val, list):
+                    any_values = [str(item).strip().lower() for item in val if str(item).strip()]
+                    if any_values:
+                        must_conditions.append(FieldCondition(key=key, match=MatchAny(any=any_values)))
+                else:
+                    must_conditions.append(FieldCondition(key=key, match=MatchValue(value=str(val).lower())))
 
     has_inner = category_values & INNER_LAYERS
     has_outer = category_values & OUTER_LAYERS

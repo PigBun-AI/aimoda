@@ -179,8 +179,8 @@ describe('session store', () => {
         execution_status: 'running',
         preferences: {
           gender: 'female',
-          quarter: '春夏',
-          year: 2026,
+          season_groups: ['春夏'],
+          years: [2026],
           taste_profile_id: null,
           taste_profile_weight: 0.24,
         },
@@ -200,8 +200,8 @@ describe('session store', () => {
       execution_status: 'running'
       preferences: {
         gender: 'male'
-        quarter: '秋冬'
-        year: 2027
+        season_groups: ['秋冬']
+        years: [2027]
         taste_profile_id: null
         taste_profile_weight: 0.24
       }
@@ -216,8 +216,8 @@ describe('session store', () => {
     await act(async () => {
       void updateSessionChatPreferences('session-1', {
         gender: 'male',
-        quarter: '秋冬',
-        year: 2027,
+        season_groups: ['秋冬'],
+        years: [2027],
         taste_profile_id: null,
         taste_profile_weight: 0.24,
       })
@@ -231,8 +231,8 @@ describe('session store', () => {
         execution_status: 'running',
         preferences: {
           gender: 'female',
-          quarter: '春夏',
-          year: 2026,
+          season_groups: ['春夏'],
+          years: [2026],
           taste_profile_id: null,
           taste_profile_weight: 0.24,
         },
@@ -247,8 +247,8 @@ describe('session store', () => {
 
     expect(result.current.sessions[0]?.preferences).toMatchObject({
       gender: 'male',
-      quarter: '秋冬',
-      year: 2027,
+      season_groups: ['秋冬'],
+      years: [2027],
     })
 
     await act(async () => {
@@ -259,8 +259,8 @@ describe('session store', () => {
         execution_status: 'running',
         preferences: {
           gender: 'male',
-          quarter: '秋冬',
-          year: 2027,
+          season_groups: ['秋冬'],
+          years: [2027],
           taste_profile_id: null,
           taste_profile_weight: 0.24,
         },
@@ -272,8 +272,8 @@ describe('session store', () => {
 
     expect(result.current.sessions[0]?.preferences).toMatchObject({
       gender: 'male',
-      quarter: '秋冬',
-      year: 2027,
+      season_groups: ['秋冬'],
+      years: [2027],
     })
   })
 

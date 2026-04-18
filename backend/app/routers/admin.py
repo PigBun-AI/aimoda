@@ -23,6 +23,11 @@ from ..services.style_feedback_service import (
     list_style_gap_feedback_admin,
     update_style_gap_feedback_admin,
 )
+from ..services.taste_profile_service import (
+    TasteProfileNotReadyError,
+    get_system_taste_profile_status,
+    rebuild_system_taste_profile,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -190,3 +195,23 @@ def get_style_gap_events(
     del user
     payload = list_style_gap_events_admin(signal_id=signal_id, limit=limit)
     return {"success": True, "data": {"items": payload, "limit": limit}}
+
+
+@router.get("/system-dna")
+def get_system_dna_status(
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    del user
+    return {"success": True, "data": get_system_taste_profile_status()}
+
+
+@router.post("/system-dna/rebuild")
+def rebuild_system_dna(
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    del user
+    try:
+        payload = rebuild_system_taste_profile()
+    except TasteProfileNotReadyError as exc:
+        raise AppError(str(exc), 400) from exc
+    return {"success": True, "data": payload}
