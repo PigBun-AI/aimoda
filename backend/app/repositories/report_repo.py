@@ -64,32 +64,51 @@ def find_report_by_id(report_id: int) -> ReportRecord | None:
     return _map_report(row) if row else None
 
 
-def list_reports(page: int = 1, limit: int = 12) -> tuple[list[ReportRecord], int]:
+def _build_report_search_clause(q: str | None, *, include_slug: bool = False) -> tuple[str, list[object]]:
+    if not q or not q.strip():
+        return "", []
+
+    keyword = f"%{q.strip()}%"
+    clauses = [
+        "title ILIKE %s",
+        "brand ILIKE %s",
+        "season ILIKE %s",
+        "CAST(year AS TEXT) ILIKE %s",
+    ]
+    params: list[object] = [keyword, keyword, keyword, keyword]
+
+    if include_slug:
+        clauses.append("slug ILIKE %s")
+        params.append(keyword)
+
+    return f"WHERE {' OR '.join(clauses)}", params
+
+
+def list_reports(page: int = 1, limit: int = 12, q: str | None = None) -> tuple[list[ReportRecord], int]:
     offset = (page - 1) * limit
+    where_sql, params = _build_report_search_clause(q)
     with _get_pg_conn() as conn:
-        count_row = conn.execute("SELECT COUNT(*) FROM reports").fetchone()
+        count_row = conn.execute(
+            f"SELECT COUNT(*) FROM reports {where_sql}",
+            params,
+        ).fetchone()
         total = count_row[0] if count_row else 0
         rows = conn.execute(
-            f"SELECT {_REPORT_COLUMNS} FROM reports ORDER BY id DESC LIMIT %s OFFSET %s",
-            (limit, offset),
+            f"""
+            SELECT {_REPORT_COLUMNS}
+            FROM reports
+            {where_sql}
+            ORDER BY id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (*params, limit, offset),
         ).fetchall()
     return [_map_report(r) for r in rows], total
 
 
 def list_reports_admin(page: int = 1, limit: int = 20, q: str | None = None) -> tuple[list[ReportRecord], int]:
     offset = (page - 1) * limit
-    where_sql = ""
-    params: list[object] = []
-
-    if q and q.strip():
-        keyword = f"%{q.strip()}%"
-        where_sql = """
-            WHERE title ILIKE %s
-               OR brand ILIKE %s
-               OR season ILIKE %s
-               OR slug ILIKE %s
-        """
-        params = [keyword, keyword, keyword, keyword]
+    where_sql, params = _build_report_search_clause(q, include_slug=True)
 
     with _get_pg_conn() as conn:
         count_row = conn.execute(

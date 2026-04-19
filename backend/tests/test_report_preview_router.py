@@ -1,5 +1,6 @@
 import pytest
 from fastapi import Response
+from starlette.requests import Request
 
 from backend.app.exceptions import AppError
 from backend.app.models import AuthenticatedUser, ReportRecord
@@ -35,6 +36,21 @@ def _user(role: str = "viewer") -> AuthenticatedUser:
     )
 
 
+def _request(path: str = "/api/reports/7/preview/pages/report.html") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "headers": [],
+            "query_string": b"",
+            "scheme": "https",
+            "server": ("testserver", 443),
+            "client": ("127.0.0.1", 12345),
+        }
+    )
+
+
 def test_get_single_report_sets_preview_cookie_and_preview_url(monkeypatch):
     response = Response()
     monkeypatch.setattr(reports_router, "get_report", lambda _id: _report())
@@ -58,6 +74,28 @@ def test_get_single_report_sets_preview_cookie_and_preview_url(monkeypatch):
     assert "Max-Age=600" in cookie
 
 
+def test_list_reports_forwards_search_query_and_sets_preview_cookie(monkeypatch):
+    response = Response()
+    calls: dict[str, object] = {}
+    monkeypatch.setattr(reports_router, "get_reports", lambda page, limit, q=None: (calls.update({"page": page, "limit": limit, "q": q}) or ([_report()], 1)))
+    monkeypatch.setattr(reports_router.settings, "FRONTEND_URL", "https://dev.ai-moda.ai")
+    monkeypatch.setattr(reports_router.settings, "REPORT_PREVIEW_TOKEN_TTL_SECONDS", 600)
+
+    payload = reports_router.list_reports(
+        user=_user(),
+        response=response,
+        page=2,
+        limit=6,
+        q="2026",
+    )
+
+    assert calls == {"page": 2, "limit": 6, "q": "2026"}
+    assert payload["meta"]["page"] == 2
+    assert payload["meta"]["limit"] == 6
+    assert payload["meta"]["total"] == 1
+    assert "aimoda_report_preview=" in response.headers.get("set-cookie", "")
+
+
 def test_preview_report_asset_returns_content(monkeypatch):
     class FakeOSS:
         def get_url(self, oss_path: str) -> str:
@@ -71,6 +109,7 @@ def test_preview_report_asset_returns_content(monkeypatch):
     monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
 
     response = reports_router.preview_report_asset(
+        request=_request("/api/reports/7/preview/assets/look-001.jpg"),
         report_id=7,
         asset_path="assets/look-001.jpg",
         preview_token="preview-token",
@@ -102,6 +141,7 @@ def test_preview_report_asset_injects_html_patch(monkeypatch):
     monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
 
     response = reports_router.preview_report_asset(
+        request=_request(),
         report_id=7,
         asset_path="pages/report.html",
         preview_token="preview-token",
@@ -127,6 +167,7 @@ def test_preview_report_asset_uses_oss_resize_for_thumbnail(monkeypatch):
     monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
 
     response = reports_router.preview_report_asset(
+        request=_request("/api/reports/7/preview/assets/look-001.jpg"),
         report_id=7,
         asset_path="assets/look-001.jpg",
         max_edge=1280,
@@ -159,6 +200,7 @@ def test_preview_report_asset_rewrites_css_image_urls(monkeypatch):
     monkeypatch.setattr(reports_router, "get_oss_service", lambda: FakeOSS())
 
     response = reports_router.preview_report_asset(
+        request=_request("/api/reports/7/preview/pages/report.css"),
         report_id=7,
         asset_path="pages/report.css",
         preview_token="preview-token",
@@ -178,6 +220,7 @@ def test_preview_report_asset_rejects_viewer_without_report_access(monkeypatch):
 
     with pytest.raises(AppError) as exc:
         reports_router.preview_report_asset(
+            request=_request(),
             report_id=7,
             asset_path="pages/report.html",
             preview_token="preview-token",

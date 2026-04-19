@@ -399,8 +399,15 @@ export interface PaginatedReports {
   totalPages: number
 }
 
-export async function getReports(page = 1, limit = 12): Promise<PaginatedReports> {
-  const response = await fetchWithAuth(`/api/reports?page=${page}&limit=${limit}`)
+export async function getReports(page = 1, limit = 12, q?: string): Promise<PaginatedReports> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('page', String(page))
+  searchParams.set('limit', String(limit))
+  if (q?.trim()) {
+    searchParams.set('q', q.trim())
+  }
+
+  const response = await fetchWithAuth(`/api/reports?${searchParams.toString()}`)
 
   if (!response.ok) {
     let payload: ApiResponse<unknown> | null = null

@@ -50,8 +50,8 @@ def get_report(report_id: int) -> ReportRecord | None:
     return find_report_by_id(report_id)
 
 
-def get_reports(page: int = 1, limit: int = 12) -> tuple[list[ReportRecord], int]:
-    return list_reports(page, limit)
+def get_reports(page: int = 1, limit: int = 12, q: str | None = None) -> tuple[list[ReportRecord], int]:
+    return list_reports(page=page, limit=limit, q=q)
 
 
 def get_reports_admin(page: int = 1, limit: int = 20, q: str | None = None) -> tuple[list[ReportRecord], int]:

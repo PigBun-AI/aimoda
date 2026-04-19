@@ -15,6 +15,21 @@ def test_resolve_report_root_keeps_flat_zip_root_with_manifest(tmp_path: Path):
     assert resolved == tmp_path
 
 
+def test_get_reports_forwards_search_query(monkeypatch):
+    calls: dict[str, object] = {}
+    monkeypatch.setattr(
+        report_service,
+        "list_reports",
+        lambda page, limit, q=None: (calls.update({"page": page, "limit": limit, "q": q}) or ([], 0)),
+    )
+
+    items, total = report_service.get_reports(page=3, limit=9, q="AW26")
+
+    assert items == []
+    assert total == 0
+    assert calls == {"page": 3, "limit": 9, "q": "AW26"}
+
+
 def test_resolve_report_root_descends_when_archive_has_single_wrapper_dir(tmp_path: Path):
     wrapper = tmp_path / "wrapped-report"
     wrapper.mkdir()
