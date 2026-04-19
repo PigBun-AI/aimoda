@@ -16,7 +16,7 @@ from ..repositories.gallery_repo import list_galleries_admin, update_gallery_adm
 from ..repositories.user_repo import count_users, count_users_by_role
 from ..services.subscription_service import get_stats as get_subscription_stats
 from ..services.activity_service import get_daily_active_percent, get_activity_trend
-from ..services.report_service import get_report, get_reports_admin, serialize_report_public, update_report_admin
+from ..services.report_service import delete_report_with_files, get_report, get_reports_admin, serialize_report_public, update_report_admin
 from ..services.style_feedback_service import (
     get_style_gap_stats_admin,
     list_style_gap_events_admin,
@@ -87,6 +87,18 @@ def patch_admin_report(
     if updated is None:
         raise AppError("report not found", 404)
     return {"success": True, "data": serialize_report_public(updated)}
+
+
+@router.delete("/reports/{report_id}")
+def delete_admin_report(
+    report_id: int,
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    del user
+    deleted = delete_report_with_files(report_id)
+    if not deleted:
+        raise AppError("report not found", 404)
+    return {"success": True, "data": {"deleted": True, "reportId": report_id}}
 
 
 @router.get("/galleries")

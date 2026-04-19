@@ -19,6 +19,7 @@
   "articleListDesc": "所有已上传的时装周快报",
   "updatedAt": "更新于",
   "deleteConfirm": "确定要删除这篇文章吗？",
+  "deleteFailed": "删除快报失败，请稍后重试。",
   "noArticles": "暂无文章",
   "redemptionCodes": "兑换码",
   "redemptionCodesDesc": "生成和管理订阅兑换码",

@@ -707,7 +707,13 @@ export async function getMembershipSnapshot(): Promise<MembershipSnapshot> {
 }
 
 export async function deleteReport(id: string): Promise<void> {
-  await request(`/api/reports/${id}`, {
+  await request<{ deleted: boolean; reportId: number }>(`/api/reports/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function deleteAdminReport(id: string): Promise<void> {
+  await request<{ deleted: boolean; reportId: number }>(`/api/admin/reports/${id}`, {
     method: 'DELETE',
   })
 }

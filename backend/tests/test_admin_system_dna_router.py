@@ -34,3 +34,18 @@ def test_rebuild_system_dna(monkeypatch):
         "success": True,
         "data": {"profile_status": "ready", "profile_vector_type": "fashion_clip"},
     }
+
+
+def test_delete_admin_report(monkeypatch):
+    monkeypatch.setattr(
+        admin_router,
+        "delete_report_with_files",
+        lambda report_id: report_id == 42,
+    )
+
+    response = admin_router.delete_admin_report(report_id=42, user=_admin_user())
+
+    assert response == {
+        "success": True,
+        "data": {"deleted": True, "reportId": 42},
+    }

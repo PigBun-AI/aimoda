@@ -70,3 +70,71 @@ def test_resolve_report_lead_excerpt_backfills_metadata(monkeypatch):
         "entry_html": "pages/report.html",
         "lead_excerpt": "这是一段足够长的首页导语文案，用来说明本次报告聚焦的品牌轮廓、版型变化与关键单品信号。",
     }
+
+
+def test_delete_report_with_files_removes_report_views_before_report(monkeypatch):
+    report = ReportRecord(
+        id=12,
+        slug="delete-me",
+        title="Delete Me",
+        brand="Brand",
+        season="AW",
+        year=2026,
+        look_count=8,
+        index_url="https://example.com/report.html",
+        overview_url=None,
+        cover_url=None,
+        oss_prefix="reports/delete-me",
+        uploaded_by=1,
+        metadata_json=None,
+        created_at="2026-04-04T00:00:00Z",
+        updated_at="2026-04-04T00:00:00Z",
+    )
+
+    deleted_prefixes: list[str] = []
+
+    class FakeOSS:
+        def delete_prefix(self, prefix: str) -> int:
+            deleted_prefixes.append(prefix)
+            return 3
+
+    monkeypatch.setattr(report_service, "find_report_by_id", lambda report_id: report if report_id == 12 else None)
+    monkeypatch.setattr(report_service, "_delete_report_records", lambda report_id: report_id == 12)
+    monkeypatch.setattr(report_service, "get_oss_service", lambda: FakeOSS())
+
+    deleted = report_service.delete_report_with_files(12)
+
+    assert deleted is True
+    assert deleted_prefixes == ["reports/delete-me"]
+
+
+def test_delete_report_with_files_tolerates_oss_cleanup_failure(monkeypatch):
+    report = ReportRecord(
+        id=18,
+        slug="cleanup-warning",
+        title="Cleanup Warning",
+        brand="Brand",
+        season="SS",
+        year=2026,
+        look_count=5,
+        index_url="https://example.com/report.html",
+        overview_url=None,
+        cover_url=None,
+        oss_prefix="reports/cleanup-warning",
+        uploaded_by=1,
+        metadata_json=None,
+        created_at="2026-04-04T00:00:00Z",
+        updated_at="2026-04-04T00:00:00Z",
+    )
+
+    class FakeOSS:
+        def delete_prefix(self, prefix: str) -> int:
+            raise RuntimeError(f"boom:{prefix}")
+
+    monkeypatch.setattr(report_service, "find_report_by_id", lambda report_id: report if report_id == 18 else None)
+    monkeypatch.setattr(report_service, "_delete_report_records", lambda report_id: report_id == 18)
+    monkeypatch.setattr(report_service, "get_oss_service", lambda: FakeOSS())
+
+    deleted = report_service.delete_report_with_files(18)
+
+    assert deleted is True
