@@ -588,5 +588,5 @@ def delete_report(
 ):
     deleted = delete_report_with_files(report_id)
     if not deleted:
-        return {"success": False, "error": "未找到对应报告"}
-    return {"success": True, "message": "报告删除成功"}
+        raise AppError("未找到对应报告", 404)
+    return {"success": True, "data": {"deleted": True, "reportId": report_id}}

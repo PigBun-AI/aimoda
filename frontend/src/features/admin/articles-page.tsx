@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { deleteReport, getAdminReportsPage, updateAdminReport } from "@/lib/api"
+import { deleteAdminReport, getAdminReportsPage, getApiErrorMessage, updateAdminReport } from "@/lib/api"
 
 import type { ReportSummary } from "@/lib/types"
 
@@ -72,13 +72,16 @@ export function ArticlesPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: deleteReport,
+    mutationFn: deleteAdminReport,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-reports"] })
       queryClient.invalidateQueries({ queryKey: ["reports"] })
       setDeleteTarget(null)
     },
   })
+  const deleteErrorMessage = deleteMutation.error
+    ? getApiErrorMessage(deleteMutation.error, t("deleteFailed"))
+    : null
 
   useEffect(() => {
     setPage(1)
@@ -298,21 +301,42 @@ export function ArticlesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (open) return
+          deleteMutation.reset()
+          setDeleteTarget(null)
+        }}
+      >
         <DialogContent className="max-w-lg rounded-none border-border/80">
           <DialogHeader>
             <DialogTitle>{t("common:delete")}</DialogTitle>
             <DialogDescription>{t("deleteConfirm")}</DialogDescription>
           </DialogHeader>
           {deleteTarget ? <p className="type-chat-meta text-muted-foreground">{deleteTarget.title}</p> : null}
+          {deleteErrorMessage ? (
+            <p className="type-chat-meta border border-destructive/25 bg-destructive/5 px-3 py-2 text-destructive">
+              {deleteErrorMessage}
+            </p>
+          ) : null}
           <DialogFooter>
-            <Button variant="outline" className="rounded-none" onClick={() => setDeleteTarget(null)}>
+            <Button
+              variant="outline"
+              className="rounded-none"
+              onClick={() => {
+                deleteMutation.reset()
+                setDeleteTarget(null)
+              }}
+              disabled={deleteMutation.isPending}
+            >
               {t("common:cancel")}
             </Button>
             <Button
               variant="destructive"
               className="rounded-none"
               loading={deleteMutation.isPending}
+              disabled={deleteMutation.isPending}
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
             >
               {t("common:delete")}

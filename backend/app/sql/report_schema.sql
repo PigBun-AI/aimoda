@@ -81,6 +81,37 @@ CREATE TABLE IF NOT EXISTS report_views (
     UNIQUE (user_id, report_id)
 );
 
+DO $$
+DECLARE
+    existing_def TEXT;
+    constraint_name TEXT;
+BEGIN
+    SELECT pg_get_constraintdef(c.oid)
+      INTO existing_def
+      FROM pg_constraint c
+     WHERE c.conrelid = 'report_views'::regclass
+       AND c.contype = 'f'
+       AND c.confrelid = 'reports'::regclass
+     LIMIT 1;
+
+    IF existing_def IS NULL OR existing_def NOT ILIKE '%ON DELETE CASCADE%' THEN
+        FOR constraint_name IN
+            SELECT c.conname
+              FROM pg_constraint c
+             WHERE c.conrelid = 'report_views'::regclass
+               AND c.contype = 'f'
+               AND c.confrelid = 'reports'::regclass
+        LOOP
+            EXECUTE format('ALTER TABLE report_views DROP CONSTRAINT IF EXISTS %I', constraint_name);
+        END LOOP;
+
+        ALTER TABLE report_views
+            ADD CONSTRAINT report_views_report_id_fkey
+            FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE;
+    END IF;
+END;
+$$;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_report_views_user_id ON report_views(user_id);
 CREATE INDEX IF NOT EXISTS idx_report_views_user_viewed_at ON report_views(user_id, viewed_at);

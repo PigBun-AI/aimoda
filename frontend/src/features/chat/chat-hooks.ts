@@ -39,7 +39,16 @@ export function useChat(
 ) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerData, setDrawerData] = useState<DrawerData | null>(null)
-  const { messages, isLoading } = useChatMessageStore(sessionId)
+  const { messages, isLoading, hydrated } = useChatMessageStore(sessionId)
+  const [historyHydrationState, setHistoryHydrationState] = useState<{
+    sessionId: string | null
+    status: 'idle' | 'loading' | 'error'
+    errorMessage: string | null
+  }>({
+    sessionId: null,
+    status: 'idle',
+    errorMessage: null,
+  })
 
   const { sessions, markSessionExecutionStatus, primeSessionForImmediateRun, syncSessionRunId, loadSessions } = useSessionStore()
   const activeSession = sessionId ? sessions.find(session => session.id === sessionId) ?? null : null
@@ -57,14 +66,37 @@ export function useChat(
     setDrawerOpen(false)
     setDrawerData(null)
     postRunHydrationTokenRef.current += 1
+    setHistoryHydrationState({
+      sessionId,
+      status: 'idle',
+      errorMessage: null,
+    })
   }, [sessionId])
 
-  const hydrateSessionMessages = useCallback(async (targetSessionId: string): Promise<ChatMessage[]> => {
+  const hydrateSessionMessages = useCallback(async (
+    targetSessionId: string,
+    options?: { background?: boolean },
+  ): Promise<ChatMessage[]> => {
+    if (!options?.background) {
+      setHistoryHydrationState({
+        sessionId: targetSessionId,
+        status: 'loading',
+        errorMessage: null,
+      })
+    }
+
     const { requestId, baseRevision } = requestSessionHydration(targetSessionId)
 
     try {
       const msgs = await getSessionMessages(targetSessionId)
       if (!Array.isArray(msgs)) {
+        if (!options?.background) {
+          setHistoryHydrationState({
+            sessionId: targetSessionId,
+            status: 'idle',
+            errorMessage: null,
+          })
+        }
         return []
       }
 
@@ -83,9 +115,23 @@ export function useChat(
           : undefined,
       }))
       applyHydratedMessages(targetSessionId, requestId, baseRevision, mapped)
+      if (!options?.background) {
+        setHistoryHydrationState({
+          sessionId: targetSessionId,
+          status: 'idle',
+          errorMessage: null,
+        })
+      }
       return mapped
     } catch (err) {
       console.error('Failed to load session messages', err)
+      if (!options?.background) {
+        setHistoryHydrationState({
+          sessionId: targetSessionId,
+          status: 'error',
+          errorMessage: err instanceof Error ? err.message : String(err),
+        })
+      }
       throw err
     }
   }, [])
@@ -129,8 +175,17 @@ export function useChat(
       return
     }
 
-    void hydrateSessionMessages(sessionId)
-  }, [hydrateSessionMessages, sessionId])
+    if (hydrated) {
+      setHistoryHydrationState({
+        sessionId,
+        status: 'idle',
+        errorMessage: null,
+      })
+      return
+    }
+
+    void hydrateSessionMessages(sessionId).catch(() => undefined)
+  }, [hydrateSessionMessages, hydrated, sessionId])
 
   useEffect(() => {
     activeRunIdRef.current = activeSession?.current_run_id ?? null
@@ -143,20 +198,25 @@ export function useChat(
     if (!isRemoteRunning) {
       if (wasRemoteRunningRef.current) {
         wasRemoteRunningRef.current = false
-        void hydrateSessionMessages(sessionId)
+        void hydrateSessionMessages(sessionId, { background: true }).catch(() => undefined)
       }
       return
     }
 
     wasRemoteRunningRef.current = true
-    void hydrateSessionMessages(sessionId)
+    void hydrateSessionMessages(sessionId, { background: hydrated }).catch(() => undefined)
 
     const intervalId = window.setInterval(() => {
-      void hydrateSessionMessages(sessionId)
+      void hydrateSessionMessages(sessionId, { background: true }).catch(() => undefined)
     }, 2000)
 
     return () => window.clearInterval(intervalId)
-  }, [hydrateSessionMessages, isLoading, isRemoteRunning, sessionId])
+  }, [hydrateSessionMessages, hydrated, isLoading, isRemoteRunning, sessionId])
+
+  const retryHydrateSession = useCallback(async () => {
+    if (!sessionId) return
+    await hydrateSessionMessages(sessionId)
+  }, [hydrateSessionMessages, sessionId])
 
   const sendMessage = useCallback(async (input: ChatComposerInput, overrideSessionId?: string) => {
     const sid = overrideSessionId || sessionId
@@ -548,6 +608,11 @@ export function useChat(
   return {
     messages,
     isLoading,
+    isHydratingHistory: historyHydrationState.sessionId === sessionId && historyHydrationState.status === 'loading' && !hydrated,
+    historyHydrationError: historyHydrationState.sessionId === sessionId && historyHydrationState.status === 'error'
+      ? historyHydrationState.errorMessage
+      : null,
+    retryHydrateSession,
     isStopping,
     stopMessage,
     sendMessage,

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ChatInput } from './chat-input'
 import { getChatArtifact, getChatPreferenceOptions, resolveSearchPlanRef } from './chat-api'
 import { ImageDrawer } from './image-drawer'
@@ -78,6 +79,63 @@ function EmptyState() {
   )
 }
 
+function HistoryLoadingState() {
+  const { t } = useTranslation('common')
+
+  return (
+    <div className="mx-auto w-full max-w-3xl border-t border-border/60 pt-5 sm:pt-6">
+      <div className="border border-border/70 bg-card px-5 py-5 shadow-token-sm sm:px-6">
+        <div className="mb-5 flex items-center gap-2.5">
+          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          <span className="type-chat-kicker text-muted-foreground">{t('chatSessionLoadingTitle')}</span>
+        </div>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-28 rounded-none" />
+            <Skeleton className="h-16 w-[78%] rounded-none" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="ml-auto h-4 w-24 rounded-none" />
+            <Skeleton className="ml-auto h-20 w-[70%] rounded-none" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-32 rounded-none" />
+            <Skeleton className="h-24 w-[82%] rounded-none" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HistoryLoadFailedState({
+  message,
+  onRetry,
+}: {
+  message: string | null
+  onRetry: () => void
+}) {
+  const { t } = useTranslation('common')
+
+  return (
+    <div className="mx-auto w-full max-w-3xl border-t border-border/60 pt-5 sm:pt-6">
+      <div className="border border-destructive/25 bg-card px-5 py-5 shadow-token-sm sm:px-6">
+        <div className="space-y-2">
+          <p className="type-chat-kicker text-destructive">{t('chatSessionLoadFailedTitle')}</p>
+          <p className="type-body-muted text-muted-foreground">
+            {message || t('chatSessionLoadFailedHint')}
+          </p>
+        </div>
+        <div className="mt-4">
+          <Button type="button" variant="outline" size="sm" className="rounded-none" onClick={onRetry}>
+            {t('chatSessionRetry')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ChatPage() {
   const { t } = useTranslation('common')
   const isDesktop = useIsDesktop()
@@ -128,6 +186,9 @@ export function ChatPage() {
   const {
     messages,
     isLoading,
+    isHydratingHistory,
+    historyHydrationError,
+    retryHydrateSession,
     isStopping: isStoppingLocal,
     stopMessage,
     sendMessage,
@@ -401,6 +462,9 @@ export function ChatPage() {
     () => summarizeChatPreferences(draftPreferences, preferenceCollections, t),
     [draftPreferences, preferenceCollections, t],
   )
+  const hasPersistedHistory = (activeSession?.message_count ?? 0) > 0
+  const showHistoryLoading = hasPersistedHistory && messages.length === 0 && isHydratingHistory && !historyHydrationError
+  const showHistoryLoadFailed = hasPersistedHistory && messages.length === 0 && Boolean(historyHydrationError)
 
   const hasPendingPreferenceChanges = !areChatPreferencesEqual(draftPreferences, preferenceEditor)
 
@@ -477,7 +541,16 @@ export function ChatPage() {
           style={isDesktop ? { width: `${chatWidthPercent}%` } : undefined}
         >
           <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5 sm:py-5">
-            {messages.length === 0 ? (
+            {showHistoryLoading ? (
+              <HistoryLoadingState />
+            ) : showHistoryLoadFailed ? (
+              <HistoryLoadFailedState
+                message={historyHydrationError}
+                onRetry={() => {
+                  void retryHydrateSession()
+                }}
+              />
+            ) : messages.length === 0 ? (
               <EmptyState />
             ) : (
               <div className="mx-auto w-full max-w-3xl border-t border-border/60 pt-5 sm:pt-6">

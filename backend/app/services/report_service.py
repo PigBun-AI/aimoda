@@ -12,13 +12,14 @@ import zipfile
 from pathlib import Path
 from urllib.parse import quote, unquote, urlsplit
 
+import psycopg
+
 from ..config import settings
 from ..constants import OPENCLAW_REPORT_TEMPLATE, OPENCLAW_UPLOAD_CONTRACT, REPORT_SPEC
 from ..exceptions import AppError
 from ..models import ReportRecord
 from ..repositories.report_repo import (
     create_report,
-    delete_report_by_id,
     find_report_by_id,
     find_report_by_slug,
     list_reports,
@@ -163,13 +164,22 @@ def update_report_admin(
     )
 
 
+def _delete_report_records(report_id: int) -> bool:
+    with psycopg.connect(settings.POSTGRES_DSN) as conn:
+        conn.execute("UPDATE report_upload_jobs SET report_id = NULL WHERE report_id = %s", (report_id,))
+        conn.execute("DELETE FROM report_views WHERE report_id = %s", (report_id,))
+        result = conn.execute("DELETE FROM reports WHERE id = %s", (report_id,))
+        conn.commit()
+        return result.rowcount > 0
+
+
 def delete_report_with_files(report_id: int) -> bool:
     """Delete a report from the database AND its OSS files."""
     report = find_report_by_id(report_id)
     if not report:
         return False
 
-    deleted = delete_report_by_id(report_id)
+    deleted = _delete_report_records(report_id)
     if deleted and report.oss_prefix:
         # Clean up OSS files
         try:

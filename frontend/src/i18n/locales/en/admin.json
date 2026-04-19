@@ -19,6 +19,7 @@
   "articleListDesc": "All uploaded fashion week flash reports",
   "updatedAt": "Updated at",
   "deleteConfirm": "Are you sure you want to delete this article?",
+  "deleteFailed": "Failed to delete the report. Please try again.",
   "noArticles": "No articles",
   "redemptionCodes": "Redemption Codes",
   "redemptionCodesDesc": "Generate and manage subscription codes",

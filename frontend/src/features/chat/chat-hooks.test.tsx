@@ -81,6 +81,8 @@ describe('useChat', () => {
       ({ result } = renderHook(() => useChat('session-1')))
     })
 
+    expect(result.current.isHydratingHistory).toBe(true)
+
     await act(async () => {
       await result.current.sendMessage({
         content: [{ type: 'text', text: '帮我找红色连衣裙' }],
@@ -98,6 +100,8 @@ describe('useChat', () => {
     await waitFor(() => {
       expect(result.current.messages).toHaveLength(2)
     })
+    expect(result.current.isHydratingHistory).toBe(false)
+    expect(result.current.historyHydrationError).toBeNull()
 
     expect(result.current.messages[0]).toMatchObject({
       role: 'user',
@@ -143,6 +147,40 @@ describe('useChat', () => {
     await waitFor(() => {
       expect(result.current.messages).toEqual([])
     })
+  })
+
+  it('surfaces hydration failure and allows retrying the current session', async () => {
+    mockedGetSessionMessages
+      .mockRejectedValueOnce(new Error('network timeout'))
+      .mockResolvedValueOnce([
+        {
+          id: 'm-2',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'retry success' }],
+        },
+      ])
+
+    let result!: ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+    await act(async () => {
+      ({ result } = renderHook(() => useChat('session-2')))
+    })
+
+    await waitFor(() => {
+      expect(result.current.historyHydrationError).toContain('network timeout')
+    })
+
+    expect(result.current.isHydratingHistory).toBe(false)
+    expect(result.current.messages).toEqual([])
+
+    await act(async () => {
+      await result.current.retryHydrateSession()
+    })
+
+    await waitFor(() => {
+      expect(result.current.messages).toHaveLength(1)
+    })
+
+    expect(result.current.historyHydrationError).toBeNull()
   })
 
   it('removes the empty optimistic assistant message when a run is explicitly stopped', async () => {
