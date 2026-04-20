@@ -621,6 +621,22 @@ def _is_invalid_chat_history_error(error: Exception) -> bool:
     )
 
 
+def _is_model_safety_rejection_error(error: Exception) -> bool:
+    message = str(error).lower()
+    return (
+        "data_inspection_failed" in message
+        or "input text data may contain inappropriate content" in message
+    )
+
+
+def _resolve_agent_stream_error_message(error: Exception) -> str:
+    if _is_invalid_chat_history_error(error):
+        return "invalid_chat_history"
+    if _is_model_safety_rejection_error(error):
+        return "当前问题触发了模型安全审核，请换一种表述后重试。"
+    return "Agent stream failed. Check server logs."
+
+
 def _track_detached_post_run_task(task: asyncio.Task[Any]) -> None:
     _detached_post_run_tasks.add(task)
 
@@ -1454,8 +1470,8 @@ async def chat_endpoint(
             import traceback
             traceback.print_exc()
             invalid_history_repaired = False
-            error_message = "Agent stream failed. Check server logs."
-            if _is_invalid_chat_history_error(exc):
+            error_message = _resolve_agent_stream_error_message(exc)
+            if error_message == "invalid_chat_history":
                 next_thread_version = await asyncio.to_thread(
                     reset_session_runtime_checkpoint,
                     req.session_id,
