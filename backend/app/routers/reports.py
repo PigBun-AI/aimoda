@@ -362,8 +362,9 @@ def list_reports(
     response: Response,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=12, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=255),
 ):
-    reports, total = get_reports(page, limit)
+    reports, total = get_reports(page=page, limit=limit, q=q)
     preview_token = issue_report_preview_token(user)
     response.set_cookie(
         key=REPORT_PREVIEW_COOKIE_NAME,

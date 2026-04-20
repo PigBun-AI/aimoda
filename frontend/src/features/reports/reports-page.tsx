@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowUpRight, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { ArchiveSplitCard } from '@/components/cards/archive-split-card'
 import { PageIntro } from '@/components/layout/page-intro'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RedeemDialog } from '@/features/redemption/redeem-dialog'
 import { useReports } from '@/features/reports/use-reports'
@@ -20,15 +21,18 @@ function formatReportDate(date: string, language: string) {
 }
 
 export function ReportsPage() {
-  const { t } = useTranslation('reports')
+  const { t } = useTranslation(['reports', 'common'])
   const { i18n } = useTranslation()
   const [page, setPage] = useState(1)
+  const [searchInput, setSearchInput] = useState('')
+  const [query, setQuery] = useState('')
   const limit = 12
-  const reportsQuery = useReports(page, limit)
+  const reportsQuery = useReports(page, limit, query)
   const reports = reportsQuery.data?.reports ?? []
   const totalPages = reportsQuery.data?.totalPages ?? 1
   const totalReports = reportsQuery.data?.total ?? reports.length
   const isLocked = reportsQuery.error instanceof ApiError && reportsQuery.error.status === 403
+  const hasSubmittedQuery = query.length > 0
   const reportFallbackCopy = useMemo(
     () => (report: typeof reports[number]) => t('reportDeck', {
       brand: report.brand,
@@ -37,6 +41,10 @@ export function ReportsPage() {
     }),
     [i18n.language, t],
   )
+
+  useEffect(() => {
+    setPage(1)
+  }, [query])
 
   return (
     <section className="space-y-7 sm:space-y-8">
@@ -56,6 +64,43 @@ export function ReportsPage() {
         )}
       />
 
+      <section className="border border-border/80 bg-background px-4 py-4 shadow-token-sm sm:px-5 sm:py-5">
+        <form
+          className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]"
+          onSubmit={(event) => {
+            event.preventDefault()
+            setQuery(searchInput.trim())
+          }}
+        >
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="pl-11"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="outline">
+              {t('common:confirm')}
+            </Button>
+            {hasSubmittedQuery ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setSearchInput('')
+                  setQuery('')
+                }}
+              >
+                {t('clearSearch')}
+              </Button>
+            ) : null}
+          </div>
+        </form>
+      </section>
+
       {isLocked ? (
         <div className="border border-border/70 bg-card px-5 py-8 shadow-token-md sm:px-6 sm:py-9">
           <div className="mx-auto flex max-w-xl flex-col gap-3.5">
@@ -72,6 +117,22 @@ export function ReportsPage() {
               </Button>
               <RedeemDialog />
             </div>
+          </div>
+        </div>
+      ) : reports.length === 0 && !reportsQuery.isLoading ? (
+        <div className="border border-border/70 bg-card px-5 py-10 text-center shadow-token-md sm:px-6 sm:py-12">
+          <div className="mx-auto flex max-w-[20rem] flex-col items-center gap-4">
+            <div className="type-chat-kicker border border-border/70 bg-background px-4 py-2 text-muted-foreground">
+              {hasSubmittedQuery ? '∅' : '00'}
+            </div>
+            <p className="type-section-title text-foreground">
+              {hasSubmittedQuery ? t('noSearchResultsTitle') : t('noReports')}
+            </p>
+            {hasSubmittedQuery ? (
+              <p className="type-body-muted text-pretty text-muted-foreground">
+                {t('noSearchResultsBody', { query })}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : (
@@ -185,19 +246,6 @@ export function ReportsPage() {
             <ChevronRight className="size-4" strokeWidth={1.75} />
           </Button>
         </nav>
-      )}
-
-      {reports.length === 0 && !reportsQuery.isLoading && (
-        <div className="border border-border/70 bg-card px-5 py-10 text-center shadow-token-md sm:px-6 sm:py-12">
-          <div className="mx-auto flex max-w-[18rem] flex-col items-center gap-4">
-            <div className="type-chat-kicker border border-border/70 bg-background px-4 py-2 text-muted-foreground">
-              00
-            </div>
-            <p className="type-section-title text-foreground">
-              {t('noReports')}
-            </p>
-          </div>
-        </div>
       )}
     </section>
   )
