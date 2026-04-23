@@ -3,8 +3,10 @@
 -- Migrated from SQLite to PostgreSQL (shared fashion_chat database)
 --
 -- Tables:
---   1. reports       — Report metadata + OSS URLs
---   2. report_views  — Per-user view tracking (free tier limit)
+--   1. reports            — Report metadata + OSS URLs
+--   2. report_views       — Per-user view tracking (free tier limit)
+--   3. report_upload_jobs — Async report upload lifecycle tracking
+--   4. trend_flows        — Single-brand four-quarter trend flow reports
 --
 -- Note: users table remains in SQLite; user_id FKs are NOT enforced here.
 -- ============================================================================
@@ -81,9 +83,154 @@ CREATE TABLE IF NOT EXISTS report_views (
     UNIQUE (user_id, report_id)
 );
 
+DO $$
+DECLARE
+    existing_def TEXT;
+    constraint_name TEXT;
+BEGIN
+    SELECT pg_get_constraintdef(c.oid)
+      INTO existing_def
+      FROM pg_constraint c
+     WHERE c.conrelid = 'report_views'::regclass
+       AND c.contype = 'f'
+       AND c.confrelid = 'reports'::regclass
+     LIMIT 1;
+
+    IF existing_def IS NULL OR existing_def NOT ILIKE '%ON DELETE CASCADE%' THEN
+        FOR constraint_name IN
+            SELECT c.conname
+              FROM pg_constraint c
+             WHERE c.conrelid = 'report_views'::regclass
+               AND c.contype = 'f'
+               AND c.confrelid = 'reports'::regclass
+        LOOP
+            EXECUTE format('ALTER TABLE report_views DROP CONSTRAINT IF EXISTS %I', constraint_name);
+        END LOOP;
+
+        ALTER TABLE report_views
+            ADD CONSTRAINT report_views_report_id_fkey
+            FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE;
+    END IF;
+END;
+$$;
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_report_views_user_id ON report_views(user_id);
 CREATE INDEX IF NOT EXISTS idx_report_views_user_viewed_at ON report_views(user_id, viewed_at);
 
 COMMENT ON TABLE report_views IS
     'Tracks per-user report views for free-tier view limit enforcement.';
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 3. report_upload_jobs — Async report upload lifecycle tracking
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS report_upload_jobs (
+    id              TEXT PRIMARY KEY,
+    filename        TEXT NOT NULL,
+    status          TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    uploaded_by     INTEGER NOT NULL,
+    file_size_bytes BIGINT NOT NULL DEFAULT 0,
+    source_object_key TEXT,
+    report_id       INTEGER REFERENCES reports(id) ON DELETE SET NULL,
+    report_slug     TEXT,
+    error_message   TEXT,
+    started_at      TIMESTAMPTZ,
+    completed_at    TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION report_upload_jobs_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'report_upload_jobs' AND column_name = 'source_object_key'
+    ) THEN
+        ALTER TABLE report_upload_jobs ADD COLUMN source_object_key TEXT;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'report_upload_jobs_updated_at'
+    ) THEN
+        CREATE TRIGGER report_upload_jobs_updated_at
+            BEFORE UPDATE ON report_upload_jobs
+            FOR EACH ROW EXECUTE FUNCTION report_upload_jobs_set_updated_at();
+    END IF;
+END;
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_report_upload_jobs_uploaded_by_created_at
+    ON report_upload_jobs(uploaded_by, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_report_upload_jobs_status_created_at
+    ON report_upload_jobs(status, created_at DESC);
+
+COMMENT ON TABLE report_upload_jobs IS
+    'Async report upload jobs for long-running OSS extraction/upload flows.';
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4. trend_flows — Structured brand trend-flow reports across four quarters
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS trend_flows (
+    id              SERIAL PRIMARY KEY,
+    slug            TEXT NOT NULL UNIQUE,
+    title           TEXT NOT NULL,
+    brand           TEXT NOT NULL,
+    start_quarter   TEXT NOT NULL,
+    start_year      INTEGER NOT NULL,
+    end_quarter     TEXT NOT NULL,
+    end_year        INTEGER NOT NULL,
+
+    index_url       TEXT NOT NULL DEFAULT '',
+    overview_url    TEXT,
+    cover_url       TEXT,
+    oss_prefix      TEXT NOT NULL DEFAULT '',
+
+    uploaded_by     INTEGER,
+    timeline_json   JSONB NOT NULL DEFAULT '[]'::jsonb,
+    metadata_json   JSONB,
+    lead_excerpt    TEXT,
+
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION trend_flows_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'trend_flows_updated_at'
+    ) THEN
+        CREATE TRIGGER trend_flows_updated_at
+            BEFORE UPDATE ON trend_flows
+            FOR EACH ROW EXECUTE FUNCTION trend_flows_set_updated_at();
+    END IF;
+END;
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_trend_flows_brand ON trend_flows(brand);
+CREATE INDEX IF NOT EXISTS idx_trend_flows_created_at ON trend_flows(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trend_flows_start_window ON trend_flows(start_year DESC, end_year DESC);
+
+COMMENT ON TABLE trend_flows IS
+    'Single-brand trend-flow reports spanning four consecutive quarter-year windows.';

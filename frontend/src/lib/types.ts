@@ -62,6 +62,29 @@ export interface ReportDetail extends ReportSummary {
   tags: string[]
 }
 
+export interface TrendFlowTimelinePoint {
+  quarter: string
+  year: number
+}
+
+export interface TrendFlowSummary {
+  id: string
+  slug: string
+  title: string
+  brand: string
+  windowLabel: string
+  timeline: TrendFlowTimelinePoint[]
+  status: 'draft' | 'published' | 'archived'
+  updatedAt: string
+  coverImageUrl: string | null
+  previewUrl: string
+  leadExcerpt?: string | null
+}
+
+export interface TrendFlowDetail extends TrendFlowSummary {
+  iframeUrl: string
+}
+
 export interface AdminUser extends AuthUser {
   lastActiveAt: string
 }

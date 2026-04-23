@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getReportById, getReports } from '@/lib/api'
+import { getReportById, getReports, getTrendFlows } from '@/lib/api'
 
 describe('api client fallback policy', () => {
   beforeEach(() => {
@@ -36,6 +36,29 @@ describe('api client fallback policy', () => {
     )
 
     await expect(getReportById('report-1')).rejects.toThrow('403')
+  })
+
+  it('includes q when requesting paginated trend flows search results', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        success: true,
+        data: [],
+        meta: { total: 0, page: 1, limit: 12, totalPages: 0 },
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    await getTrendFlows(1, 12, '2025')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/trend-flow?page=1&limit=12&q=2025',
+      expect.objectContaining({
+        credentials: 'include',
+      }),
+    )
   })
 
   it('includes q when requesting paginated reports search results', async () => {

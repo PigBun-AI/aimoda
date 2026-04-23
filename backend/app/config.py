@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     REPORT_MCP_INTERNAL_TOKEN: str = "aimoda-report-mcp-internal-token"
     REPORT_MCP_SERVICE_USER_ID: int = 1
     AGENT_MCP_INTERNAL_TOKEN: str = "aimoda-agent-mcp-internal-token"
+    TREND_FLOW_MCP_INTERNAL_TOKEN: str = "aimoda-trend-flow-mcp-internal-token"
+    TREND_FLOW_MCP_SERVICE_USER_ID: int = 1
 
     # --- Agent / Chat ---
     QDRANT_URL: str = "http://220.168.84.134:16333"

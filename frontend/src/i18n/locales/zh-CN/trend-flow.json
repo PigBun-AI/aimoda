@@ -1,0 +1,23 @@
+{
+  "title": "趋势流动",
+  "subtitle": "围绕单一品牌，查看连续四个季度的趋势流动归档。",
+  "archiveLabel": "aimoda trend flow",
+  "searchPlaceholder": "搜索品牌、标题、季度或年份",
+  "clearSearch": "清空搜索",
+  "deck": "{{brand}} 的四季度趋势流动档案，覆盖 {{window}}，更新于 {{date}}。",
+  "openItem": "打开趋势流动",
+  "lockedEyebrow": "会员解锁",
+  "lockedTitle": "完整趋势流动归档需开通会员",
+  "lockedBody": "趋势流动为会员专属内容。开通会员后即可浏览单品牌连续四季度的完整归档与预览内容。",
+  "openMembership": "前往订阅",
+  "emptyTitle": "暂无趋势流动",
+  "emptyBody": "外部 Agent 发布后，这里会展示单品牌连续四季度的趋势流动归档。",
+  "noSearchResultsTitle": "没有匹配的趋势流动",
+  "noSearchResultsBody": "未找到与“{{query}}”相关的趋势流动，请尝试其他品牌、季度或年份。",
+  "notFound": "未找到对应趋势流动",
+  "backToList": "返回列表",
+  "detailDeck": "{{brand}} 的趋势流动覆盖 {{window}}，适合快速查看品牌跨季度演化。",
+  "openRawPreview": "新标签页打开原始预览",
+  "iframeError": "该趋势流动地址不符合安全加载策略",
+  "pagination": "分页"
+}

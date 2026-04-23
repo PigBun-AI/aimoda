@@ -69,6 +69,16 @@ def require_agent_mcp_internal_service(
     }
 
 
+def require_trend_flow_mcp_internal_service(
+    x_internal_token: Annotated[str | None, Header(alias="X-Internal-Token")] = None,
+    x_internal_service: Annotated[str | None, Header(alias="X-Internal-Service")] = None,
+) -> str:
+    """Dependency: verify service-to-service token for the trend-flow MCP adapter."""
+    if not x_internal_token or x_internal_token != settings.TREND_FLOW_MCP_INTERNAL_TOKEN:
+        raise AppError("无效的内部服务令牌", 401)
+    return x_internal_service or "unknown"
+
+
 def require_role(allowed_roles: list[UserRole]):
     """Dependency factory: require specific user roles."""
 
@@ -78,6 +88,18 @@ def require_role(allowed_roles: list[UserRole]):
         return user
 
     return checker
+
+
+def check_subscription_access_dep(
+    user: AuthenticatedUser,
+    locked_message: str = "订阅后可查看该内容",
+) -> None:
+    """Require an active subscription for non-admin/editor users."""
+    if user.role in ("admin", "editor"):
+        return
+    if find_active_subscription_by_user_id(user.id) is not None:
+        return
+    raise AppError(locked_message, 403)
 
 
 def extract_device_context(request: Request) -> dict:

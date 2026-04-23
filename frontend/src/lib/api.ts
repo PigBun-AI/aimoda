@@ -13,6 +13,8 @@ import type {
   RedemptionCodeType,
   ReportDetail,
   ReportSummary,
+  TrendFlowDetail,
+  TrendFlowSummary,
   StyleGapListResponse,
   Subscription,
   UpdateStyleGapPayload,
@@ -399,6 +401,14 @@ export interface PaginatedReports {
   totalPages: number
 }
 
+export interface PaginatedTrendFlows {
+  items: TrendFlowSummary[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+}
+
 export async function getReports(page = 1, limit = 12, q?: string): Promise<PaginatedReports> {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(page))
@@ -474,6 +484,87 @@ export async function getReportById(id: string): Promise<ReportDetail> {
     description: `${data.brand} ${data.season} ${data.year} RTW 趋势报告，包含 ${data.lookCount} 个造型`,
     iframeUrl: data.previewUrl || data.indexUrl || `/report-files/${data.slug}/index.html`,
     tags: [data.brand, data.season, String(data.year), 'RTW']
+  }
+}
+
+export async function getTrendFlows(page = 1, limit = 12, q?: string): Promise<PaginatedTrendFlows> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('page', String(page))
+  searchParams.set('limit', String(limit))
+  if (q?.trim()) {
+    searchParams.set('q', q.trim())
+  }
+
+  const response = await fetchWithAuth(`/api/trend-flow?${searchParams.toString()}`)
+
+  if (!response.ok) {
+    let payload: ApiResponse<unknown> | null = null
+    try {
+      payload = (await response.json()) as ApiResponse<unknown>
+    } catch {
+      payload = null
+    }
+    throw new ApiError(
+      payload?.error ?? `Request failed with status ${response.status}`,
+      response.status,
+      payload?.data,
+    )
+  }
+
+  const payload = await response.json() as {
+    success: boolean
+    data: Array<TrendFlowSummary & {
+      coverUrl?: string | null
+      previewUrl: string
+      leadExcerpt?: string | null
+      timeline?: Array<{ quarter: string; year: number }>
+      windowLabel: string
+    }>
+    meta: { total: number; page: number; limit: number; totalPages: number }
+  }
+
+  if (!payload.success || !payload.data) {
+    throw new ApiError('Failed to fetch trend flows', 500)
+  }
+
+  return {
+    items: payload.data.map((item) => ({
+      ...item,
+      id: String(item.id),
+      coverImageUrl: item.coverUrl ?? null,
+      timeline: item.timeline ?? [],
+    })),
+    ...payload.meta,
+  }
+}
+
+export async function getTrendFlowById(id: string): Promise<TrendFlowDetail> {
+  const data = await request<{
+    id: number
+    slug: string
+    title: string
+    brand: string
+    coverUrl?: string | null
+    previewUrl: string
+    updatedAt: string
+    windowLabel: string
+    leadExcerpt?: string | null
+    timeline?: Array<{ quarter: string; year: number }>
+  }>(`/api/trend-flow/${id}`)
+
+  return {
+    id: String(data.id),
+    slug: data.slug,
+    title: data.title,
+    brand: data.brand,
+    windowLabel: data.windowLabel,
+    timeline: data.timeline ?? [],
+    status: 'published',
+    updatedAt: data.updatedAt,
+    coverImageUrl: data.coverUrl ?? null,
+    previewUrl: data.previewUrl,
+    leadExcerpt: data.leadExcerpt ?? null,
+    iframeUrl: data.previewUrl,
   }
 }
 

@@ -106,12 +106,12 @@ def _normalize_html_asset_paths(report_root: Path) -> None:
             logger.info("Normalized broken asset refs in %s", html_path.relative_to(report_root).as_posix())
 
 
-def _upload_files(oss: OSSService, report_root: Path, slug: str, files: list[Path]) -> dict[str, str]:
+def _upload_files(oss: OSSService, report_root: Path, slug: str, files: list[Path], *, namespace: str) -> dict[str, str]:
     path_map: dict[str, str] = {}
     for file_path in files:
         rel_path = file_path.relative_to(report_root)
         rel_str = rel_path.as_posix()
-        oss_key = OSSService.report_path(slug, rel_str)
+        oss_key = f"{namespace}/{slug}/{rel_str}"
         content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
 
         with open(file_path, "rb") as f:
@@ -123,17 +123,24 @@ def _upload_files(oss: OSSService, report_root: Path, slug: str, files: list[Pat
     return path_map
 
 
-def upload_report_to_oss(report_root: Path, slug: str) -> ReportOSSResult:
+def upload_report_to_oss(
+    report_root: Path,
+    slug: str,
+    *,
+    namespace: str = "reports",
+    validate_manifest: bool = True,
+) -> ReportOSSResult:
     """Upload all report files to OSS and return URLs."""
 
     oss = get_oss_service()
-    oss_prefix = f"reports/{slug}/"
+    oss_prefix = f"{namespace}/{slug}/"
     manifest = load_report_manifest(report_root)
-    validate_report_directory(report_root)
+    if validate_manifest:
+        validate_report_directory(report_root)
     _normalize_html_asset_paths(report_root)
 
     upload_files = _scan_upload_files(report_root)
-    path_map = _upload_files(oss, report_root, slug, upload_files)
+    path_map = _upload_files(oss, report_root, slug, upload_files, namespace=namespace)
     total_size = sum(file_path.stat().st_size for file_path in upload_files)
     image_count = sum(1 for file_path in upload_files if file_path.suffix.lower() in IMAGE_EXTENSIONS)
 

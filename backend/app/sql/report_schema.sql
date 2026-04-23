@@ -3,8 +3,10 @@
 -- Migrated from SQLite to PostgreSQL (shared fashion_chat database)
 --
 -- Tables:
---   1. reports       — Report metadata + OSS URLs
---   2. report_views  — Per-user view tracking (free tier limit)
+--   1. reports            — Report metadata + OSS URLs
+--   2. report_views       — Per-user view tracking (free tier limit)
+--   3. report_upload_jobs — Async report upload lifecycle tracking
+--   4. trend_flows        — Single-brand four-quarter trend flow reports
 --
 -- Note: users table remains in SQLite; user_id FKs are NOT enforced here.
 -- ============================================================================
@@ -176,3 +178,59 @@ CREATE INDEX IF NOT EXISTS idx_report_upload_jobs_status_created_at
 
 COMMENT ON TABLE report_upload_jobs IS
     'Async report upload jobs for long-running OSS extraction/upload flows.';
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4. trend_flows — Structured brand trend-flow reports across four quarters
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS trend_flows (
+    id              SERIAL PRIMARY KEY,
+    slug            TEXT NOT NULL UNIQUE,
+    title           TEXT NOT NULL,
+    brand           TEXT NOT NULL,
+    start_quarter   TEXT NOT NULL,
+    start_year      INTEGER NOT NULL,
+    end_quarter     TEXT NOT NULL,
+    end_year        INTEGER NOT NULL,
+
+    index_url       TEXT NOT NULL DEFAULT '',
+    overview_url    TEXT,
+    cover_url       TEXT,
+    oss_prefix      TEXT NOT NULL DEFAULT '',
+
+    uploaded_by     INTEGER,
+    timeline_json   JSONB NOT NULL DEFAULT '[]'::jsonb,
+    metadata_json   JSONB,
+    lead_excerpt    TEXT,
+
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION trend_flows_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'trend_flows_updated_at'
+    ) THEN
+        CREATE TRIGGER trend_flows_updated_at
+            BEFORE UPDATE ON trend_flows
+            FOR EACH ROW EXECUTE FUNCTION trend_flows_set_updated_at();
+    END IF;
+END;
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_trend_flows_brand ON trend_flows(brand);
+CREATE INDEX IF NOT EXISTS idx_trend_flows_created_at ON trend_flows(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_trend_flows_start_window ON trend_flows(start_year DESC, end_year DESC);
+
+COMMENT ON TABLE trend_flows IS
+    'Single-brand trend-flow reports spanning four consecutive quarter-year windows.';
