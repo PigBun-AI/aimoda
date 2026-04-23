@@ -1,0 +1,23 @@
+{
+  "title": "Trend Flow",
+  "subtitle": "Browse single-brand trend flow archives spanning four consecutive quarters.",
+  "archiveLabel": "aimoda trend flow",
+  "searchPlaceholder": "Search brand, title, quarter, or year",
+  "clearSearch": "Clear search",
+  "deck": "A four-quarter trend-flow archive for {{brand}}, covering {{window}} and updated on {{date}}.",
+  "openItem": "Open trend flow",
+  "lockedEyebrow": "Membership Access",
+  "lockedTitle": "Full trend-flow archives require membership access",
+  "lockedBody": "Trend Flow is a membership-only archive. Open membership to browse the full four-quarter brand archive and preview experience.",
+  "openMembership": "Open membership",
+  "emptyTitle": "No trend flows yet",
+  "emptyBody": "Published trend-flow archives from external agents will appear here.",
+  "noSearchResultsTitle": "No matching trend flows",
+  "noSearchResultsBody": "No trend flows matched “{{query}}”. Try another brand, quarter, or year.",
+  "notFound": "Trend flow not found",
+  "backToList": "Back to List",
+  "detailDeck": "{{brand}} trend flow across {{window}}, designed for quick cross-season review.",
+  "openRawPreview": "Open raw preview in new tab",
+  "iframeError": "This trend-flow URL does not meet security loading policy",
+  "pagination": "Pagination"
+}

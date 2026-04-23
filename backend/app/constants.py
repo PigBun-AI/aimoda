@@ -125,3 +125,70 @@ OPENCLAW_REPORT_TEMPLATE = {
         "所有图片尽量拆到 assets/，不要把正文大图 base64 内嵌进 HTML。",
     ],
 }
+
+
+TREND_FLOW_SPEC = {
+    "version": "1.0.0",
+    "updatedAt": "2026-04-23",
+    "description": "AiModa Trend Flow ZIP 规范 - 单品牌、连续四个季度的趋势流动报告",
+    "folderStructure": {
+        "root": "{trend-flow-root}/",
+        "required": ["manifest.json", "entry HTML", "zip-internal assets"],
+        "optional": ["additional html pages", "assets/", "images/"],
+    },
+    "manifest": {
+        "requiredFields": ["slug", "title", "brand", "timeline", "entryHtml"],
+        "timelineRules": {
+            "exactLength": 4,
+            "requiredFields": ["quarter", "year"],
+            "quarterValues": ["早春", "春夏", "早秋", "秋冬"],
+            "mustBeConsecutive": True,
+        },
+        "example": {
+            "specVersion": "1.0",
+            "contentType": "trend_flow",
+            "slug": "miumiu-2025-early-spring-to-aw-trend-flow",
+            "title": "Miu Miu 趋势流动：2025 早春至秋冬",
+            "brand": "Miu Miu",
+            "timeline": [
+                {"quarter": "早春", "year": 2025},
+                {"quarter": "春夏", "year": 2025},
+                {"quarter": "早秋", "year": 2025},
+                {"quarter": "秋冬", "year": 2025},
+            ],
+            "entryHtml": "pages/report.html",
+            "overviewHtml": None,
+            "coverImage": None,
+        },
+    },
+}
+
+
+TREND_FLOW_TEMPLATE = {
+    "version": "1.0.0",
+    "updatedAt": "2026-04-23",
+    "folderTemplate": {
+        "root": "{slug}-trend-flow/",
+        "children": [
+            "manifest.json",
+            "pages/report.html",
+            "assets/cover.jpg",
+            "assets/chart-01.jpg",
+        ],
+    },
+    "manifestTemplate": {
+        "specVersion": "1.0",
+        "contentType": "trend_flow",
+        "slug": "brand-2025-trend-flow",
+        "title": "Brand 趋势流动：2025 早春至秋冬",
+        "brand": "Brand",
+        "timeline": [
+            {"quarter": "早春", "year": 2025},
+            {"quarter": "春夏", "year": 2025},
+            {"quarter": "早秋", "year": 2025},
+            {"quarter": "秋冬", "year": 2025},
+        ],
+        "entryHtml": "pages/report.html",
+        "coverImage": None,
+    },
+}

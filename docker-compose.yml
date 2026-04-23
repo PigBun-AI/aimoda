@@ -18,6 +18,8 @@ services:
       UPLOAD_TMP_DIR: /tmp/fashion-report-uploads
       REPORT_MCP_INTERNAL_TOKEN: ${REPORT_MCP_INTERNAL_TOKEN:-aimoda-report-mcp-internal-token}
       REPORT_MCP_SERVICE_USER_ID: ${REPORT_MCP_SERVICE_USER_ID:-1}
+      TREND_FLOW_MCP_INTERNAL_TOKEN: ${TREND_FLOW_MCP_INTERNAL_TOKEN:-aimoda-trend-flow-mcp-internal-token}
+      TREND_FLOW_MCP_SERVICE_USER_ID: ${TREND_FLOW_MCP_SERVICE_USER_ID:-1}
       # Agent / Chat
       QDRANT_URL: ${QDRANT_URL:-http://220.168.84.134:16333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
@@ -257,6 +259,37 @@ services:
           memory: ${REPORT_MCP_MEM_RESERVATION:-128m}
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18770/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  trend-flow-mcp:
+    build:
+      context: ./services/trend-flow-mcp
+      dockerfile: Dockerfile
+    environment:
+      PORT: '18790'
+      BACKEND_URL: http://api:3000
+      BACKEND_INTERNAL_TOKEN: ${TREND_FLOW_MCP_INTERNAL_TOKEN:-aimoda-trend-flow-mcp-internal-token}
+      BACKEND_INTERNAL_SERVICE_NAME: trend-flow-mcp
+    depends_on:
+      api:
+        condition: service_healthy
+    cpus: ${TREND_FLOW_MCP_CPUS:-0.5}
+    mem_limit: ${TREND_FLOW_MCP_MEM_LIMIT:-256m}
+    mem_reservation: ${TREND_FLOW_MCP_MEM_RESERVATION:-128m}
+    deploy:
+      resources:
+        limits:
+          cpus: '${TREND_FLOW_MCP_CPUS:-0.5}'
+          memory: ${TREND_FLOW_MCP_MEM_LIMIT:-256m}
+        reservations:
+          cpus: '${TREND_FLOW_MCP_CPU_RESERVATION:-0.25}'
+          memory: ${TREND_FLOW_MCP_MEM_RESERVATION:-128m}
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:18790/health']
       interval: 30s
       timeout: 10s
       retries: 3

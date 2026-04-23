@@ -100,6 +100,40 @@ class ReportMetadata(BaseModel):
     lead_excerpt: str | None = None
 
 
+class TrendFlowTimelinePoint(CamelModel):
+    quarter: str
+    year: int
+
+
+class TrendFlowRecord(CamelModel):
+    id: int
+    slug: str
+    title: str
+    brand: str
+    start_quarter: str
+    start_year: int
+    end_quarter: str
+    end_year: int
+    index_url: str
+    overview_url: str | None = None
+    cover_url: str | None = None
+    oss_prefix: str
+    uploaded_by: int | None = None
+    timeline_json: str | None = None
+    metadata_json: str | None = None
+    lead_excerpt: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class TrendFlowMetadata(BaseModel):
+    slug: str
+    title: str
+    brand: str
+    timeline: list[TrendFlowTimelinePoint]
+    lead_excerpt: str | None = None
+
+
 class ReportUploadJobRecord(CamelModel):
     id: str
     filename: str

@@ -131,7 +131,8 @@ export function AppShell() {
     location.pathname === '/chat' ||
     location.pathname === '/collections' ||
     location.pathname === '/profile' ||
-    location.pathname.startsWith('/reports/')
+    location.pathname.startsWith('/reports/') ||
+    location.pathname.startsWith('/trend-flow/')
   const isChatImmersive = location.pathname === '/chat' && isDrawerFullscreen
 
   const hasRunningSession = chatSessions.some(
@@ -156,6 +157,7 @@ export function AppShell() {
     () => [
       { to: '/chat', label: t('common:aiAssistant'), icon: MessageCircle },
       { to: '/reports', label: t('reports:title'), icon: LayoutDashboard },
+      { to: '/trend-flow', label: t('trend-flow:title'), icon: Sparkles },
       { to: '/inspiration', label: t('common:inspiration'), icon: Sparkles },
       { to: '/collections', label: t('common:favoritesTab'), icon: Heart },
     ],
