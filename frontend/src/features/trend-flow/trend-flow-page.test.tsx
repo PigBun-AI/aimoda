@@ -66,7 +66,8 @@ describe('TrendFlowPage', () => {
     expect(screen.getByText('Miu Miu 趋势流动：2025')).toBeInTheDocument()
     expect(screen.getByText('连续四季的品牌演化。')).toBeInTheDocument()
     const openLinks = screen.getAllByRole('link', { name: /Miu Miu 趋势流动：2025/i })
-    expect(openLinks[0]).toHaveAttribute('href', '/trend-flow/trend-1')
+    expect(openLinks[0]).toHaveAttribute('href', '/api/trend-flow/1/preview/pages/report.html')
+    expect(openLinks[0]).toHaveAttribute('target', '_blank')
   })
 
   it('submits keyword search and shows dedicated empty state for no matches', async () => {

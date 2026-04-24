@@ -18,6 +18,24 @@ function formatFlowDate(date: string, language: string) {
   })
 }
 
+function getSafeIframeUrl(url: string): string | null {
+  try {
+    if (url.startsWith('/')) {
+      return url
+    }
+    const parsed = new URL(url, window.location.origin)
+    if (parsed.origin === window.location.origin) {
+      return parsed.pathname + parsed.search + parsed.hash
+    }
+    if (parsed.hostname.endsWith('.aliyuncs.com')) {
+      return url
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export function TrendFlowPage() {
   const { t, i18n } = useTranslation(['trend-flow', 'common'])
   const [page, setPage] = useState(1)
@@ -137,16 +155,22 @@ export function TrendFlowPage() {
                 const itemNumber = (page - 1) * limit + index + 1
                 const paddedNumber = String(itemNumber).padStart(2, '0')
                 const paddedTotal = String(totalItems).padStart(2, '0')
+                const safePreviewUrl = getSafeIframeUrl(item.previewUrl)
                 return (
                   <article
                     key={item.id}
                     className="relative flex min-h-[calc(100dvh-16rem)] flex-col border-t border-border/60 pt-[6vh] md:pt-[8vh]"
                   >
-                    <div className="pointer-events-none absolute right-0 top-6 type-meta tabular-nums text-muted-foreground">
-                      {paddedNumber} / {paddedTotal}
+                    <div
+                      aria-label={`${paddedNumber} of ${paddedTotal}`}
+                      className="pointer-events-none absolute right-4 top-10 z-10 type-meta tabular-nums text-muted-foreground"
+                    >
+                      <span className="block origin-center -rotate-90 whitespace-nowrap">
+                        {paddedNumber} / {paddedTotal}
+                      </span>
                     </div>
 
-                    <header className="relative z-10 max-w-full pr-0 md:max-w-[78%] md:pr-[4vw]">
+                    <header className="relative z-10 max-w-full pr-10 md:max-w-[78%] md:pr-[4vw]">
                       <p className="type-chat-kicker text-muted-foreground">{item.brand}</p>
                       <h2 className="mt-4 text-balance text-[clamp(2.25rem,7vw,6rem)] font-bold leading-[0.95] tracking-tight text-foreground">
                         {item.title}
@@ -161,32 +185,43 @@ export function TrendFlowPage() {
                       ) : null}
                     </header>
 
-                    <div className="absolute right-0 top-[38%] hidden md:block">
+                    <div className="absolute right-10 top-[38%] z-10 hidden md:block">
                       <Button asChild variant="outline" className="type-chat-action h-11 px-6">
-                        <Link to={`/trend-flow/${item.id}`} aria-label={`${t('openItem')} — ${item.title}`}>
+                        <a
+                          href={item.previewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`${t('openItem')} — ${item.title}`}
+                        >
                           <span>{t('openItem')}</span>
                           <ArrowUpRight className="size-4" strokeWidth={1.6} />
-                        </Link>
+                        </a>
                       </Button>
                     </div>
 
                     <div className="mt-6 md:hidden">
                       <Button asChild variant="outline" size="sm">
-                        <Link to={`/trend-flow/${item.id}`} aria-label={`${t('openItem')} — ${item.title}`}>
+                        <a
+                          href={item.previewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label={`${t('openItem')} — ${item.title}`}
+                        >
                           <span>{t('openItem')}</span>
                           <ArrowUpRight className="size-4" strokeWidth={1.6} />
-                        </Link>
+                        </a>
                       </Button>
                     </div>
 
                     <div className="mt-auto pt-[6vh]">
-                      <div className="aspect-[21/9] w-full overflow-hidden border border-border/70 bg-background">
-                        {item.coverImageUrl ? (
-                          <img
-                            src={item.coverImageUrl}
-                            alt={item.title}
-                            className="h-full w-full object-cover object-center"
+                      <div className="relative aspect-[21/9] w-full overflow-hidden border border-border/70 bg-background">
+                        {safePreviewUrl ? (
+                          <iframe
+                            src={safePreviewUrl}
+                            title={item.title}
                             loading="lazy"
+                            tabIndex={-1}
+                            className="pointer-events-none absolute inset-0 h-full w-full border-0 bg-white dark:bg-black"
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center px-6 text-center">

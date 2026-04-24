@@ -131,8 +131,7 @@ export function AppShell() {
     location.pathname === '/chat' ||
     location.pathname === '/collections' ||
     location.pathname === '/profile' ||
-    location.pathname.startsWith('/reports/') ||
-    location.pathname.startsWith('/trend-flow/')
+    location.pathname.startsWith('/reports/')
   const isChatImmersive = location.pathname === '/chat' && isDrawerFullscreen
 
   const hasRunningSession = chatSessions.some(

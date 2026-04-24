@@ -11,7 +11,6 @@ const ChatPage = lazy(() => import('@/features/chat/chat-page').then((module) =>
 const ReportsPage = lazy(() => import('@/features/reports/reports-page').then((module) => ({ default: module.ReportsPage })))
 const ReportDetailPage = lazy(() => import('@/features/reports/report-detail-page').then((module) => ({ default: module.ReportDetailPage })))
 const TrendFlowPage = lazy(() => import('@/features/trend-flow/trend-flow-page').then((module) => ({ default: module.TrendFlowPage })))
-const TrendFlowDetailPage = lazy(() => import('@/features/trend-flow/trend-flow-detail-page').then((module) => ({ default: module.TrendFlowDetailPage })))
 const ProfilePage = lazy(() => import('@/features/profile/profile-page').then((module) => ({ default: module.ProfilePage })))
 const FavoriteCollectionsPage = lazy(() => import('@/features/favorites/favorite-collections-page').then((module) => ({ default: module.FavoriteCollectionsPage })))
 const ImageDetailPage = lazy(() => import('@/features/chat/image-detail-page').then((module) => ({ default: module.ImageDetailPage })))
@@ -102,10 +101,6 @@ export const router = createBrowserRouter(
                 {
                   path: '/trend-flow',
                   element: withRouteSuspense(<TrendFlowPage />),
-                },
-                {
-                  path: '/trend-flow/:trendFlowId',
-                  element: withRouteSuspense(<TrendFlowDetailPage />),
                 },
                 {
                   path: '/inspiration',
