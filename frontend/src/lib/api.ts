@@ -3,6 +3,7 @@ import type {
   AdminGallerySummary,
   AdminGalleriesPage,
   AdminReportsPage,
+  AdminTrendFlowsPage,
   AuthUser,
   DashboardData,
   GetStyleGapsParams,
@@ -20,6 +21,7 @@ import type {
   UpdateStyleGapPayload,
   UpdateAdminGalleryPayload,
   UpdateAdminReportPayload,
+  UpdateAdminTrendFlowPayload,
   MembershipSnapshot,
 } from '@/lib/types'
 
@@ -515,6 +517,8 @@ export async function getTrendFlows(page = 1, limit = 12, q?: string): Promise<P
     success: boolean
     data: Array<TrendFlowSummary & {
       coverUrl?: string | null
+      coverHtml?: string | null
+      coverHtmlSource?: string | null
       previewUrl: string
       leadExcerpt?: string | null
       timeline?: Array<{ quarter: string; year: number }>
@@ -532,6 +536,8 @@ export async function getTrendFlows(page = 1, limit = 12, q?: string): Promise<P
       ...item,
       id: String(item.id),
       coverImageUrl: item.coverUrl ?? null,
+      coverHtml: item.coverHtml ?? null,
+      coverHtmlSource: item.coverHtmlSource ?? null,
       timeline: item.timeline ?? [],
     })),
     ...payload.meta,
@@ -545,6 +551,8 @@ export async function getTrendFlowById(id: string): Promise<TrendFlowDetail> {
     title: string
     brand: string
     coverUrl?: string | null
+    coverHtml?: string | null
+    coverHtmlSource?: string | null
     previewUrl: string
     updatedAt: string
     windowLabel: string
@@ -562,6 +570,8 @@ export async function getTrendFlowById(id: string): Promise<TrendFlowDetail> {
     status: 'published',
     updatedAt: data.updatedAt,
     coverImageUrl: data.coverUrl ?? null,
+    coverHtml: data.coverHtml ?? null,
+    coverHtmlSource: data.coverHtmlSource ?? null,
     previewUrl: data.previewUrl,
     leadExcerpt: data.leadExcerpt ?? null,
     iframeUrl: data.previewUrl,
@@ -870,6 +880,85 @@ export async function updateAdminReport(id: string, payload: UpdateAdminReportPa
     ...data,
     coverImageUrl: data.coverUrl || `/report-files/${data.slug}/cover.jpg`,
   }
+}
+
+export async function getAdminTrendFlowsPage(params: {
+  page?: number
+  limit?: number
+  q?: string
+}): Promise<AdminTrendFlowsPage> {
+  const searchParams = new URLSearchParams()
+  searchParams.set('page', String(params.page ?? 1))
+  searchParams.set('limit', String(params.limit ?? 12))
+  if (params.q?.trim()) searchParams.set('q', params.q.trim())
+
+  const data = await request<{
+    items: Array<TrendFlowSummary & {
+      coverUrl?: string | null
+      coverHtml?: string | null
+      coverHtmlSource?: string | null
+      leadExcerpt?: string | null
+      timeline?: Array<{ quarter: string; year: number }>
+      windowLabel: string
+    }>
+    total: number
+    page: number
+    limit: number
+    totalPages: number
+    q: string
+  }>(`/api/admin/trend-flows?${searchParams.toString()}`)
+
+  return {
+    items: data.items.map((item) => ({
+      ...item,
+      id: String(item.id),
+      coverImageUrl: item.coverUrl ?? null,
+      coverHtml: item.coverHtml ?? null,
+      coverHtmlSource: item.coverHtmlSource ?? null,
+      timeline: item.timeline ?? [],
+    })),
+    total: data.total,
+    page: data.page,
+    limit: data.limit,
+    totalPages: data.totalPages,
+    q: data.q,
+  }
+}
+
+export async function updateAdminTrendFlow(id: string, payload: UpdateAdminTrendFlowPayload): Promise<TrendFlowSummary> {
+  const data = await request<TrendFlowSummary & {
+    coverUrl?: string | null
+    coverHtml?: string | null
+    coverHtmlSource?: string | null
+    timeline?: Array<{ quarter: string; year: number }>
+  }>(`/api/admin/trend-flows/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: payload.title,
+      brand: payload.brand,
+      start_quarter: payload.startQuarter,
+      start_year: payload.startYear,
+      end_quarter: payload.endQuarter,
+      end_year: payload.endYear,
+      cover_url: payload.coverUrl,
+      lead_excerpt: payload.leadExcerpt,
+    }),
+  })
+
+  return {
+    ...data,
+    id: String(data.id),
+    coverImageUrl: data.coverUrl ?? null,
+    coverHtml: data.coverHtml ?? null,
+    coverHtmlSource: data.coverHtmlSource ?? null,
+    timeline: data.timeline ?? [],
+  }
+}
+
+export async function deleteAdminTrendFlow(id: string): Promise<void> {
+  await request<{ deleted: boolean; trendFlowId: number }>(`/api/admin/trend-flows/${id}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function getAdminGalleriesPage(params: {

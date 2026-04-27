@@ -147,11 +147,11 @@ function toolError(err: unknown) {
 }
 
 function createServer(): McpServer {
-  const server = new McpServer({ name: 'aimoda-trend-flow', version: '1.0.0' })
+  const server = new McpServer({ name: 'aimoda-trend-flow', version: '2.0.0' })
 
   server.tool(
     'get_trend_flow_spec',
-    '获取趋势流动 ZIP 打包规范，包含 manifest、时间轴要求与目录结构。',
+    '获取趋势流动 ZIP 打包规范，包含 manifest、时间轴要求、目录结构，以及 template 或正文 data-aimoda-cover-fragment 封面标记规范。',
     {},
     async () => {
       try {
@@ -164,7 +164,7 @@ function createServer(): McpServer {
 
   server.tool(
     'get_trend_flow_template',
-    '获取趋势流动 ZIP 模板，适合外部 Agent 直接据此构建单品牌四季度包。',
+    '获取趋势流动 ZIP 模板，含 entryHtml 内的 cover template 示例；如果封面就是正文 C 区块，也可用 data-aimoda-cover-fragment 标记该区块。',
     {},
     async () => {
       try {
@@ -177,7 +177,7 @@ function createServer(): McpServer {
 
   server.tool(
     'publish_trend_flow',
-    '发布一个趋势流动 ZIP。要求 manifest 中 brand、timeline、entryHtml 完整，timeline 必须是连续四个季度。',
+    '发布一个趋势流动 ZIP。严格要求 manifest.specVersion、contentType=trend_flow、brand、timeline、entryHtml 完整，timeline 必须是连续四个季度，entryHtml 必须提供唯一封面标记：cover template 或正文 data-aimoda-cover-fragment。',
     {
       file_base64: z.string().describe('zip 文件的 base64 编码'),
       filename: z.string().optional().default('trend-flow.zip').describe('zip 文件名'),
@@ -252,7 +252,7 @@ async function main() {
   app.use(express.default.json({ limit: '100mb' }))
 
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', service: 'trend-flow-mcp', version: '1.0.0' })
+    res.json({ status: 'ok', service: 'trend-flow-mcp', version: '2.0.0' })
   })
 
   app.post('/mcp', authMiddleware, async (req, res) => {

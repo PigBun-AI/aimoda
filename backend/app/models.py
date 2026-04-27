@@ -355,6 +355,17 @@ class UpdateAdminReportRequest(BaseModel):
     lead_excerpt: str | None = Field(default=None, max_length=2000)
 
 
+class UpdateAdminTrendFlowRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    brand: str | None = Field(default=None, min_length=1, max_length=255)
+    start_quarter: str | None = Field(default=None, min_length=1, max_length=64)
+    start_year: int | None = Field(default=None, ge=1900, le=2100)
+    end_quarter: str | None = Field(default=None, min_length=1, max_length=64)
+    end_year: int | None = Field(default=None, ge=1900, le=2100)
+    cover_url: str | None = Field(default=None, max_length=2000)
+    lead_excerpt: str | None = Field(default=None, max_length=2000)
+
+
 class UpdateAdminGalleryRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=4000)

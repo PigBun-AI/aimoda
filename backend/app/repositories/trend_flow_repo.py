@@ -107,6 +107,76 @@ def list_trend_flows(page: int = 1, limit: int = 12, q: str | None = None) -> tu
     return [_map_trend_flow(row) for row in rows], total
 
 
+def update_trend_flow_admin_fields(
+    trend_flow_id: int,
+    *,
+    title: str | None = None,
+    brand: str | None = None,
+    start_quarter: str | None = None,
+    start_year: int | None = None,
+    end_quarter: str | None = None,
+    end_year: int | None = None,
+    cover_url: str | None = None,
+    timeline_json: list[dict] | None = None,
+    metadata_json: dict | None = None,
+) -> TrendFlowRecord | None:
+    assignments: list[str] = []
+    params: list[object] = []
+
+    if title is not None:
+        assignments.append("title = %s")
+        params.append(title)
+    if brand is not None:
+        assignments.append("brand = %s")
+        params.append(brand)
+    if start_quarter is not None:
+        assignments.append("start_quarter = %s")
+        params.append(start_quarter)
+    if start_year is not None:
+        assignments.append("start_year = %s")
+        params.append(start_year)
+    if end_quarter is not None:
+        assignments.append("end_quarter = %s")
+        params.append(end_quarter)
+    if end_year is not None:
+        assignments.append("end_year = %s")
+        params.append(end_year)
+    if cover_url is not None:
+        assignments.append("cover_url = %s")
+        params.append(cover_url or None)
+    if timeline_json is not None:
+        assignments.append("timeline_json = %s")
+        params.append(psycopg.types.json.Json(timeline_json))
+    if metadata_json is not None:
+        assignments.append("metadata_json = %s")
+        params.append(psycopg.types.json.Json(metadata_json))
+
+    if not assignments:
+        return find_trend_flow_by_id(trend_flow_id)
+
+    with _get_pg_conn() as conn:
+        row = conn.execute(
+            f"""
+            UPDATE trend_flows
+            SET {", ".join(assignments)},
+                updated_at = NOW()
+            WHERE id = %s
+            RETURNING {TREND_FLOW_COLUMNS}
+            """,
+            (*params, trend_flow_id),
+        ).fetchone()
+        conn.commit()
+
+    return _map_trend_flow(row) if row else None
+
+
+def delete_trend_flow(trend_flow_id: int) -> bool:
+    with _get_pg_conn() as conn:
+        result = conn.execute("DELETE FROM trend_flows WHERE id = %s", (trend_flow_id,))
+        conn.commit()
+        return result.rowcount > 0
+
+
 def create_trend_flow(
     *,
     slug: str,

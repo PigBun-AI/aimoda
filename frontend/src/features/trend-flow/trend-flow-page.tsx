@@ -1,266 +1,472 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { ArrowUpRight, Search } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { ArrowUpRight, Search, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
-import { PageIntro } from '@/components/layout/page-intro'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Skeleton } from '@/components/ui/skeleton'
-import { useTrendFlows } from '@/features/trend-flow/use-trend-flows'
-import { ApiError } from '@/lib/api'
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useInfiniteTrendFlows } from "@/features/trend-flow/use-trend-flows";
+import { ApiError } from "@/lib/api";
+import type { TrendFlowSummary } from "@/lib/types";
 
-function formatFlowDate(date: string, language: string) {
-  return new Date(date).toLocaleDateString(language === 'zh-CN' ? 'zh-CN' : 'en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+const READER_PAGE_SIZE = 4;
+const PREVIEW_IFRAME_SCALE = 0.78;
+
+function buildCoverSrcDoc(coverHtml: string) {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: transparent;
+      }
+      body {
+        overflow: hidden;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      img,
+      picture,
+      video,
+      canvas,
+      svg {
+        max-width: 100%;
+      }
+    </style>
+  </head>
+  <body>${coverHtml}</body>
+</html>`;
 }
 
-function getSafeIframeUrl(url: string): string | null {
-  try {
-    if (url.startsWith('/')) {
-      return url
-    }
-    const parsed = new URL(url, window.location.origin)
-    if (parsed.origin === window.location.origin) {
-      return parsed.pathname + parsed.search + parsed.hash
-    }
-    if (parsed.hostname.endsWith('.aliyuncs.com')) {
-      return url
-    }
-    return null
-  } catch {
-    return null
-  }
+function formatFlowDate(date: string, language: string) {
+  return new Date(date).toLocaleDateString(
+    language === "zh-CN" ? "zh-CN" : "en-US",
+    {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    },
+  );
 }
 
 export function TrendFlowPage() {
-  const { t, i18n } = useTranslation(['trend-flow', 'common'])
-  const [page, setPage] = useState(1)
-  const [searchInput, setSearchInput] = useState('')
-  const [query, setQuery] = useState('')
-  const limit = 12
-  const trendFlowsQuery = useTrendFlows(page, limit, query)
-  const trendFlows = trendFlowsQuery.data?.items ?? []
-  const totalPages = trendFlowsQuery.data?.totalPages ?? 1
-  const totalItems = trendFlowsQuery.data?.total ?? trendFlows.length
-  const isLocked = trendFlowsQuery.error instanceof ApiError && trendFlowsQuery.error.status === 403
-  const hasSubmittedQuery = query.length > 0
+  const { t, i18n } = useTranslation(["trend-flow", "common"]);
+  const [query, setQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Array<HTMLElement | null>>([]);
+
+  const trendFlowsQuery = useInfiniteTrendFlows(READER_PAGE_SIZE, query);
+  const pages = trendFlowsQuery.data?.pages ?? [];
+  const trendFlows = useMemo(
+    () => pages.flatMap((page) => page.items),
+    [pages],
+  );
+  const totalItems = pages[0]?.total ?? trendFlows.length;
+  const activeItemNumber = trendFlows.length
+    ? Math.min(activeIndex + 1, totalItems)
+    : 0;
+  const isLocked =
+    trendFlowsQuery.error instanceof ApiError &&
+    trendFlowsQuery.error.status === 403;
+  const hasSubmittedQuery = query.length > 0;
   const fallbackCopy = useMemo(
-    () => (item: typeof trendFlows[number]) => t('deck', {
-      brand: item.brand,
-      window: item.windowLabel,
-      date: formatFlowDate(item.updatedAt, i18n.language),
-    }),
-    [i18n.language, t, trendFlows],
-  )
+    () => (item: TrendFlowSummary) =>
+      t("deck", {
+        brand: item.brand,
+        window: item.windowLabel,
+        date: formatFlowDate(item.updatedAt, i18n.language),
+      }),
+    [i18n.language, t],
+  );
 
   useEffect(() => {
-    setPage(1)
-  }, [query])
+    if (!isSearchOpen) return;
+    setSearchInput(query);
+  }, [isSearchOpen, query]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+    if (typeof scrollContainerRef.current?.scrollTo === "function") {
+      scrollContainerRef.current.scrollTo({ top: 0 });
+    }
+  }, [query]);
+
+  useEffect(() => {
+    const root = scrollContainerRef.current;
+    if (
+      !root ||
+      trendFlows.length === 0 ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visibleEntry = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+
+        if (!visibleEntry) return;
+        const nextIndex = Number(
+          (visibleEntry.target as HTMLElement).dataset.index,
+        );
+        if (!Number.isNaN(nextIndex)) {
+          setActiveIndex(nextIndex);
+        }
+      },
+      {
+        root,
+        threshold: [0.55, 0.75],
+      },
+    );
+
+    itemRefs.current.slice(0, trendFlows.length).forEach((item) => {
+      if (item) observer.observe(item);
+    });
+
+    return () => observer.disconnect();
+  }, [trendFlows.length]);
+
+  useEffect(() => {
+    const root = scrollContainerRef.current;
+    const sentinel = loadMoreRef.current;
+    if (
+      !root ||
+      !sentinel ||
+      !trendFlowsQuery.hasNextPage ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries.some((entry) => entry.isIntersecting) &&
+          !trendFlowsQuery.isFetchingNextPage
+        ) {
+          void trendFlowsQuery.fetchNextPage();
+        }
+      },
+      {
+        root,
+        rootMargin: "60% 0px",
+      },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    trendFlows.length,
+    trendFlowsQuery.fetchNextPage,
+    trendFlowsQuery.hasNextPage,
+    trendFlowsQuery.isFetchingNextPage,
+  ]);
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setQuery(searchInput.trim());
+    setIsSearchOpen(false);
+  }
+
+  function clearSearch() {
+    setSearchInput("");
+    setQuery("");
+    setIsSearchOpen(false);
+  }
 
   return (
-    <section className="space-y-7 sm:space-y-8">
-      <PageIntro
-        eyebrow={String(totalItems).padStart(2, '0')}
-        title={t('title')}
-        aside={(
-          <div className="flex h-full flex-col justify-between gap-4">
-            <p className="type-meta max-w-[32ch] text-pretty text-muted-foreground/84">
-              {t('subtitle')}
-            </p>
-            <div className="type-meta flex items-center justify-between border-t border-border/60 pt-3 text-muted-foreground">
-              <span>{t('archiveLabel')}</span>
-              <span className="tabular-nums">{String(page).padStart(2, '0')}</span>
+    <section className="relative h-full overflow-hidden bg-background">
+      {!isLocked ? (
+        <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex items-start justify-between gap-3 sm:inset-x-5 sm:top-5">
+          <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-2">
+            <div className="border border-border/70 bg-background/90 px-3 py-2 shadow-token-sm backdrop-blur-md">
+              <p className="type-chat-kicker text-muted-foreground">
+                {t("readerEyebrow")}
+              </p>
+              <p className="type-chat-label tabular-nums text-foreground">
+                {String(activeItemNumber).padStart(2, "0")} /{" "}
+                {String(totalItems).padStart(2, "0")}
+              </p>
             </div>
-          </div>
-        )}
-      />
 
-      <section className="border border-border/80 bg-background px-4 py-4 shadow-token-sm sm:px-5 sm:py-5">
-        <form
-          className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]"
-          onSubmit={(event) => {
-            event.preventDefault()
-            setQuery(searchInput.trim())
-          }}
-        >
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder={t('searchPlaceholder')}
-              className="pl-11"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="outline">
-              {t('common:confirm')}
-            </Button>
             {hasSubmittedQuery ? (
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                onClick={() => {
-                  setSearchInput('')
-                  setQuery('')
-                }}
+                onClick={clearSearch}
+                className="flex max-w-[min(22rem,calc(100vw-8rem))] items-center gap-2 border border-border/70 bg-background/90 px-3 py-2 text-left shadow-token-sm backdrop-blur-md transition-colors hover:border-foreground/25"
               >
-                {t('clearSearch')}
-              </Button>
+                <span className="type-chat-meta truncate text-muted-foreground">
+                  {t("searchingFor", { query })}
+                </span>
+                <X className="size-3.5 shrink-0 text-muted-foreground" />
+              </button>
             ) : null}
           </div>
-        </form>
-      </section>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="pointer-events-auto h-10 bg-background/90 px-3 shadow-token-sm backdrop-blur-md sm:px-4"
+            onClick={() => setIsSearchOpen(true)}
+          >
+            <Search className="size-4" />
+            <span className="hidden sm:inline">{t("searchEntry")}</span>
+          </Button>
+        </div>
+      ) : null}
+
+      <Dialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+        <DialogContent className="max-w-xl rounded-none border-border/80">
+          <DialogHeader>
+            <DialogTitle>{t("searchTitle")}</DialogTitle>
+            <DialogDescription>{t("searchDescription")}</DialogDescription>
+          </DialogHeader>
+          <form className="grid gap-3" onSubmit={submitSearch}>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder={t("searchPlaceholder")}
+                className="pl-11"
+                autoFocus
+              />
+            </div>
+            <div className="flex flex-wrap justify-end gap-2">
+              {hasSubmittedQuery ? (
+                <Button type="button" variant="ghost" onClick={clearSearch}>
+                  {t("clearSearch")}
+                </Button>
+              ) : null}
+              <Button type="submit" variant="outline">
+                {t("common:confirm")}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {isLocked ? (
-        <div className="border border-border/70 bg-card px-5 py-8 shadow-token-md sm:px-6 sm:py-9">
-          <div className="mx-auto flex max-w-xl flex-col gap-3.5">
-            <p className="type-chat-kicker text-muted-foreground">{t('lockedEyebrow')}</p>
-            <h2 className="type-page-title text-foreground">{t('lockedTitle')}</h2>
-            <p className="type-body-muted max-w-[44ch] text-pretty">
-              {t('lockedBody')}
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Button asChild variant="outline" className="type-chat-action h-10 px-5">
-                <Link to="/profile?tab=access">{t('openMembership')}</Link>
-              </Button>
+        <div className="flex h-full items-center justify-center px-5">
+          <div className="w-full max-w-xl border border-border/70 bg-card px-5 py-8 shadow-token-md sm:px-6 sm:py-9">
+            <div className="flex flex-col gap-3.5">
+              <p className="type-chat-kicker text-muted-foreground">
+                {t("lockedEyebrow")}
+              </p>
+              <h2 className="type-page-title text-foreground">
+                {t("lockedTitle")}
+              </h2>
+              <p className="type-body-muted max-w-[44ch] text-pretty">
+                {t("lockedBody")}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  className="type-chat-action h-10 px-5"
+                >
+                  <Link to="/profile?tab=access">{t("openMembership")}</Link>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       ) : trendFlows.length === 0 && !trendFlowsQuery.isLoading ? (
-        <div className="border border-border/70 bg-card px-5 py-10 text-center shadow-token-md sm:px-6 sm:py-12">
-          <div className="mx-auto flex max-w-[22rem] flex-col items-center gap-4">
+        <div className="flex h-full items-center justify-center px-5 text-center">
+          <div className="flex max-w-[24rem] flex-col items-center gap-4 border border-border/70 bg-card px-5 py-10 shadow-token-md sm:px-6 sm:py-12">
             <div className="type-chat-kicker border border-border/70 bg-background px-4 py-2 text-muted-foreground">
-              {hasSubmittedQuery ? '∅' : '00'}
+              {hasSubmittedQuery ? "∅" : "00"}
             </div>
             <p className="type-section-title text-foreground">
-              {hasSubmittedQuery ? t('noSearchResultsTitle') : t('emptyTitle')}
+              {hasSubmittedQuery ? t("noSearchResultsTitle") : t("emptyTitle")}
             </p>
             <p className="type-body-muted text-pretty text-muted-foreground">
-              {hasSubmittedQuery ? t('noSearchResultsBody', { query }) : t('emptyBody')}
+              {hasSubmittedQuery
+                ? t("noSearchResultsBody", { query })
+                : t("emptyBody")}
             </p>
+            {hasSubmittedQuery ? (
+              <Button type="button" variant="outline" onClick={clearSearch}>
+                {t("clearSearch")}
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : (
-        <div className="flex flex-col">
-          {trendFlowsQuery.isLoading
-            ? Array.from({ length: 2 }).map((_, index) => (
-                <Skeleton key={index} className="min-h-[calc(100dvh-16rem)] w-full rounded-none border-t border-border/60" />
-              ))
-            : trendFlows.map((item, index) => {
-                const itemNumber = (page - 1) * limit + index + 1
-                const paddedNumber = String(itemNumber).padStart(2, '0')
-                const paddedTotal = String(totalItems).padStart(2, '0')
-                const safePreviewUrl = getSafeIframeUrl(item.previewUrl)
-                return (
-                  <article
-                    key={item.id}
-                    className="relative flex min-h-[calc(100dvh-16rem)] flex-col border-t border-border/60 pt-[6vh] md:pt-[8vh]"
-                  >
-                    <div
-                      aria-label={`${paddedNumber} of ${paddedTotal}`}
-                      className="pointer-events-none absolute right-4 top-10 z-10 type-meta tabular-nums text-muted-foreground"
+        <>
+          <div
+            ref={scrollContainerRef}
+            className="h-full snap-y snap-mandatory overflow-y-auto scroll-smooth overscroll-contain"
+            aria-label={t("readerLabel")}
+            tabIndex={0}
+          >
+            {trendFlowsQuery.isLoading
+              ? Array.from({ length: 1 }).map((_, index) => (
+                  <Skeleton
+                    key={index}
+                    className="min-h-full w-full rounded-none border-t border-border/60"
+                  />
+                ))
+              : trendFlows.map((item, index) => {
+                  const paddedNumber = String(index + 1).padStart(2, "0");
+                  const paddedTotal = String(totalItems).padStart(2, "0");
+                  return (
+                    <article
+                      key={item.id}
+                      ref={(element) => {
+                        itemRefs.current[index] = element;
+                      }}
+                      data-index={index}
+                      className="relative grid h-full snap-start snap-always grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-t border-border/60 px-4 pb-4 pt-[clamp(4.75rem,10dvh,6.75rem)] sm:px-6 sm:pb-6 lg:px-8"
                     >
-                      <span className="block origin-center -rotate-90 whitespace-nowrap">
-                        {paddedNumber} / {paddedTotal}
-                      </span>
-                    </div>
-
-                    <header className="relative z-10 max-w-full pr-10 md:max-w-[78%] md:pr-[4vw]">
-                      <p className="type-chat-kicker text-muted-foreground">{item.brand}</p>
-                      <h2 className="mt-4 text-balance text-[clamp(2.25rem,7vw,6rem)] font-bold leading-[0.95] tracking-tight text-foreground">
-                        {item.title}
-                      </h2>
-                      <p className="type-meta mt-6 text-muted-foreground tabular-nums">
-                        {item.windowLabel} · {formatFlowDate(item.updatedAt, i18n.language)}
-                      </p>
-                      {item.leadExcerpt ? (
-                        <p className="type-body-muted mt-5 max-w-[48ch] text-pretty text-muted-foreground">
-                          {item.leadExcerpt}
-                        </p>
-                      ) : null}
-                    </header>
-
-                    <div className="absolute right-10 top-[38%] z-10 hidden md:block">
-                      <Button asChild variant="outline" className="type-chat-action h-11 px-6">
-                        <a
-                          href={item.previewUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`${t('openItem')} — ${item.title}`}
-                        >
-                          <span>{t('openItem')}</span>
-                          <ArrowUpRight className="size-4" strokeWidth={1.6} />
-                        </a>
-                      </Button>
-                    </div>
-
-                    <div className="mt-6 md:hidden">
-                      <Button asChild variant="outline" size="sm">
-                        <a
-                          href={item.previewUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`${t('openItem')} — ${item.title}`}
-                        >
-                          <span>{t('openItem')}</span>
-                          <ArrowUpRight className="size-4" strokeWidth={1.6} />
-                        </a>
-                      </Button>
-                    </div>
-
-                    <div className="mt-auto pt-[6vh]">
-                      <div className="relative aspect-[21/9] w-full overflow-hidden border border-border/70 bg-background">
-                        {safePreviewUrl ? (
-                          <iframe
-                            src={safePreviewUrl}
-                            title={item.title}
-                            loading="lazy"
-                            tabIndex={-1}
-                            className="pointer-events-none absolute inset-0 h-full w-full border-0 bg-white dark:bg-black"
-                          />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center px-6 text-center">
-                            <p className="type-chat-kicker max-w-[44ch] text-muted-foreground">
-                              {fallbackCopy(item)}
-                            </p>
-                          </div>
-                        )}
+                      <div
+                        aria-label={`${paddedNumber} of ${paddedTotal}`}
+                        className="pointer-events-none absolute right-4 top-[clamp(5.5rem,12dvh,7.5rem)] z-10 type-meta tabular-nums text-muted-foreground sm:right-6"
+                      >
+                        <span className="block origin-center -rotate-90 whitespace-nowrap">
+                          {paddedNumber} / {paddedTotal}
+                        </span>
                       </div>
-                    </div>
-                  </article>
-                )
-              })}
-        </div>
-      )}
 
-      {totalPages > 1 && (
-        <nav className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-5" aria-label={t('pagination')}>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
-            disabled={page === 1 || trendFlowsQuery.isLoading}
-          >
-            {t('common:previous')}
-          </Button>
-          <p className="type-chat-label tabular-nums text-foreground">
-            {String(page).padStart(2, '0')} / {String(totalPages).padStart(2, '0')}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
-            disabled={page === totalPages || trendFlowsQuery.isLoading}
-          >
-            {t('common:next')}
-          </Button>
-        </nav>
+                      <div className="relative z-10 grid gap-5 pr-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-8 md:pr-0">
+                        <header className="max-w-[min(64rem,100%)]">
+                          <p className="type-chat-kicker text-muted-foreground">
+                            {item.brand}
+                          </p>
+                          <h2 className="mt-3 max-w-[13ch] text-balance text-[clamp(2.15rem,5.8vw,5.4rem)] font-bold leading-[0.94] tracking-tight text-foreground md:mt-4 xl:max-w-[14ch]">
+                            {item.title}
+                          </h2>
+                        </header>
+                      </div>
+
+                      <div className="mt-6 md:hidden">
+                        <Button asChild variant="outline" size="sm">
+                          <a
+                            href={item.previewUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`${t("openItem")} — ${item.title}`}
+                          >
+                            <span>{t("openItem")}</span>
+                            <ArrowUpRight
+                              className="size-4"
+                              strokeWidth={1.6}
+                            />
+                          </a>
+                        </Button>
+                      </div>
+
+                      <div className="relative min-h-0 pt-[clamp(1.25rem,3dvh,2.25rem)]">
+                        <div className="hidden justify-end pb-[clamp(0.85rem,2dvh,1.35rem)] pr-[clamp(1rem,3vw,3rem)] md:flex">
+                          <Button
+                            asChild
+                            variant="outline"
+                            className="type-chat-action h-11 bg-background/90 px-6 shadow-token-sm backdrop-blur-md"
+                          >
+                            <a
+                              href={item.previewUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label={`${t("openItem")} — ${item.title}`}
+                            >
+                              <span>{t("openItem")}</span>
+                              <ArrowUpRight
+                                className="size-4"
+                                strokeWidth={1.6}
+                              />
+                            </a>
+                          </Button>
+                        </div>
+                        <div className="relative h-full min-h-0 w-full overflow-hidden border border-border/70 bg-background shadow-token-sm">
+                          {item.coverHtml ? (
+                            <iframe
+                              srcDoc={buildCoverSrcDoc(item.coverHtml)}
+                              title={item.title}
+                              loading="lazy"
+                              sandbox="allow-same-origin"
+                              tabIndex={-1}
+                              className="pointer-events-none h-full w-full border-0 bg-white dark:bg-black"
+                            />
+                          ) : (
+                            <iframe
+                              src={item.previewUrl}
+                              title={item.title}
+                              loading="lazy"
+                              tabIndex={-1}
+                              className="pointer-events-none absolute left-1/2 top-0 border-0 bg-white dark:bg-black"
+                              style={{
+                                width: `${100 / PREVIEW_IFRAME_SCALE}%`,
+                                height: `${100 / PREVIEW_IFRAME_SCALE}%`,
+                                transform: `translateX(-50%) scale(${PREVIEW_IFRAME_SCALE})`,
+                                transformOrigin: "top center",
+                              }}
+                            />
+                          )}
+                          {!item.coverImageUrl && !item.coverHtml ? (
+                            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-background via-background/90 to-transparent px-6 py-5 text-center">
+                              <p className="type-chat-kicker max-w-[44ch] text-muted-foreground">
+                                {fallbackCopy(item)}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+            <div ref={loadMoreRef} className="h-px" aria-hidden="true" />
+            {trendFlowsQuery.isFetchingNextPage ? (
+              <div className="flex h-24 items-center justify-center">
+                <p className="type-chat-kicker text-muted-foreground">
+                  {t("loadingMore")}
+                </p>
+              </div>
+            ) : null}
+          </div>
+
+          {trendFlows.length > 0 ? (
+            <div className="pointer-events-none absolute bottom-5 right-4 z-20 hidden flex-col items-end gap-2 md:flex">
+              <div className="h-28 w-px overflow-hidden bg-border/70">
+                <div
+                  className="w-px bg-foreground transition-[height] duration-normal"
+                  style={{
+                    height: `${Math.max(
+                      8,
+                      (activeItemNumber / Math.max(totalItems, 1)) * 100,
+                    )}%`,
+                  }}
+                />
+              </div>
+              <p className="type-meta tabular-nums text-muted-foreground">
+                {String(activeItemNumber).padStart(2, "0")}
+              </p>
+            </div>
+          ) : null}
+        </>
       )}
     </section>
-  )
+  );
 }

@@ -147,11 +147,21 @@ def _rewrite_css_public_asset_urls(css: bytes, trend_flow, current_asset_path: s
 @router.get("")
 def list_public_trend_flows(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    response: Response,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=12, ge=1, le=100),
     q: str | None = Query(default=None, max_length=255),
 ):
     check_subscription_access_dep(user, "开通会员后可查看趋势流动")
+    response.set_cookie(
+        key=TREND_FLOW_PREVIEW_COOKIE_NAME,
+        value=issue_report_preview_token(user),
+        max_age=settings.REPORT_PREVIEW_TOKEN_TTL_SECONDS,
+        httponly=True,
+        secure=_should_secure_preview_cookie(),
+        samesite="lax",
+        path="/api/trend-flow",
+    )
     items, total = get_trend_flows(page=page, limit=limit, q=q)
     return {
         "success": True,

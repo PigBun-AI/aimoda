@@ -1,5 +1,5 @@
 import { Suspense, lazy, type ReactNode, useCallback, useEffect, useState } from 'react'
-import { BarChart3, FileText, Image as ImageIcon, LogOut, Tags, Ticket, User, UserCog } from 'lucide-react'
+import { BarChart3, FileText, Image as ImageIcon, LogOut, Sparkles, Tags, Ticket, User, UserCog } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -14,12 +14,13 @@ import { cn } from '@/lib/utils'
 
 const DashboardTabPage = lazy(() => import('@/features/admin/dashboard-page').then((module) => ({ default: module.DashboardPage })))
 const ArticlesTabPage = lazy(() => import('@/features/admin/articles-page').then((module) => ({ default: module.ArticlesPage })))
+const TrendFlowAdminTabPage = lazy(() => import('@/features/admin/trend-flow-admin-page').then((module) => ({ default: module.TrendFlowAdminPage })))
 const AdminUsersTabPage = lazy(() => import('@/features/admin/admin-page').then((module) => ({ default: module.AdminPage })))
 const RedemptionCodesTabPage = lazy(() => import('@/features/admin/redemption-codes-page').then((module) => ({ default: module.RedemptionCodesPage })))
 const AdminGalleriesTabPage = lazy(() => import('@/features/admin/admin-galleries-page').then((module) => ({ default: module.AdminGalleriesPage })))
 const StyleGapTabPage = lazy(() => import('@/features/admin/style-gap-page').then((module) => ({ default: module.StyleGapPage })))
 
-type TabId = 'profile' | 'access' | 'dashboard' | 'articles' | 'galleries' | 'styleGaps' | 'users' | 'redemption'
+type TabId = 'profile' | 'access' | 'dashboard' | 'articles' | 'trendFlows' | 'galleries' | 'styleGaps' | 'users' | 'redemption'
 
 interface TabConfig {
   id: TabId
@@ -39,6 +40,7 @@ export function ProfilePage() {
     { id: 'access', labelKey: 'accessTab', icon: Ticket },
     { id: 'dashboard', labelKey: 'dashboardTab', icon: BarChart3, requiresAdmin: true },
     { id: 'articles', labelKey: 'articlesTab', icon: FileText, requiresAdmin: true },
+    { id: 'trendFlows', labelKey: 'trendFlowsTab', icon: Sparkles, requiresAdmin: true },
     { id: 'galleries', labelKey: 'galleriesTab', icon: ImageIcon, requiresAdmin: true },
     { id: 'styleGaps', labelKey: 'styleGapsTab', icon: Tags, requiresAdmin: true },
     { id: 'users', labelKey: 'usersTab', icon: UserCog, requiresAdmin: true },
@@ -70,6 +72,8 @@ export function ProfilePage() {
         return renderWorkbenchTab(<DashboardTabPage />)
       case 'articles':
         return renderWorkbenchTab(<ArticlesTabPage />)
+      case 'trendFlows':
+        return renderWorkbenchTab(<TrendFlowAdminTabPage />)
       case 'galleries':
         return renderWorkbenchTab(<AdminGalleriesTabPage />)
       case 'styleGaps':
