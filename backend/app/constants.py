@@ -212,7 +212,24 @@ TREND_FLOW_SPEC = {
         "missingSpecVersion": "hard_fail",
         "missingContentType": "hard_fail",
         "invalidContentType": "hard_fail",
+        "binaryUploadPath": "必须使用 prepare_trend_flow_upload 返回的预签名 OSS URL 直传 ZIP，再调用 complete_trend_flow_upload；MCP 不接收 ZIP base64。",
+        "legacyPublishTool": "not_available",
         "legacyCoverFallback": "仅用于历史数据展示，不作为新 MCP 上传包的合格标准",
+    },
+    "workflow": [
+        "get_trend_flow_spec",
+        "get_trend_flow_template",
+        "prepare_trend_flow_upload",
+        "upload zip to signed OSS url",
+        "complete_trend_flow_upload",
+        "get_trend_flow_upload_status until completed",
+        "list_trend_flows or get_trend_flow for verification",
+    ],
+    "toolPolicy": {
+        "legacyPublishRemoved": True,
+        "neverSendZipAsBase64InMcpJson": True,
+        "alwaysFollowNextAction": True,
+        "pollUntilCompletedOrFailed": True,
     },
     "compiledArtifact": {
         "description": "后端会把自由 HTML ZIP 编译为稳定中间产物；数据库和前端只消费该产物字段，不直接推断上传包结构。",
@@ -307,6 +324,8 @@ TREND_FLOW_TEMPLATE = {
 </template>
 """.strip(),
     "notes": [
+        "正式上传流程：prepare_trend_flow_upload -> PUT zip 到返回的 upload.url -> complete_trend_flow_upload -> get_trend_flow_upload_status。",
+        "MCP 不提供 base64 发布工具；ZIP 二进制只能直传 OSS。",
         "如果封面需要独立设计，使用 template id=\"aimoda-trend-flow-cover\" data-aimoda-cover。",
         "如果封面就是正文里的某个现成区块，直接在该区块根节点添加 data-aimoda-cover-fragment。",
         "片段内资源路径按 entryHtml 所在目录解析，例如 pages/report.html 中引用 ../assets/cover.jpg。",

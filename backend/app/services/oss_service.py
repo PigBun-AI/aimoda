@@ -174,6 +174,11 @@ class OSSService:
         return f"report-uploads/{job_id}/{safe_name}"
 
     @staticmethod
+    def trend_flow_upload_staging_path(job_id: str, filename: str) -> str:
+        safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", PurePosixPath(filename).name or "trend-flow.zip")
+        return f"trend-flow-uploads/{job_id}/{safe_name}"
+
+    @staticmethod
     def collection_upload_path(
         user_id: int,
         collection_id: str,

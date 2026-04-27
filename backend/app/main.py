@@ -14,6 +14,7 @@ from .routers import auth, users, reports, trend_flows, admin, redemption_codes,
 from .services.favorite_upload_job_service import recover_favorite_upload_jobs
 from .services.oss_service import get_oss_service
 from .services.report_upload_job_service import recover_report_upload_jobs
+from .services.trend_flow_upload_job_service import recover_trend_flow_upload_jobs
 
 PG_REPORT_SCHEMA_LOCK_KEY = 4201001
 PG_CHAT_SCHEMA_LOCK_KEY = 4201002
@@ -104,6 +105,21 @@ def _recover_report_upload_jobs():
         logging.getLogger(__name__).warning("Failed to recover report upload jobs: %s", e)
 
 
+def _recover_trend_flow_upload_jobs():
+    """Fail stale in-flight Trend Flow upload jobs left behind by restarts."""
+    import logging
+
+    try:
+        recovered = recover_trend_flow_upload_jobs()
+        if recovered:
+            logging.getLogger(__name__).warning(
+                "Marked %d stale Trend Flow upload jobs as failed during startup",
+                recovered,
+            )
+    except Exception as e:
+        logging.getLogger(__name__).warning("Failed to recover Trend Flow upload jobs: %s", e)
+
+
 def _recover_favorite_upload_jobs():
     """Fail stale in-flight favorite upload jobs left behind by restarts."""
     import logging
@@ -192,6 +208,7 @@ _init_pg_report_schema() # PostgreSQL (reports, report_views)
 _init_pg_chat_schema()   # PostgreSQL (chat_sessions, messages, artifacts)
 _init_pg_gallery_indexes() # PostgreSQL gallery read-path indexes
 _recover_report_upload_jobs()
+_recover_trend_flow_upload_jobs()
 _recover_favorite_upload_jobs()
 _ensure_oss_direct_upload_cors()
 

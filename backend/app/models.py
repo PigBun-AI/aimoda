@@ -150,6 +150,22 @@ class ReportUploadJobRecord(CamelModel):
     completed_at: str | None = None
 
 
+class TrendFlowUploadJobRecord(CamelModel):
+    id: str
+    filename: str
+    status: ReportUploadJobStatus
+    uploaded_by: int
+    file_size_bytes: int
+    source_object_key: str | None = None
+    trend_flow_id: int | None = None
+    trend_flow_slug: str | None = None
+    error_message: str | None = None
+    created_at: str
+    updated_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
 class FavoriteUploadJobItemRecord(CamelModel):
     id: str
     job_id: str

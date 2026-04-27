@@ -7,6 +7,7 @@
 --   2. report_views       — Per-user view tracking (free tier limit)
 --   3. report_upload_jobs — Async report upload lifecycle tracking
 --   4. trend_flows        — Single-brand four-quarter trend flow reports
+--   5. trend_flow_upload_jobs — Async Trend Flow upload lifecycle tracking
 --
 -- Note: users table remains in SQLite; user_id FKs are NOT enforced here.
 -- ============================================================================
@@ -234,3 +235,53 @@ CREATE INDEX IF NOT EXISTS idx_trend_flows_start_window ON trend_flows(start_yea
 
 COMMENT ON TABLE trend_flows IS
     'Single-brand trend-flow reports spanning four consecutive quarter-year windows.';
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 5. trend_flow_upload_jobs — Async Trend Flow upload lifecycle tracking
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS trend_flow_upload_jobs (
+    id                TEXT PRIMARY KEY,
+    filename          TEXT NOT NULL,
+    status            TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    uploaded_by       INTEGER NOT NULL,
+    file_size_bytes   BIGINT NOT NULL DEFAULT 0,
+    source_object_key TEXT,
+    trend_flow_id     INTEGER REFERENCES trend_flows(id) ON DELETE SET NULL,
+    trend_flow_slug   TEXT,
+    error_message     TEXT,
+    started_at        TIMESTAMPTZ,
+    completed_at      TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE OR REPLACE FUNCTION trend_flow_upload_jobs_set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'trend_flow_upload_jobs_updated_at'
+    ) THEN
+        CREATE TRIGGER trend_flow_upload_jobs_updated_at
+            BEFORE UPDATE ON trend_flow_upload_jobs
+            FOR EACH ROW EXECUTE FUNCTION trend_flow_upload_jobs_set_updated_at();
+    END IF;
+END;
+$$;
+
+CREATE INDEX IF NOT EXISTS idx_trend_flow_upload_jobs_uploaded_by_created_at
+    ON trend_flow_upload_jobs(uploaded_by, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_trend_flow_upload_jobs_status_created_at
+    ON trend_flow_upload_jobs(status, created_at DESC);
+
+COMMENT ON TABLE trend_flow_upload_jobs IS
+    'Async Trend Flow upload jobs for direct OSS upload and long-running package processing.';
