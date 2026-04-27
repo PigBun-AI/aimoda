@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from html import escape
+from html.parser import HTMLParser
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +13,6 @@ from ..value_normalization import normalize_quarter_value
 from .report_package_errors import ReportPackageError
 from .report_scanner import (
     _resolve_package_path,
-    _resolve_required_cover_image,
     _validate_all_html_files,
     extract_report_lead_excerpt,
     load_report_manifest,
@@ -20,6 +22,117 @@ from .report_scanner import (
 
 _QUARTER_ORDER = ("早春", "春夏", "早秋", "秋冬")
 _QUARTER_INDEX = {quarter: index for index, quarter in enumerate(_QUARTER_ORDER)}
+TREND_FLOW_COVER_TEMPLATE_ID = "aimoda-trend-flow-cover"
+TREND_FLOW_COVER_FRAGMENT_ATTR = "data-aimoda-cover-fragment"
+VOID_HTML_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+TREND_FLOW_COVER_TEMPLATE_PATTERN = re.compile(
+    r"<template\b(?P<attrs>[^>]*)>(?P<body>.*?)</template>",
+    re.IGNORECASE | re.DOTALL,
+)
+HEAD_STYLE_PATTERN = re.compile(r"<style\b[^>]*>.*?</style>", re.IGNORECASE | re.DOTALL)
+STYLESHEET_LINK_PATTERN = re.compile(
+    r"<link\b(?=[^>]*\brel=[\"'][^\"']*\bstylesheet\b[^\"']*[\"'])[^>]*>",
+    re.IGNORECASE | re.DOTALL,
+)
+HTML_ATTR_PATTERN = re.compile(
+    r"(?P<name>[a-zA-Z_:][-a-zA-Z0-9_:.]*)"
+    r"(?:\s*=\s*(?:\"(?P<double>[^\"]*)\"|'(?P<single>[^']*)'|(?P<bare>[^\s\"'=<>`]+)))?",
+    re.IGNORECASE,
+)
+UNSAFE_COVER_ELEMENT_PATTERN = re.compile(
+    r"<(script|iframe|object|embed|form)\b[^>]*>.*?</\1>",
+    re.IGNORECASE | re.DOTALL,
+)
+UNSAFE_SELF_CLOSING_COVER_ELEMENT_PATTERN = re.compile(
+    r"<(script|iframe|object|embed|form)\b[^>]*?/?>",
+    re.IGNORECASE | re.DOTALL,
+)
+INLINE_EVENT_HANDLER_PATTERN = re.compile(
+    r"\s+on[a-zA-Z]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)",
+    re.IGNORECASE,
+)
+JAVASCRIPT_URL_PATTERN = re.compile(
+    r"(?P<prefix>\b(?:href|src)\s*=\s*[\"'])\s*javascript:[^\"']*(?P<suffix>[\"'])",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class TrendFlowCoverTemplate:
+    html: str
+    asset_path: str
+    source: str
+
+
+class CoverFragmentParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.fragments: list[str] = []
+        self._capturing = False
+        self._capture_depth = 0
+        self._chunks: list[str] = []
+        self._tag_stack: list[str] = []
+
+    @staticmethod
+    def _render_attrs(attrs: list[tuple[str, str | None]]) -> str:
+        rendered = []
+        for name, value in attrs:
+            if value is None:
+                rendered.append(name)
+            else:
+                rendered.append(f'{name}="{escape(value, quote=True)}"')
+        return f" {' '.join(rendered)}" if rendered else ""
+
+    def _append(self, value: str) -> None:
+        if self._capturing:
+            self._chunks.append(value)
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_names = {name.lower() for name, _ in attrs}
+        is_cover_fragment = TREND_FLOW_COVER_FRAGMENT_ATTR in attr_names
+        if is_cover_fragment and not self._capturing:
+            self._capturing = True
+            self._capture_depth = 0
+            self._chunks = []
+
+        if self._capturing:
+            if tag.lower() not in VOID_HTML_TAGS:
+                self._capture_depth += 1
+                self._tag_stack.append(tag.lower())
+            self._chunks.append(f"<{tag}{self._render_attrs(attrs)}>")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._capturing:
+            self._chunks.append(f"<{tag}{self._render_attrs(attrs)} />")
+
+    def handle_endtag(self, tag: str) -> None:
+        if not self._capturing:
+            return
+
+        self._chunks.append(f"</{tag}>")
+        self._capture_depth -= 1
+        if self._tag_stack:
+            self._tag_stack.pop()
+        if self._capture_depth == 0:
+            self.fragments.append("".join(self._chunks).strip())
+            self._capturing = False
+            self._chunks = []
+            self._tag_stack = []
+
+    def handle_data(self, data: str) -> None:
+        if self._tag_stack and self._tag_stack[-1] == "style":
+            self._append(data)
+            return
+        self._append(escape(data, quote=False))
+
+    def handle_entityref(self, name: str) -> None:
+        self._append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self._append(f"&#{name};")
+
+    def handle_comment(self, data: str) -> None:
+        self._append(f"<!--{data}-->")
 
 
 def _normalize_slug(name: str) -> str:
@@ -33,6 +146,94 @@ def _infer_title(html: str) -> str | None:
     if title_match and title_match.group(1).strip():
         return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", title_match.group(1))).strip()
     return None
+
+
+def _parse_html_attrs(attrs: str) -> dict[str, str | None]:
+    parsed: dict[str, str | None] = {}
+    for match in HTML_ATTR_PATTERN.finditer(attrs):
+        name = match.group("name").lower()
+        value = match.group("double")
+        if value is None:
+            value = match.group("single")
+        if value is None:
+            value = match.group("bare")
+        parsed[name] = value
+    return parsed
+
+
+def _sanitize_cover_template_html(html: str) -> str:
+    cleaned = UNSAFE_COVER_ELEMENT_PATTERN.sub("", html)
+    cleaned = UNSAFE_SELF_CLOSING_COVER_ELEMENT_PATTERN.sub("", cleaned)
+    cleaned = INLINE_EVENT_HANDLER_PATTERN.sub("", cleaned)
+    cleaned = JAVASCRIPT_URL_PATTERN.sub(r"\g<prefix>#\g<suffix>", cleaned)
+    return cleaned.strip()
+
+
+def _extract_cover_fragment_html(html: str) -> list[str]:
+    parser = CoverFragmentParser()
+    parser.feed(html)
+    parser.close()
+    return [_sanitize_cover_template_html(fragment) for fragment in parser.fragments if fragment.strip()]
+
+
+def _extract_document_cover_styles(html: str) -> str:
+    styles = HEAD_STYLE_PATTERN.findall(html)
+    stylesheet_links = STYLESHEET_LINK_PATTERN.findall(html)
+    return "\n".join([*stylesheet_links, *styles]).strip()
+
+
+def extract_trend_flow_cover_template(entry_path: Path, report_root: Path) -> TrendFlowCoverTemplate | None:
+    html = entry_path.read_text(encoding="utf-8")
+    matched_templates: list[TrendFlowCoverTemplate] = []
+    for match in TREND_FLOW_COVER_TEMPLATE_PATTERN.finditer(html):
+        attrs = _parse_html_attrs(match.group("attrs"))
+        if attrs.get("id") != TREND_FLOW_COVER_TEMPLATE_ID or "data-aimoda-cover" not in attrs:
+            continue
+
+        cover_html = _sanitize_cover_template_html(match.group("body"))
+        if not cover_html:
+            raise ReportPackageError(
+                "empty_trend_flow_cover_template",
+                "趋势流动封面 template 不能为空",
+            )
+
+        matched_templates.append(
+            TrendFlowCoverTemplate(
+                html=cover_html,
+                asset_path=entry_path.relative_to(report_root).as_posix(),
+                source="entry_template",
+            )
+        )
+
+    cover_fragments = _extract_cover_fragment_html(html)
+    matched_fragments = [
+        TrendFlowCoverTemplate(
+            html="\n".join(part for part in (_extract_document_cover_styles(html), fragment) if part),
+            asset_path=entry_path.relative_to(report_root).as_posix(),
+            source="entry_fragment",
+        )
+        for fragment in cover_fragments
+    ]
+    matched_covers = [*matched_templates, *matched_fragments]
+
+    if len(matched_covers) > 1:
+        raise ReportPackageError(
+            "duplicate_trend_flow_cover_marker",
+            "entryHtml 中只能存在一个趋势流动封面标记：template 或 data-aimoda-cover-fragment 二选一",
+        )
+    if matched_covers:
+        return matched_covers[0]
+    return None
+
+
+def require_trend_flow_cover_template(entry_path: Path, report_root: Path) -> TrendFlowCoverTemplate:
+    cover_template = extract_trend_flow_cover_template(entry_path, report_root)
+    if cover_template is None:
+        raise ReportPackageError(
+            "trend_flow_cover_marker_missing",
+            "趋势流动 ZIP 必须在 entryHtml 中提供封面标记：<template id=\"aimoda-trend-flow-cover\" data-aimoda-cover> 或 data-aimoda-cover-fragment",
+        )
+    return cover_template
 
 
 def _parse_timeline(raw_timeline: Any) -> list[TrendFlowTimelinePoint]:
@@ -66,7 +267,7 @@ def _parse_timeline(raw_timeline: Any) -> list[TrendFlowTimelinePoint]:
 
 
 def _validate_trend_flow_directory(directory: Path, manifest: dict[str, Any]) -> None:
-    for field in ("slug", "brand", "timeline", "entryHtml"):
+    for field in ("specVersion", "contentType", "slug", "title", "brand", "timeline", "entryHtml"):
         if manifest.get(field) in (None, ""):
             raise ReportPackageError(
                 "missing_manifest_field",
@@ -74,10 +275,17 @@ def _validate_trend_flow_directory(directory: Path, manifest: dict[str, Any]) ->
                 details={"field": field},
             )
 
-    resolve_report_entry_html(directory, manifest)
+    if manifest.get("contentType") != "trend_flow":
+        raise ReportPackageError(
+            "invalid_content_type",
+            "manifest.contentType 必须是 trend_flow",
+            details={"field": "contentType", "value": manifest.get("contentType")},
+        )
+
+    entry_path = resolve_report_entry_html(directory, manifest)
     resolve_report_overview_html(directory, manifest)
     _validate_all_html_files(directory)
-    _resolve_required_cover_image(directory, manifest)
+    require_trend_flow_cover_template(entry_path, directory)
 
     pages = manifest.get("pages")
     if pages is not None:

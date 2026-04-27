@@ -10,6 +10,7 @@ from ..models import (
     StyleGapStatus,
     UpdateAdminGalleryRequest,
     UpdateAdminReportRequest,
+    UpdateAdminTrendFlowRequest,
     UpdateStyleGapRequest,
 )
 from ..repositories.gallery_repo import list_galleries_admin, update_gallery_admin_fields
@@ -27,6 +28,12 @@ from ..services.taste_profile_service import (
     TasteProfileNotReadyError,
     get_system_taste_profile_status,
     rebuild_system_taste_profile,
+)
+from ..services.trend_flow_service import (
+    delete_trend_flow_with_files,
+    get_trend_flows,
+    serialize_trend_flow_public,
+    update_trend_flow_admin,
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -99,6 +106,63 @@ def delete_admin_report(
     if not deleted:
         raise AppError("report not found", 404)
     return {"success": True, "data": {"deleted": True, "reportId": report_id}}
+
+
+@router.get("/trend-flows")
+def list_admin_trend_flows(
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 12,
+    q: Annotated[str | None, Query(max_length=255)] = None,
+):
+    del user
+    trend_flows, total = get_trend_flows(page=page, limit=limit, q=q)
+    return {
+        "success": True,
+        "data": {
+            "items": [serialize_trend_flow_public(item) for item in trend_flows],
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "totalPages": math.ceil(total / limit) if limit else 0,
+            "q": q or "",
+        },
+    }
+
+
+@router.patch("/trend-flows/{trend_flow_id}")
+def patch_admin_trend_flow(
+    trend_flow_id: int,
+    body: UpdateAdminTrendFlowRequest,
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    del user
+    updated = update_trend_flow_admin(
+        trend_flow_id,
+        title=body.title,
+        brand=body.brand,
+        start_quarter=body.start_quarter,
+        start_year=body.start_year,
+        end_quarter=body.end_quarter,
+        end_year=body.end_year,
+        cover_url=body.cover_url,
+        lead_excerpt=body.lead_excerpt,
+    )
+    if updated is None:
+        raise AppError("trend flow not found", 404)
+    return {"success": True, "data": serialize_trend_flow_public(updated)}
+
+
+@router.delete("/trend-flows/{trend_flow_id}")
+def delete_admin_trend_flow(
+    trend_flow_id: int,
+    user: Annotated[AuthenticatedUser, Depends(require_role(["admin"]))],
+):
+    del user
+    deleted = delete_trend_flow_with_files(trend_flow_id)
+    if not deleted:
+        raise AppError("trend flow not found", 404)
+    return {"success": True, "data": {"deleted": True, "trendFlowId": trend_flow_id}}
 
 
 @router.get("/galleries")

@@ -77,12 +77,34 @@ export interface TrendFlowSummary {
   status: 'draft' | 'published' | 'archived'
   updatedAt: string
   coverImageUrl: string | null
+  coverHtml?: string | null
+  coverHtmlSource?: string | null
   previewUrl: string
   leadExcerpt?: string | null
 }
 
 export interface TrendFlowDetail extends TrendFlowSummary {
   iframeUrl: string
+}
+
+export interface AdminTrendFlowsPage {
+  items: TrendFlowSummary[]
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  q: string
+}
+
+export interface UpdateAdminTrendFlowPayload {
+  title?: string
+  brand?: string
+  startQuarter?: string
+  startYear?: number
+  endQuarter?: string
+  endYear?: number
+  coverUrl?: string
+  leadExcerpt?: string | null
 }
 
 export interface AdminUser extends AuthUser {

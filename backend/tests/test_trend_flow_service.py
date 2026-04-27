@@ -12,7 +12,17 @@ def _build_trend_flow_zip(tmp_path: Path) -> Path:
     (root / "pages").mkdir(parents=True)
     (root / "assets").mkdir(parents=True)
     (root / "pages" / "report.html").write_text(
-        "<html><head><title>Demo Trend Flow</title></head><body><p>Demo excerpt for trend flow upload smoke test.</p></body></html>",
+        """
+        <html>
+          <head><title>Demo Trend Flow</title></head>
+          <body>
+            <p>Demo excerpt for trend flow upload smoke test.</p>
+            <template id="aimoda-trend-flow-cover" data-aimoda-cover>
+              <section class="cover"><img src="../assets/cover.svg" alt="" /></section>
+            </template>
+          </body>
+        </html>
+        """,
         encoding="utf-8",
     )
     (root / "assets" / "cover.svg").write_text(
@@ -22,6 +32,8 @@ def _build_trend_flow_zip(tmp_path: Path) -> Path:
     (root / "manifest.json").write_text(
         json.dumps(
             {
+                "specVersion": "2.0",
+                "contentType": "trend_flow",
                 "slug": "demo-brand-2025-trend-flow",
                 "title": "Demo Brand 趋势流动：2025",
                 "brand": "Demo Brand",
@@ -73,3 +85,56 @@ def test_upload_trend_flow_archive_skips_report_manifest_validation(monkeypatch,
     assert record.slug == "demo-brand-2025-trend-flow"
     assert captured["namespace"] == "trend-flow"
     assert captured["validate_manifest"] is False
+    assert record.metadata_json["coverHtmlSource"] == "entry_template"
+    assert record.metadata_json["coverHtmlAssetPath"] == "pages/report.html"
+    assert "../assets/cover.svg" in record.metadata_json["coverHtml"]
+
+
+def test_serialize_trend_flow_public_rewrites_cover_html_refs():
+    record = SimpleNamespace(
+        id=42,
+        slug="demo-brand-2025-trend-flow",
+        title="Demo Brand 趋势流动：2025",
+        brand="Demo Brand",
+        start_quarter="早春",
+        start_year=2025,
+        end_quarter="秋冬",
+        end_year=2025,
+        index_url="https://oss.example.com/trend-flow/demo/pages/report.html",
+        overview_url=None,
+        cover_url=None,
+        oss_prefix="trend-flow/demo-brand-2025-trend-flow/",
+        uploaded_by=7,
+        timeline_json=json.dumps([]),
+        metadata_json=json.dumps(
+            {
+                "entryHtml": "pages/report.html",
+                "coverHtml": '<section><img src="../assets/cover.svg" /><div style="background-image:url(../assets/bg.jpg)"></div></section>',
+                "coverHtmlAssetPath": "pages/report.html",
+                "coverHtmlSource": "entry_template",
+                "timeline": [
+                    {"quarter": "早春", "year": 2025},
+                    {"quarter": "春夏", "year": 2025},
+                    {"quarter": "早秋", "year": 2025},
+                    {"quarter": "秋冬", "year": 2025},
+                ],
+            }
+        ),
+        lead_excerpt=None,
+        created_at="2026-04-23T00:00:00Z",
+        updated_at="2026-04-23T00:00:00Z",
+        model_dump=lambda by_alias=True: {
+            "id": 42,
+            "slug": "demo-brand-2025-trend-flow",
+            "title": "Demo Brand 趋势流动：2025",
+            "brand": "Demo Brand",
+            "coverUrl": None,
+            "updatedAt": "2026-04-23T00:00:00Z",
+        },
+    )
+
+    payload = trend_flow_service.serialize_trend_flow_public(record)
+
+    assert payload["coverHtmlSource"] == "entry_template"
+    assert 'src="/api/trend-flow/42/preview/assets/cover.svg"' in payload["coverHtml"]
+    assert "url(/api/trend-flow/42/preview/assets/bg.jpg)" in payload["coverHtml"]
