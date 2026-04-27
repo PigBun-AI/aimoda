@@ -111,25 +111,42 @@ async function proxyListTrendFlows(slug?: string, page = 1, limit = 20, q?: stri
   )
 }
 
-async function proxyUploadTrendFlow(zipBase64: string, filename: string) {
-  const buffer = Buffer.from(zipBase64, 'base64')
-  const boundary = `----MCP${Date.now()}`
-  const body = Buffer.concat([
-    Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/zip\r\n\r\n`,
-    ),
-    buffer,
-    Buffer.from(`\r\n--${boundary}--\r\n`),
-  ])
-
+async function proxyPrepareTrendFlowUpload(filename: string, fileSizeBytes: number, contentType = 'application/zip') {
   return callInternalApi<JsonObject>(
-    '/api/internal/trend-flow-mcp/upload',
+    '/api/internal/trend-flow-mcp/upload/prepare',
     {
       method: 'POST',
-      headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-      body,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename,
+        file_size_bytes: fileSizeBytes,
+        content_type: contentType,
+      }),
     },
-    { operation: 'publish_trend_flow', filename, size_bytes: buffer.length },
+    { operation: 'prepare_trend_flow_upload', filename, size_bytes: fileSizeBytes },
+  )
+}
+
+async function proxyCompleteTrendFlowUpload(jobId: string, objectKey?: string) {
+  return callInternalApi<JsonObject>(
+    '/api/internal/trend-flow-mcp/upload/complete',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_id: jobId,
+        object_key: objectKey ?? null,
+      }),
+    },
+    { operation: 'complete_trend_flow_upload', job_id: jobId, object_key: objectKey ?? null },
+  )
+}
+
+async function proxyGetTrendFlowUploadStatus(jobId: string) {
+  return callInternalApi<JsonObject>(
+    `/api/internal/trend-flow-mcp/upload-jobs/${encodeURIComponent(jobId)}`,
+    { method: 'GET' },
+    { operation: 'get_trend_flow_upload_status', job_id: jobId },
   )
 }
 
@@ -176,15 +193,51 @@ function createServer(): McpServer {
   )
 
   server.tool(
-    'publish_trend_flow',
-    '发布一个趋势流动 ZIP。严格要求 manifest.specVersion、contentType=trend_flow、brand、timeline、entryHtml 完整，timeline 必须是连续四个季度，entryHtml 必须提供唯一封面标记：cover template 或正文 data-aimoda-cover-fragment。',
+    'prepare_trend_flow_upload',
+    '创建趋势流动 ZIP 的直传 OSS 上传任务。返回 job 信息、预签名 PUT URL、必需 headers 和 objectKey；调用方应将 zip 文件直接上传到 upload.url，然后调用 complete_trend_flow_upload。',
     {
-      file_base64: z.string().describe('zip 文件的 base64 编码'),
-      filename: z.string().optional().default('trend-flow.zip').describe('zip 文件名'),
+      filename: z.string().min(1).describe('zip 文件名'),
+      file_size_bytes: z.number().int().positive().describe('zip 文件大小（字节）'),
+      content_type: z.string().optional().default('application/zip').describe('上传内容类型'),
     },
     async (toolArgs) => {
       try {
-        return toolSuccess(await proxyUploadTrendFlow(toolArgs.file_base64, toolArgs.filename ?? 'trend-flow.zip'))
+        return toolSuccess(await proxyPrepareTrendFlowUpload(
+          toolArgs.filename,
+          toolArgs.file_size_bytes,
+          toolArgs.content_type ?? 'application/zip',
+        ))
+      } catch (err) {
+        return toolError(err)
+      }
+    },
+  )
+
+  server.tool(
+    'complete_trend_flow_upload',
+    '在调用方完成 OSS 直传后，通知平台开始异步处理趋势流动 ZIP。输入 prepare_trend_flow_upload 返回的 job_id；可选回传 object_key 做一致性校验。',
+    {
+      job_id: z.string().min(1).describe('prepare_trend_flow_upload 返回的 job_id'),
+      object_key: z.string().optional().describe('可选，prepare_trend_flow_upload 返回的 objectKey'),
+    },
+    async (toolArgs) => {
+      try {
+        return toolSuccess(await proxyCompleteTrendFlowUpload(toolArgs.job_id, toolArgs.object_key))
+      } catch (err) {
+        return toolError(err)
+      }
+    },
+  )
+
+  server.tool(
+    'get_trend_flow_upload_status',
+    '查询趋势流动异步上传/处理任务状态。返回 pending / processing / completed / failed，以及成功后的 trend_flow_id / trend_flow_slug。',
+    {
+      job_id: z.string().min(1).describe('上传任务 job_id'),
+    },
+    async (toolArgs) => {
+      try {
+        return toolSuccess(await proxyGetTrendFlowUploadStatus(toolArgs.job_id))
       } catch (err) {
         return toolError(err)
       }

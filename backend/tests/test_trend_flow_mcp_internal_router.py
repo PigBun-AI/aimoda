@@ -1,12 +1,9 @@
-import io
-
 import pytest
-from fastapi import UploadFile
 
 from backend.app.config import settings
 from backend.app.dependencies import require_trend_flow_mcp_internal_service
 from backend.app.exceptions import AppError
-from backend.app.models import TrendFlowRecord
+from backend.app.models import TrendFlowRecord, TrendFlowUploadJobRecord
 from backend.app.routers import trend_flow_mcp_internal
 
 
@@ -30,6 +27,24 @@ def _trend_flow() -> TrendFlowRecord:
         lead_excerpt='连续四季的品牌演化。',
         created_at='2026-04-23T00:00:00Z',
         updated_at='2026-04-23T00:00:00Z',
+    )
+
+
+def _upload_job(job_id: str = 'job-1', status: str = 'pending') -> TrendFlowUploadJobRecord:
+    return TrendFlowUploadJobRecord(
+        id=job_id,
+        filename='trend-flow.zip',
+        status=status,
+        uploaded_by=88,
+        file_size_bytes=123,
+        source_object_key=f'trend-flow-uploads/{job_id}/trend-flow.zip',
+        trend_flow_id=None,
+        trend_flow_slug=None,
+        error_message=None,
+        created_at='2026-04-23T00:00:00Z',
+        updated_at='2026-04-23T00:00:00Z',
+        started_at=None,
+        completed_at=None,
     )
 
 
@@ -72,26 +87,72 @@ def test_list_trend_flows_for_mcp_returns_slug_payload(monkeypatch):
     assert response['trend_flow']['brand'] == 'Miu Miu'
 
 
-@pytest.mark.asyncio
-async def test_upload_trend_flow_for_mcp_uses_service_user_id(monkeypatch):
-    captured = {}
-
-    def _fake_upload_trend_flow_archive(*, archive_path: str, uploaded_by: int):
-        captured['archive_path'] = archive_path
-        captured['uploaded_by'] = uploaded_by
-        return _trend_flow()
-
-    monkeypatch.setattr(trend_flow_mcp_internal, 'upload_trend_flow_archive', _fake_upload_trend_flow_archive)
+def test_prepare_trend_flow_upload_for_mcp_returns_signed_target(monkeypatch):
     monkeypatch.setattr(settings, 'TREND_FLOW_MCP_SERVICE_USER_ID', 88)
+    monkeypatch.setattr(
+        trend_flow_mcp_internal,
+        'prepare_direct_trend_flow_upload_job',
+        lambda **kwargs: {
+            'job': _upload_job(),
+            'upload': {
+                'method': 'PUT',
+                'url': 'https://oss.example.com/trend-flow-uploads/job-1/trend-flow.zip?signature=abc',
+                'headers': {'Content-Type': 'application/zip'},
+                'object_key': 'trend-flow-uploads/job-1/trend-flow.zip',
+                'content_type': 'application/zip',
+                'expires_at': '2026-04-23T00:10:00Z',
+            },
+        },
+    )
 
-    upload = UploadFile(filename='trend-flow.zip', file=io.BytesIO(b'zip-content'))
-    response = await trend_flow_mcp_internal.upload_trend_flow_for_mcp(
+    response = trend_flow_mcp_internal.prepare_trend_flow_upload_for_mcp(
+        body=trend_flow_mcp_internal.PrepareTrendFlowUploadRequest(filename='trend-flow.zip', file_size_bytes=123),
         service_name='trend-flow-mcp',
-        file=upload,
     )
 
     assert response['success'] is True
-    assert response['trend_flow']['slug'] == 'miumiu-2025-trend-flow'
-    assert response['trend_flow']['startQuarter'] == '早春'
-    assert captured['uploaded_by'] == 88
-    assert captured['archive_path'].endswith('.zip')
+    assert response['upload']['method'] == 'PUT'
+    assert response['upload']['objectKey'] == 'trend-flow-uploads/job-1/trend-flow.zip'
+    assert response['next_action']['type'] == 'upload_zip_to_oss'
+
+
+def test_complete_trend_flow_upload_for_mcp_returns_processing_job(monkeypatch):
+    monkeypatch.setattr(trend_flow_mcp_internal, 'get_trend_flow_upload_job', lambda job_id: _upload_job(job_id=job_id))
+    monkeypatch.setattr(settings, 'TREND_FLOW_MCP_SERVICE_USER_ID', 88)
+    monkeypatch.setattr(
+        trend_flow_mcp_internal,
+        'complete_direct_trend_flow_upload_job',
+        lambda job_id, uploaded_by: _upload_job(job_id=job_id, status='processing'),
+    )
+
+    response = trend_flow_mcp_internal.complete_trend_flow_upload_for_mcp(
+        body=trend_flow_mcp_internal.CompleteTrendFlowUploadRequest(
+            job_id='job-1',
+            object_key='trend-flow-uploads/job-1/trend-flow.zip',
+        ),
+        service_name='trend-flow-mcp',
+    )
+
+    assert response['success'] is True
+    assert response['job']['status'] == 'processing'
+    assert response['next_action']['type'] == 'poll_trend_flow_upload_status'
+
+
+def test_get_trend_flow_upload_job_for_mcp_returns_job(monkeypatch):
+    monkeypatch.setattr(
+        trend_flow_mcp_internal,
+        'get_trend_flow_upload_job',
+        lambda job_id: _upload_job(job_id=job_id, status='completed').model_copy(
+            update={'trend_flow_id': 11, 'trend_flow_slug': 'miumiu-2025-trend-flow'}
+        ),
+    )
+
+    response = trend_flow_mcp_internal.get_trend_flow_upload_job_for_mcp(
+        job_id='job-1',
+        service_name='trend-flow-mcp',
+    )
+
+    assert response['success'] is True
+    assert response['job']['status'] == 'completed'
+    assert response['job']['trendFlowSlug'] == 'miumiu-2025-trend-flow'
+    assert response['next_action']['type'] == 'done'
