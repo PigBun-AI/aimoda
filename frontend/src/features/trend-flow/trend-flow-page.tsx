@@ -110,6 +110,50 @@ function buildCoverSrcDoc(coverHtml: string) {
       .tf-cover-evidence .hero-more summary {
         font-size: clamp(12px, 0.95vw, 15px) !important;
       }
+      @media (max-height: 620px) {
+        .tf-cover-evidence {
+          gap: clamp(8px, 1.3vh, 14px) !important;
+          padding: clamp(10px, 1.8vh, 18px) !important;
+        }
+        .tf-cover-evidence .metric {
+          min-height: 76px !important;
+          gap: 4px !important;
+          padding: clamp(10px, 1.6vh, 16px) !important;
+        }
+        .tf-cover-evidence .metric strong {
+          font-size: clamp(34px, 7vh, 54px) !important;
+        }
+        .tf-cover-evidence .metric span {
+          font-size: clamp(12px, 1.8vh, 15px) !important;
+        }
+        .tf-cover-evidence .hero-gallery {
+          gap: 4px !important;
+        }
+        .tf-cover-evidence .image-tile {
+          gap: 5px !important;
+        }
+        .tf-cover-evidence .image-meta {
+          gap: 2px !important;
+        }
+        .tf-cover-evidence .image-meta strong {
+          font-size: clamp(11px, 1.7vh, 13px) !important;
+        }
+        .tf-cover-evidence .image-meta small {
+          font-size: clamp(10px, 1.55vh, 12px) !important;
+        }
+      }
+      @media (max-height: 540px) {
+        .tf-cover-evidence {
+          gap: 7px !important;
+          padding: 10px !important;
+        }
+        .tf-cover-evidence .metric {
+          min-height: 64px !important;
+        }
+        .tf-cover-evidence .metric strong {
+          font-size: clamp(30px, 6.5vh, 44px) !important;
+        }
+      }
     </style>
   </head>
   <body><div data-aimoda-cover-viewport>${coverHtml}</div></body>
@@ -124,7 +168,7 @@ function TrendFlowCoverFrame({
   title: string;
 }) {
   return (
-    <div className="absolute inset-0 overflow-hidden bg-white dark:bg-black">
+    <div className="trend-reader-cover-frame bg-white dark:bg-black">
       <iframe
         srcDoc={buildCoverSrcDoc(coverHtml)}
         title={title}
@@ -280,9 +324,9 @@ export function TrendFlowPage() {
   }
 
   return (
-    <section className="relative h-full overflow-hidden bg-background">
+    <section className="trend-reader-shell relative h-full overflow-hidden bg-background">
       {!isLocked ? (
-        <div className="pointer-events-none absolute inset-x-3 top-3 z-30 flex items-start justify-between gap-3 sm:inset-x-5 sm:top-5">
+        <div className="trend-reader-floating-toolbar pointer-events-none absolute inset-x-3 z-30 flex items-start justify-between gap-3 sm:inset-x-5">
           <div className="pointer-events-auto flex min-w-0 flex-wrap items-center gap-2">
             <div className="border border-border/70 bg-background/90 px-3 py-2 shadow-token-sm backdrop-blur-md">
               <p className="type-chat-kicker text-muted-foreground">
@@ -422,23 +466,23 @@ export function TrendFlowPage() {
                         itemRefs.current[index] = element;
                       }}
                       data-index={index}
-                      className="relative grid h-full snap-start snap-always grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-t border-border/60 px-4 pb-[clamp(1.25rem,3dvh,2.5rem)] pt-[clamp(3.75rem,7.5dvh,5.25rem)] sm:px-6 lg:px-8"
+                      className="trend-reader-page relative grid h-full snap-start snap-always grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-t border-border/60 px-4 sm:px-6 lg:px-8"
                     >
                       <div
                         aria-label={`${paddedNumber} of ${paddedTotal}`}
-                        className="pointer-events-none absolute right-4 top-[clamp(4.5rem,9dvh,6rem)] z-10 type-meta tabular-nums text-muted-foreground sm:right-6"
+                        className="trend-reader-side-count pointer-events-none absolute right-4 z-10 type-meta tabular-nums text-muted-foreground sm:right-6"
                       >
                         <span className="block origin-center -rotate-90 whitespace-nowrap">
                           {paddedNumber} / {paddedTotal}
                         </span>
                       </div>
 
-                      <div className="relative z-10 mx-auto grid w-full max-w-[90rem] gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-8">
+                      <div className="trend-reader-page-header relative z-10 mx-auto grid w-full max-w-[90rem] md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
                         <header className="max-w-[min(72rem,100%)]">
                           <p className="type-chat-kicker text-muted-foreground">
                             {item.brand}
                           </p>
-                          <h2 className="mt-2 max-w-[22ch] text-balance text-[clamp(1.9rem,4.25vw,4.1rem)] font-bold leading-[0.96] tracking-tight text-foreground md:mt-3 xl:max-w-[24ch]">
+                          <h2 className="trend-reader-title mt-2 max-w-[22ch] text-balance font-bold leading-[0.96] tracking-tight text-foreground md:mt-3 xl:max-w-[24ch]">
                             {item.title}
                           </h2>
                         </header>
@@ -480,8 +524,8 @@ export function TrendFlowPage() {
                         </div>
                       </div>
 
-                      <div className="relative min-h-0 pt-[clamp(0.9rem,1.8dvh,1.5rem)]">
-                        <div className="relative mx-auto h-full min-h-0 w-full max-w-[90rem] overflow-hidden bg-background">
+                      <div className="trend-reader-canvas relative min-h-0">
+                        <div className="trend-reader-canvas-box relative mx-auto h-full min-h-0 w-full max-w-[90rem] overflow-hidden bg-background">
                           {item.coverHtml ? (
                             <TrendFlowCoverFrame
                               coverHtml={item.coverHtml}

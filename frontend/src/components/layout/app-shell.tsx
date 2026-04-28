@@ -186,7 +186,10 @@ export function AppShell() {
     const checkScreenSize = () => {
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        const isLarge = shouldPinAppShellSidebar(window.innerWidth);
+        const isLarge = shouldPinAppShellSidebar(
+          window.innerWidth,
+          window.innerHeight,
+        );
         setIsLargeScreen((prev) => {
           if (prev !== isLarge) {
             setIsSidebarOpen(isLarge);
@@ -872,7 +875,8 @@ export function AppShell() {
       >
         <header
           className={cn(
-            "sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background px-4 xl:hidden",
+            "sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background px-4",
+            isLargeScreen && "hidden",
             isChatImmersive && "hidden",
           )}
         >
@@ -941,7 +945,7 @@ export function AppShell() {
         )}
 
         {isFullScreenRoute ? (
-          <div className="h-[calc(100dvh-56px)] xl:h-dvh">
+          <div className={cn("h-[calc(100dvh-56px)]", isLargeScreen && "h-dvh")}>
             <Outlet />
           </div>
         ) : (
