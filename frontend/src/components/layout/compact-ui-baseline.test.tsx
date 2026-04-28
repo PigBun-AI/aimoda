@@ -1,7 +1,12 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { APP_SHELL_PINNED_SIDEBAR_MIN_WIDTH, shouldPinAppShellSidebar } from '@/components/layout/app-shell-layout'
+import {
+  APP_SHELL_FULL_DESKTOP_MIN_WIDTH,
+  APP_SHELL_PINNED_SIDEBAR_MIN_HEIGHT,
+  APP_SHELL_PINNED_SIDEBAR_MIN_WIDTH,
+  shouldPinAppShellSidebar,
+} from '@/components/layout/app-shell-layout'
 import { PageFrame } from '@/components/layout/page-frame'
 import { PageIntro } from '@/components/layout/page-intro'
 import { SectionIntro } from '@/components/layout/section-intro'
@@ -11,10 +16,15 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 describe('compact UI baseline', () => {
-  it('uses xl as the pinned sidebar breakpoint for AppShell', () => {
+  it('keeps MacBook-sized desktops in overlay sidebar mode', () => {
     expect(APP_SHELL_PINNED_SIDEBAR_MIN_WIDTH).toBe(1280)
-    expect(shouldPinAppShellSidebar(1279)).toBe(false)
-    expect(shouldPinAppShellSidebar(1280)).toBe(true)
+    expect(APP_SHELL_PINNED_SIDEBAR_MIN_HEIGHT).toBe(860)
+    expect(APP_SHELL_FULL_DESKTOP_MIN_WIDTH).toBe(1440)
+    expect(shouldPinAppShellSidebar(1279, 900)).toBe(false)
+    expect(shouldPinAppShellSidebar(1280, 800)).toBe(false)
+    expect(shouldPinAppShellSidebar(1366, 768)).toBe(false)
+    expect(shouldPinAppShellSidebar(1280, 860)).toBe(true)
+    expect(shouldPinAppShellSidebar(1440, 760)).toBe(true)
   })
 
   it('defaults PageFrame to compact shell spacing', () => {

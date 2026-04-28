@@ -703,6 +703,82 @@ html:lang(zh-CN) {
   }
 }
 
+@layer components {
+  .trend-reader-shell {
+    --trend-reader-toolbar-top: 1.25rem;
+    --trend-reader-page-pt: clamp(3.75rem, 7.5dvh, 5.25rem);
+    --trend-reader-page-pb: clamp(1.25rem, 3dvh, 2.5rem);
+    --trend-reader-header-gap: clamp(1rem, 2.2vw, 2rem);
+    --trend-reader-title-size: clamp(1.9rem, 4.25vw, 4.1rem);
+    --trend-reader-canvas-pt: clamp(0.9rem, 1.8dvh, 1.5rem);
+    --trend-reader-side-count-top: clamp(4.5rem, 9dvh, 6rem);
+  }
+
+  .trend-reader-floating-toolbar {
+    top: var(--trend-reader-toolbar-top);
+  }
+
+  .trend-reader-page {
+    padding-bottom: var(--trend-reader-page-pb);
+    padding-top: var(--trend-reader-page-pt);
+  }
+
+  .trend-reader-side-count {
+    top: var(--trend-reader-side-count-top);
+  }
+
+  .trend-reader-page-header {
+    gap: var(--trend-reader-header-gap);
+  }
+
+  .trend-reader-title {
+    font-size: var(--trend-reader-title-size);
+  }
+
+  .trend-reader-canvas {
+    padding-top: var(--trend-reader-canvas-pt);
+  }
+
+  .trend-reader-cover-frame {
+    inset: 0;
+    overflow: hidden;
+    position: absolute;
+  }
+
+  @media (max-height: 820px) and (min-width: 1024px) {
+    .trend-reader-shell {
+      --trend-reader-toolbar-top: 0.85rem;
+      --trend-reader-page-pt: clamp(2.65rem, 5.2dvh, 3.55rem);
+      --trend-reader-page-pb: clamp(0.8rem, 2dvh, 1.35rem);
+      --trend-reader-header-gap: clamp(0.75rem, 1.5vw, 1.25rem);
+      --trend-reader-title-size: clamp(2.1rem, 3.35vw, 3.25rem);
+      --trend-reader-canvas-pt: clamp(0.45rem, 1.1dvh, 0.85rem);
+      --trend-reader-side-count-top: clamp(3.35rem, 6.5dvh, 4.35rem);
+    }
+  }
+
+  @media (max-height: 740px) and (min-width: 1024px) {
+    .trend-reader-shell {
+      --trend-reader-page-pt: clamp(2.25rem, 4.6dvh, 3rem);
+      --trend-reader-page-pb: 0.75rem;
+      --trend-reader-title-size: clamp(1.9rem, 3vw, 2.9rem);
+      --trend-reader-canvas-pt: 0.45rem;
+    }
+  }
+
+  @media (max-width: 767px) {
+    .trend-reader-shell {
+      --trend-reader-toolbar-top: 0.75rem;
+      --trend-reader-page-pt: clamp(3.1rem, 8dvh, 4.25rem);
+      --trend-reader-page-pb: 1rem;
+      --trend-reader-header-gap: 0.8rem;
+      --trend-reader-title-size: clamp(1.65rem, 7.5vw, 2.35rem);
+      --trend-reader-canvas-pt: 0.85rem;
+      --trend-reader-side-count-top: clamp(3.75rem, 8dvh, 4.75rem);
+    }
+  }
+}
+
 /* ==================== Sonner Toast ==================== */
 [data-sonner-toaster] {
   font-family: var(--font-role-body-current), system-ui, -apple-system, sans-serif !important;
