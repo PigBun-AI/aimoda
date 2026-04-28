@@ -14,7 +14,7 @@ export const CONFIG = {
   STYLE_TEXT_ENDPOINT:
     process.env.STYLE_TEXT_ENDPOINT ??
     process.env.FASHION_CLIP_ENDPOINT ??
-    "http://113.108.13.218:34323",
+    "http://183.62.232.22:18730",
   STYLE_TEXT_MODEL:
     process.env.STYLE_TEXT_MODEL ??
     process.env.FASHION_CLIP_MODEL ??
