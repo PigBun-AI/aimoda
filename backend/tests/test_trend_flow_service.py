@@ -18,7 +18,9 @@ def _build_trend_flow_zip(tmp_path: Path) -> Path:
           <body>
             <p>Demo excerpt for trend flow upload smoke test.</p>
             <template id="aimoda-trend-flow-cover" data-aimoda-cover>
-              <section class="cover"><img src="../assets/cover.svg" alt="" /></section>
+              <section class="cover" data-aimoda-cover="trend-flow" data-cover-ratio="16:9" data-cover-width="1600" data-cover-height="900">
+                <img src="../assets/cover.svg" alt="" />
+              </section>
             </template>
           </body>
         </html>
@@ -32,7 +34,7 @@ def _build_trend_flow_zip(tmp_path: Path) -> Path:
     (root / "manifest.json").write_text(
         json.dumps(
             {
-                "specVersion": "2.0",
+                "specVersion": "3.0",
                 "contentType": "trend_flow",
                 "slug": "demo-brand-2025-trend-flow",
                 "title": "Demo Brand 趋势流动：2025",

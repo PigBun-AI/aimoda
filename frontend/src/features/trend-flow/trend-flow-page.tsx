@@ -20,6 +20,14 @@ import type { TrendFlowSummary } from "@/lib/types";
 const READER_PAGE_SIZE = 4;
 const PREVIEW_IFRAME_SCALE = 0.78;
 
+function isStandardTrendFlowCover(coverHtml: string | null | undefined) {
+  return Boolean(
+    coverHtml &&
+      /data-aimoda-cover\s*=\s*["']trend-flow["']/i.test(coverHtml) &&
+      /data-cover-ratio\s*=\s*["']16:9["']/i.test(coverHtml),
+  );
+}
+
 function buildCoverSrcDoc(coverHtml: string) {
   return `<!doctype html>
 <html>
@@ -59,6 +67,19 @@ function buildCoverSrcDoc(coverHtml: string) {
         width: 100%;
         height: 100%;
         min-height: 100% !important;
+      }
+      [data-aimoda-cover-viewport]:has([data-aimoda-cover="trend-flow"]) {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      [data-aimoda-cover-viewport] > [data-aimoda-cover="trend-flow"] {
+        width: min(100vw, calc(100vh * 16 / 9)) !important;
+        height: min(100vh, calc(100vw * 9 / 16)) !important;
+        min-height: 0 !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        flex: none;
       }
       .tf-cover-evidence {
         height: 100% !important;
@@ -459,6 +480,9 @@ export function TrendFlowPage() {
               : trendFlows.map((item, index) => {
                   const paddedNumber = String(index + 1).padStart(2, "0");
                   const paddedTotal = String(totalItems).padStart(2, "0");
+                  const hasStandardCover = isStandardTrendFlowCover(
+                    item.coverHtml,
+                  );
                   return (
                     <article
                       key={item.id}
@@ -466,7 +490,12 @@ export function TrendFlowPage() {
                         itemRefs.current[index] = element;
                       }}
                       data-index={index}
-                      className="trend-reader-page relative grid h-full snap-start snap-always grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-t border-border/60 px-4 sm:px-6 lg:px-8"
+                      className={[
+                        "trend-reader-page relative grid h-full snap-start snap-always overflow-hidden border-t border-border/60 px-4 sm:px-6 lg:px-8",
+                        hasStandardCover
+                          ? "trend-reader-page--poster grid-rows-[minmax(0,1fr)]"
+                          : "grid-rows-[auto_minmax(0,1fr)]",
+                      ].join(" ")}
                     >
                       <div
                         aria-label={`${paddedNumber} of ${paddedTotal}`}
@@ -477,20 +506,11 @@ export function TrendFlowPage() {
                         </span>
                       </div>
 
-                      <div className="trend-reader-page-header relative z-10 mx-auto grid w-full max-w-[90rem] md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                        <header className="max-w-[min(72rem,100%)]">
-                          <p className="type-chat-kicker text-muted-foreground">
-                            {item.brand}
-                          </p>
-                          <h2 className="trend-reader-title mt-2 max-w-[22ch] text-balance font-bold leading-[0.96] tracking-tight text-foreground md:mt-3 xl:max-w-[24ch]">
-                            {item.title}
-                          </h2>
-                        </header>
-
+                      {hasStandardCover ? (
                         <Button
                           asChild
                           variant="outline"
-                          className="type-chat-action hidden h-10 bg-background/90 px-5 shadow-token-sm backdrop-blur-md md:inline-flex"
+                          className="trend-reader-poster-action type-chat-action h-10 bg-background/90 px-5 shadow-token-sm backdrop-blur-md"
                         >
                           <a
                             href={item.previewUrl}
@@ -505,9 +525,22 @@ export function TrendFlowPage() {
                             />
                           </a>
                         </Button>
+                      ) : (
+                        <div className="trend-reader-page-header relative z-10 mx-auto grid w-full max-w-[90rem] md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                          <header className="max-w-[min(72rem,100%)]">
+                            <p className="type-chat-kicker text-muted-foreground">
+                              {item.brand}
+                            </p>
+                            <h2 className="trend-reader-title mt-2 max-w-[22ch] text-balance font-bold leading-[0.96] tracking-tight text-foreground md:mt-3 xl:max-w-[24ch]">
+                              {item.title}
+                            </h2>
+                          </header>
 
-                        <div className="md:hidden">
-                          <Button asChild variant="outline" size="sm">
+                          <Button
+                            asChild
+                            variant="outline"
+                            className="type-chat-action hidden h-10 bg-background/90 px-5 shadow-token-sm backdrop-blur-md md:inline-flex"
+                          >
                             <a
                               href={item.previewUrl}
                               target="_blank"
@@ -521,10 +554,34 @@ export function TrendFlowPage() {
                               />
                             </a>
                           </Button>
-                        </div>
-                      </div>
 
-                      <div className="trend-reader-canvas relative min-h-0">
+                          <div className="md:hidden">
+                            <Button asChild variant="outline" size="sm">
+                              <a
+                                href={item.previewUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                aria-label={`${t("openItem")} — ${item.title}`}
+                              >
+                                <span>{t("openItem")}</span>
+                                <ArrowUpRight
+                                  className="size-4"
+                                  strokeWidth={1.6}
+                                />
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div
+                        className={[
+                          "trend-reader-canvas relative min-h-0",
+                          hasStandardCover && "trend-reader-canvas--poster",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
                         <div className="trend-reader-canvas-box relative mx-auto h-full min-h-0 w-full max-w-[90rem] overflow-hidden bg-background">
                           {item.coverHtml ? (
                             <TrendFlowCoverFrame

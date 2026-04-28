@@ -128,9 +128,9 @@ OPENCLAW_REPORT_TEMPLATE = {
 
 
 TREND_FLOW_SPEC = {
-    "version": "2.0.0",
-    "updatedAt": "2026-04-27",
-    "description": "AiModa Trend Flow ZIP 规范 - 单品牌、连续四个季度的趋势流动报告",
+    "version": "3.0.0",
+    "updatedAt": "2026-04-29",
+    "description": "AiModa Trend Flow ZIP 规范 - 单品牌、连续四个季度的趋势流动报告；封面必须是独立 16:9 cover poster。",
     "folderStructure": {
         "root": "{trend-flow-root}/",
         "required": ["manifest.json", "entry HTML", "zip-internal assets"],
@@ -139,7 +139,7 @@ TREND_FLOW_SPEC = {
     "manifest": {
         "requiredFields": ["specVersion", "contentType", "slug", "title", "brand", "timeline", "entryHtml"],
         "strictRules": {
-            "specVersion": "必须存在，推荐使用 2.0",
+            "specVersion": "必须存在，推荐使用 3.0",
             "contentType": "必须严格等于 trend_flow",
             "title": "必须显式提供，不再依赖 entryHtml <title> 推断作为合格上传标准",
         },
@@ -150,7 +150,7 @@ TREND_FLOW_SPEC = {
             "mustBeConsecutive": True,
         },
         "example": {
-            "specVersion": "2.0",
+            "specVersion": "3.0",
             "contentType": "trend_flow",
             "slug": "miumiu-2025-early-spring-to-aw-trend-flow",
             "title": "Miu Miu 趋势流动：2025 早春至秋冬",
@@ -166,49 +166,83 @@ TREND_FLOW_SPEC = {
             "coverImage": None,
         },
     },
-    "coverFragment": {
-        "goal": "让内部 Agent 在完整 HTML 报告中声明一个不参与正文渲染的封面片段，平台会解析该片段用于趋势流动滚动页封面预览。",
+    "coverPoster": {
+        "goal": "让内部 Agent 在完整 HTML 报告中同时交付一个独立、不可见、标准 16:9 cover poster。趋势流动滚动页只展示该 poster，完整阅读页继续展示 entryHtml。",
         "acceptedMarkers": [
             '<template id="aimoda-trend-flow-cover" data-aimoda-cover>...</template>',
-            '<section data-aimoda-cover-fragment>...</section>',
         ],
         "required": True,
-        "placement": "必须放在 manifest.entryHtml 指向的 HTML 文件中，且只能出现一次。template 适合单独设计封面；data-aimoda-cover-fragment 适合直接标记正文里现成的 C 区块。",
+        "placement": "必须放在 manifest.entryHtml 指向的 HTML 文件中，且只能出现一次。template 不会在完整报告正文中渲染。",
+        "rootContract": {
+            "requiredRoot": '<section data-aimoda-cover="trend-flow" data-cover-ratio="16:9" data-cover-width="1600" data-cover-height="900">...</section>',
+            "ratio": "16:9",
+            "recommendedCanvas": {"width": 1600, "height": 900},
+            "responsibility": "标题、品牌、时间窗、关键指标、关键图片和封面摘要都由 Agent 在 cover poster 内排版完成；前端只做等比 contain 展示和打开报告按钮。",
+        },
         "resourceRule": "片段内图片、CSS 背景图等资源必须继续使用 ZIP 内部相对路径；平台会按 entryHtml 所在目录解析并重写为可访问预览资源。",
-        "styleRule": "使用 data-aimoda-cover-fragment 标记正文区块时，平台会一并抽取 entryHtml 内的 <style> 与 stylesheet <link> 到封面 iframe；仍建议该区块不要依赖正文脚本。",
-        "fallback": "仅历史数据展示层保留 manifest.coverImage / legacy cover.* / entryHtml 第一张本地图片 / 完整报告预览回退；新 MCP 上传缺少封面标记会直接失败。",
+        "styleRule": "cover poster 必须自包含样式，建议在 template 内写 <style>；不要依赖正文页全局脚本或运行时计算。",
+        "fallback": "仅历史数据展示层保留 manifest.coverImage / legacy cover.* / 完整报告预览回退；新 MCP 上传缺少标准 cover poster 会直接失败。",
         "templateExample": """
 <template id="aimoda-trend-flow-cover" data-aimoda-cover>
-  <section class="tf-cover">
-    <p class="tf-kicker">MIU MIU · FOUR-SEASON FLOW</p>
-    <h1>Miu Miu 趋势流动：2025 早春至秋冬</h1>
-    <img src="../assets/cover-hero.jpg" alt="" />
+  <style>
+    .tf-cover-poster {
+      width: 1600px;
+      height: 900px;
+      display: grid;
+      grid-template-columns: 0.82fr 1.18fr;
+      gap: 44px;
+      padding: 58px;
+      background: #f6f1e8;
+      color: #161310;
+      overflow: hidden;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    .tf-cover-poster h1 {
+      margin: 0;
+      max-width: 11ch;
+      font-size: 94px;
+      line-height: 0.92;
+      letter-spacing: -0.07em;
+    }
+    .tf-cover-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      min-height: 0;
+    }
+    .tf-cover-grid img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  </style>
+  <section class="tf-cover-poster" data-aimoda-cover="trend-flow" data-cover-ratio="16:9" data-cover-width="1600" data-cover-height="900">
+    <header>
+      <p>MIU MIU · FOUR-SEASON FLOW</p>
+      <h1>Miu Miu 趋势流动：2025 早春至秋冬</h1>
+    </header>
+    <div class="tf-cover-grid">
+      <img src="../assets/look-01.jpg" alt="" />
+      <img src="../assets/look-02.jpg" alt="" />
+      <img src="../assets/look-03.jpg" alt="" />
+    </div>
   </section>
 </template>
 """.strip(),
-        "fragmentExample": """
-<main>
-  <section>A</section>
-  <section>B</section>
-  <section data-aimoda-cover-fragment>
-    <p class="tf-kicker">MIU MIU · KEY TRANSITION</p>
-    <h2>C 区块：这一季真正要作为趋势流动封面的内容</h2>
-    <img src="../assets/key-transition.jpg" alt="" />
-  </section>
-  <section>D</section>
-</main>
-""".strip(),
     },
     "htmlRules": {
-        "coverTemplateNonRendering": "如果封面是单独设计的内容，使用 template 标记，浏览器不会在完整报告正文中渲染。",
-        "coverFragmentFromContent": "如果封面就是正文中的 C 区块，直接在该区块根节点添加 data-aimoda-cover-fragment；该区块仍会在完整报告中正常渲染。",
-        "coverFragmentScope": "封面片段只负责列表滚动页第一视觉，不要依赖正文页全局脚本；允许写片段内 style，禁止把大图 base64 内嵌。",
-        "entryHtml": "完整报告阅读仍以 manifest.entryHtml 为准；封面标记只是平台额外解析的展示片段。",
+        "coverTemplateNonRendering": "封面必须使用 template 标记，浏览器不会在完整报告正文中渲染。",
+        "coverPosterScope": "封面 poster 只负责趋势流动滚动页第一视觉，不要依赖正文页全局脚本；允许写 template 内 style，禁止把大图 base64 内嵌。",
+        "entryHtml": "完整报告阅读仍以 manifest.entryHtml 为准；cover poster 是平台额外解析的标准展示资产。",
+        "fragmentDeprecated": "data-aimoda-cover-fragment 已废弃；正文 C 区块可以在 report_html 中正常存在，但不能作为上传封面协议。",
     },
     "strictUploadPolicy": {
-        "missingCoverMarker": "hard_fail",
-        "duplicateCoverMarker": "hard_fail",
-        "emptyCoverMarker": "hard_fail",
+        "missingCoverPoster": "hard_fail",
+        "duplicateCoverPoster": "hard_fail",
+        "emptyCoverPoster": "hard_fail",
+        "missingCoverRootContract": "hard_fail",
+        "invalidCoverRatio": "hard_fail",
+        "coverFragmentMarker": "hard_fail",
         "missingSpecVersion": "hard_fail",
         "missingContentType": "hard_fail",
         "invalidContentType": "hard_fail",
@@ -246,7 +280,7 @@ TREND_FLOW_SPEC = {
         ],
         "contract": {
             "type": "trend_flow_package",
-            "version": "2.0.0",
+            "version": "3.0.0",
             "strict": True,
         },
     },
@@ -254,8 +288,8 @@ TREND_FLOW_SPEC = {
 
 
 TREND_FLOW_TEMPLATE = {
-    "version": "2.0.0",
-    "updatedAt": "2026-04-27",
+    "version": "3.0.0",
+    "updatedAt": "2026-04-29",
     "folderTemplate": {
         "root": "{slug}-trend-flow/",
         "children": [
@@ -266,7 +300,7 @@ TREND_FLOW_TEMPLATE = {
         ],
     },
     "manifestTemplate": {
-        "specVersion": "2.0",
+        "specVersion": "3.0",
         "contentType": "trend_flow",
         "slug": "brand-2025-trend-flow",
         "title": "Brand 趋势流动：2025 早春至秋冬",
@@ -283,29 +317,35 @@ TREND_FLOW_TEMPLATE = {
     "entryHtmlCoverSnippet": """
 <template id="aimoda-trend-flow-cover" data-aimoda-cover>
   <style>
-    .tf-cover {
-      min-height: 100%;
+    .tf-cover-poster {
+      width: 1600px;
+      height: 900px;
       display: grid;
-      grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
-      gap: 32px;
-      align-items: end;
-      padding: clamp(28px, 5vw, 64px);
+      grid-template-columns: 0.82fr 1.18fr;
+      gap: 44px;
+      padding: 58px;
       background: #f5f0e8;
       color: #171512;
-      font-family: Georgia, "Times New Roman", serif;
+      overflow: hidden;
+      font-family: "Helvetica Neue", Arial, sans-serif;
     }
-    .tf-cover h1 {
+    .tf-cover-poster h1 {
       margin: 0;
-      max-width: 10ch;
-      font-size: clamp(48px, 8vw, 112px);
-      line-height: 0.9;
-      letter-spacing: -0.06em;
+      max-width: 11ch;
+      font-size: 94px;
+      line-height: 0.92;
+      letter-spacing: -0.07em;
     }
-    .tf-cover img {
+    .tf-cover-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      min-height: 0;
+    }
+    .tf-cover-grid img {
       width: 100%;
-      height: min(68vh, 680px);
+      height: 100%;
       object-fit: cover;
-      border: 1px solid rgba(23, 21, 18, 0.22);
     }
     .tf-kicker {
       margin: 0 0 18px;
@@ -314,20 +354,24 @@ TREND_FLOW_TEMPLATE = {
       text-transform: uppercase;
     }
   </style>
-  <section class="tf-cover">
+  <section class="tf-cover-poster" data-aimoda-cover="trend-flow" data-cover-ratio="16:9" data-cover-width="1600" data-cover-height="900">
     <div>
       <p class="tf-kicker">BRAND · FOUR-SEASON FLOW</p>
       <h1>Brand 趋势流动：2025 早春至秋冬</h1>
     </div>
-    <img src="../assets/cover.jpg" alt="" />
+    <div class="tf-cover-grid">
+      <img src="../assets/look-01.jpg" alt="" />
+      <img src="../assets/look-02.jpg" alt="" />
+      <img src="../assets/look-03.jpg" alt="" />
+    </div>
   </section>
 </template>
 """.strip(),
     "notes": [
         "正式上传流程：prepare_trend_flow_upload -> PUT zip 到返回的 upload.url -> complete_trend_flow_upload -> get_trend_flow_upload_status。",
         "MCP 不提供 base64 发布工具；ZIP 二进制只能直传 OSS。",
-        "如果封面需要独立设计，使用 template id=\"aimoda-trend-flow-cover\" data-aimoda-cover。",
-        "如果封面就是正文里的某个现成区块，直接在该区块根节点添加 data-aimoda-cover-fragment。",
+        "封面必须使用 template id=\"aimoda-trend-flow-cover\" data-aimoda-cover，并在内部提供 16:9 标准 poster 根节点。",
+        "data-aimoda-cover-fragment 已废弃；不要再从正文区块抽取封面。",
         "片段内资源路径按 entryHtml 所在目录解析，例如 pages/report.html 中引用 ../assets/cover.jpg。",
     ],
 }

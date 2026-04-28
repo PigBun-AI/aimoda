@@ -164,11 +164,11 @@ function toolError(err: unknown) {
 }
 
 function createServer(): McpServer {
-  const server = new McpServer({ name: 'aimoda-trend-flow', version: '2.0.0' })
+  const server = new McpServer({ name: 'aimoda-trend-flow', version: '3.0.0' })
 
   server.tool(
     'get_trend_flow_spec',
-    '获取趋势流动 ZIP 打包规范，包含 manifest、时间轴要求、目录结构，以及 template 或正文 data-aimoda-cover-fragment 封面标记规范。',
+    '获取趋势流动 ZIP 打包规范，包含 manifest、时间轴要求、目录结构，以及 16:9 标准 cover poster template 规范。',
     {},
     async () => {
       try {
@@ -181,7 +181,7 @@ function createServer(): McpServer {
 
   server.tool(
     'get_trend_flow_template',
-    '获取趋势流动 ZIP 模板，含 entryHtml 内的 cover template 示例；如果封面就是正文 C 区块，也可用 data-aimoda-cover-fragment 标记该区块。',
+    '获取趋势流动 ZIP 模板，含 entryHtml 内的 16:9 cover poster template 示例。正文 fragment 封面已废弃。',
     {},
     async () => {
       try {
@@ -305,7 +305,7 @@ async function main() {
   app.use(express.default.json({ limit: '100mb' }))
 
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', service: 'trend-flow-mcp', version: '2.0.0' })
+    res.json({ status: 'ok', service: 'trend-flow-mcp', version: '3.0.0' })
   })
 
   app.post('/mcp', authMiddleware, async (req, res) => {

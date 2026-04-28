@@ -24,6 +24,9 @@ _QUARTER_ORDER = ("早春", "春夏", "早秋", "秋冬")
 _QUARTER_INDEX = {quarter: index for index, quarter in enumerate(_QUARTER_ORDER)}
 TREND_FLOW_COVER_TEMPLATE_ID = "aimoda-trend-flow-cover"
 TREND_FLOW_COVER_FRAGMENT_ATTR = "data-aimoda-cover-fragment"
+TREND_FLOW_STANDARD_COVER_ATTR = "data-aimoda-cover"
+TREND_FLOW_STANDARD_COVER_VALUE = "trend-flow"
+TREND_FLOW_STANDARD_COVER_RATIO = "16:9"
 VOID_HTML_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
 TREND_FLOW_COVER_TEMPLATE_PATTERN = re.compile(
     r"<template\b(?P<attrs>[^>]*)>(?P<body>.*?)</template>",
@@ -53,6 +56,10 @@ INLINE_EVENT_HANDLER_PATTERN = re.compile(
 )
 JAVASCRIPT_URL_PATTERN = re.compile(
     r"(?P<prefix>\b(?:href|src)\s*=\s*[\"'])\s*javascript:[^\"']*(?P<suffix>[\"'])",
+    re.IGNORECASE,
+)
+COVER_ROOT_TAG_PATTERN = re.compile(
+    r"<(?P<tag>[a-zA-Z][a-zA-Z0-9:-]*)\b(?P<attrs>[^>]*)>",
     re.IGNORECASE,
 )
 
@@ -169,6 +176,47 @@ def _sanitize_cover_template_html(html: str) -> str:
     return cleaned.strip()
 
 
+def _validate_standard_cover_contract(html: str) -> None:
+    matched_roots: list[dict[str, str | None]] = []
+    for match in COVER_ROOT_TAG_PATTERN.finditer(html):
+        attrs = _parse_html_attrs(match.group("attrs"))
+        if TREND_FLOW_STANDARD_COVER_ATTR in attrs:
+            matched_roots.append(attrs)
+
+    if len(matched_roots) != 1:
+        raise ReportPackageError(
+            "invalid_trend_flow_cover_contract",
+            "趋势流动封面必须且只能包含一个 data-aimoda-cover=\"trend-flow\" 的 16:9 标准封面根节点",
+        )
+
+    attrs = matched_roots[0]
+    if attrs.get(TREND_FLOW_STANDARD_COVER_ATTR) != TREND_FLOW_STANDARD_COVER_VALUE:
+        raise ReportPackageError(
+            "invalid_trend_flow_cover_contract",
+            "趋势流动封面根节点必须声明 data-aimoda-cover=\"trend-flow\"",
+        )
+    if attrs.get("data-cover-ratio") != TREND_FLOW_STANDARD_COVER_RATIO:
+        raise ReportPackageError(
+            "invalid_trend_flow_cover_ratio",
+            "趋势流动封面根节点必须声明 data-cover-ratio=\"16:9\"",
+        )
+
+    try:
+        width = int(str(attrs.get("data-cover-width") or ""))
+        height = int(str(attrs.get("data-cover-height") or ""))
+    except ValueError as exc:
+        raise ReportPackageError(
+            "invalid_trend_flow_cover_canvas",
+            "趋势流动封面根节点必须声明整数 data-cover-width 与 data-cover-height",
+        ) from exc
+
+    if width <= 0 or height <= 0 or abs(width / height - 16 / 9) > 0.01:
+        raise ReportPackageError(
+            "invalid_trend_flow_cover_canvas",
+            "趋势流动封面画布必须是正数尺寸且比例为 16:9，例如 1600×900",
+        )
+
+
 def _extract_cover_fragment_html(html: str) -> list[str]:
     parser = CoverFragmentParser()
     parser.feed(html)
@@ -196,6 +244,7 @@ def extract_trend_flow_cover_template(entry_path: Path, report_root: Path) -> Tr
                 "empty_trend_flow_cover_template",
                 "趋势流动封面 template 不能为空",
             )
+        _validate_standard_cover_contract(cover_html)
 
         matched_templates.append(
             TrendFlowCoverTemplate(
@@ -206,23 +255,19 @@ def extract_trend_flow_cover_template(entry_path: Path, report_root: Path) -> Tr
         )
 
     cover_fragments = _extract_cover_fragment_html(html)
-    matched_fragments = [
-        TrendFlowCoverTemplate(
-            html="\n".join(part for part in (_extract_document_cover_styles(html), fragment) if part),
-            asset_path=entry_path.relative_to(report_root).as_posix(),
-            source="entry_fragment",
+    if cover_fragments:
+        raise ReportPackageError(
+            "trend_flow_cover_fragment_unsupported",
+            "趋势流动 3.0 已废弃 data-aimoda-cover-fragment；必须在 template 中提供独立 16:9 cover poster",
         )
-        for fragment in cover_fragments
-    ]
-    matched_covers = [*matched_templates, *matched_fragments]
 
-    if len(matched_covers) > 1:
+    if len(matched_templates) > 1:
         raise ReportPackageError(
             "duplicate_trend_flow_cover_marker",
-            "entryHtml 中只能存在一个趋势流动封面标记：template 或 data-aimoda-cover-fragment 二选一",
+            "entryHtml 中只能存在一个趋势流动封面 template",
         )
-    if matched_covers:
-        return matched_covers[0]
+    if matched_templates:
+        return matched_templates[0]
     return None
 
 
@@ -231,7 +276,7 @@ def require_trend_flow_cover_template(entry_path: Path, report_root: Path) -> Tr
     if cover_template is None:
         raise ReportPackageError(
             "trend_flow_cover_marker_missing",
-            "趋势流动 ZIP 必须在 entryHtml 中提供封面标记：<template id=\"aimoda-trend-flow-cover\" data-aimoda-cover> 或 data-aimoda-cover-fragment",
+            "趋势流动 ZIP 必须在 entryHtml 中提供标准 16:9 封面 template：<template id=\"aimoda-trend-flow-cover\" data-aimoda-cover>",
         )
     return cover_template
 
