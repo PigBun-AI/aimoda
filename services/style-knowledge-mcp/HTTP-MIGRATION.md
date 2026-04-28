@@ -127,7 +127,7 @@ style-knowledge-mcp:
   environment:
     - QDRANT_URL=http://qdrant:6333
     - QDRANT_API_KEY=aimoda2025
-    - FASHION_CLIP_ENDPOINT=http://113.108.13.218:34323
+    - FASHION_CLIP_ENDPOINT=http://183.62.232.22:18730
   restart: unless-stopped
 ```
 

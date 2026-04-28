@@ -49,10 +49,92 @@ function buildCoverSrcDoc(coverHtml: string) {
       svg {
         max-width: 100%;
       }
+      [data-aimoda-cover-viewport] {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #fff;
+      }
+      [data-aimoda-cover-viewport] > *:not(style) {
+        width: 100%;
+        height: 100%;
+        min-height: 100% !important;
+      }
+      .tf-cover-evidence {
+        height: 100% !important;
+        min-height: 100% !important;
+        align-content: center !important;
+        gap: clamp(14px, 1.7vw, 24px) !important;
+        padding: clamp(18px, 2.2vw, 32px) !important;
+      }
+      .tf-cover-evidence .metric-row {
+        min-height: 0 !important;
+      }
+      .tf-cover-evidence .metric {
+        min-height: 96px !important;
+        gap: 7px !important;
+        padding: clamp(14px, 1.8vw, 24px) !important;
+      }
+      .tf-cover-evidence .metric strong {
+        font-size: clamp(42px, 5vw, 72px) !important;
+        line-height: 0.86 !important;
+      }
+      .tf-cover-evidence .metric span {
+        font-size: clamp(14px, 1.12vw, 18px) !important;
+      }
+      .tf-cover-evidence .hero-gallery {
+        gap: 5px !important;
+      }
+      .tf-cover-evidence .image-tile {
+        gap: 8px !important;
+      }
+      .tf-cover-evidence .image-crop {
+        aspect-ratio: 2 / 3 !important;
+      }
+      .tf-cover-evidence .image-crop img {
+        object-fit: contain !important;
+        object-position: center center !important;
+      }
+      .tf-cover-evidence .image-meta {
+        gap: 4px !important;
+      }
+      .tf-cover-evidence .image-meta strong {
+        font-size: clamp(12px, 0.92vw, 15px) !important;
+      }
+      .tf-cover-evidence .image-meta small {
+        font-size: clamp(11px, 0.82vw, 13px) !important;
+      }
+      .tf-cover-evidence .hero-more {
+        margin-top: 2px !important;
+      }
+      .tf-cover-evidence .hero-more summary {
+        font-size: clamp(12px, 0.95vw, 15px) !important;
+      }
     </style>
   </head>
-  <body>${coverHtml}</body>
+  <body><div data-aimoda-cover-viewport>${coverHtml}</div></body>
 </html>`;
+}
+
+function TrendFlowCoverFrame({
+  coverHtml,
+  title,
+}: {
+  coverHtml: string;
+  title: string;
+}) {
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-white dark:bg-black">
+      <iframe
+        srcDoc={buildCoverSrcDoc(coverHtml)}
+        title={title}
+        loading="lazy"
+        sandbox="allow-same-origin"
+        tabIndex={-1}
+        className="pointer-events-none h-full w-full border-0 bg-white dark:bg-black"
+      />
+    </div>
+  );
 }
 
 function formatFlowDate(date: string, language: string) {
@@ -340,30 +422,32 @@ export function TrendFlowPage() {
                         itemRefs.current[index] = element;
                       }}
                       data-index={index}
-                      className="relative grid h-full snap-start snap-always grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-t border-border/60 px-4 pb-4 pt-[clamp(4.75rem,10dvh,6.75rem)] sm:px-6 sm:pb-6 lg:px-8"
+                      className="relative grid h-full snap-start snap-always grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-t border-border/60 px-4 pb-[clamp(1.25rem,3dvh,2.5rem)] pt-[clamp(3.75rem,7.5dvh,5.25rem)] sm:px-6 lg:px-8"
                     >
                       <div
                         aria-label={`${paddedNumber} of ${paddedTotal}`}
-                        className="pointer-events-none absolute right-4 top-[clamp(5.5rem,12dvh,7.5rem)] z-10 type-meta tabular-nums text-muted-foreground sm:right-6"
+                        className="pointer-events-none absolute right-4 top-[clamp(4.5rem,9dvh,6rem)] z-10 type-meta tabular-nums text-muted-foreground sm:right-6"
                       >
                         <span className="block origin-center -rotate-90 whitespace-nowrap">
                           {paddedNumber} / {paddedTotal}
                         </span>
                       </div>
 
-                      <div className="relative z-10 grid gap-5 pr-10 md:grid-cols-[minmax(0,1fr)_auto] md:items-start md:gap-8 md:pr-0">
-                        <header className="max-w-[min(64rem,100%)]">
+                      <div className="relative z-10 mx-auto grid w-full max-w-[90rem] gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end md:gap-8">
+                        <header className="max-w-[min(72rem,100%)]">
                           <p className="type-chat-kicker text-muted-foreground">
                             {item.brand}
                           </p>
-                          <h2 className="mt-3 max-w-[13ch] text-balance text-[clamp(2.15rem,5.8vw,5.4rem)] font-bold leading-[0.94] tracking-tight text-foreground md:mt-4 xl:max-w-[14ch]">
+                          <h2 className="mt-2 max-w-[22ch] text-balance text-[clamp(1.9rem,4.25vw,4.1rem)] font-bold leading-[0.96] tracking-tight text-foreground md:mt-3 xl:max-w-[24ch]">
                             {item.title}
                           </h2>
                         </header>
-                      </div>
 
-                      <div className="mt-6 md:hidden">
-                        <Button asChild variant="outline" size="sm">
+                        <Button
+                          asChild
+                          variant="outline"
+                          className="type-chat-action hidden h-10 bg-background/90 px-5 shadow-token-sm backdrop-blur-md md:inline-flex"
+                        >
                           <a
                             href={item.previewUrl}
                             target="_blank"
@@ -377,15 +461,9 @@ export function TrendFlowPage() {
                             />
                           </a>
                         </Button>
-                      </div>
 
-                      <div className="relative min-h-0 pt-[clamp(1.25rem,3dvh,2.25rem)]">
-                        <div className="hidden justify-end pb-[clamp(0.85rem,2dvh,1.35rem)] pr-[clamp(1rem,3vw,3rem)] md:flex">
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="type-chat-action h-11 bg-background/90 px-6 shadow-token-sm backdrop-blur-md"
-                          >
+                        <div className="md:hidden">
+                          <Button asChild variant="outline" size="sm">
                             <a
                               href={item.previewUrl}
                               target="_blank"
@@ -400,15 +478,14 @@ export function TrendFlowPage() {
                             </a>
                           </Button>
                         </div>
-                        <div className="relative h-full min-h-0 w-full overflow-hidden border border-border/70 bg-background shadow-token-sm">
+                      </div>
+
+                      <div className="relative min-h-0 pt-[clamp(0.9rem,1.8dvh,1.5rem)]">
+                        <div className="relative mx-auto h-full min-h-0 w-full max-w-[90rem] overflow-hidden bg-background">
                           {item.coverHtml ? (
-                            <iframe
-                              srcDoc={buildCoverSrcDoc(item.coverHtml)}
+                            <TrendFlowCoverFrame
+                              coverHtml={item.coverHtml}
                               title={item.title}
-                              loading="lazy"
-                              sandbox="allow-same-origin"
-                              tabIndex={-1}
-                              className="pointer-events-none h-full w-full border-0 bg-white dark:bg-black"
                             />
                           ) : (
                             <iframe
