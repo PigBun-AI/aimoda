@@ -8,6 +8,19 @@ from backend.app.services.trend_flow_scanner import (
     extract_trend_flow_metadata,
 )
 
+STANDARD_COVER_HTML = '''
+<section
+  class="cover"
+  data-aimoda-cover="trend-flow"
+  data-cover-ratio="16:9"
+  data-cover-width="1600"
+  data-cover-height="900"
+>
+  <h1>Miu Miu Cover</h1>
+  <img src="../assets/cover.jpg" alt="" />
+</section>
+'''
+
 
 def test_extract_trend_flow_metadata_from_manifest(tmp_path):
     trend_root = tmp_path / 'miumiu-trend-flow'
@@ -15,13 +28,13 @@ def test_extract_trend_flow_metadata_from_manifest(tmp_path):
     (trend_root / 'assets').mkdir()
 
     (trend_root / 'pages' / 'report.html').write_text(
-        '''
+        f'''
         <html>
           <head><title>Miu Miu 趋势流动：2025</title></head>
           <body>
             <p>连续四季的轮廓、材质与品牌语义在这一份趋势流动中被系统性地串联起来。</p>
             <template id="aimoda-trend-flow-cover" data-aimoda-cover>
-              <section><img src="../assets/cover.jpg" alt="" /></section>
+              {STANDARD_COVER_HTML}
             </template>
           </body>
         </html>
@@ -32,7 +45,7 @@ def test_extract_trend_flow_metadata_from_manifest(tmp_path):
     (trend_root / 'manifest.json').write_text(
         json.dumps(
             {
-                'specVersion': '2.0',
+                'specVersion': '3.0',
                 'contentType': 'trend_flow',
                 'slug': 'miumiu-2025-trend-flow',
                 'title': 'Miu Miu 趋势流动：2025',
@@ -63,10 +76,10 @@ def test_trend_flow_requires_consecutive_timeline(tmp_path):
     (trend_root / 'pages').mkdir(parents=True)
     (trend_root / 'assets').mkdir()
     (trend_root / 'pages' / 'report.html').write_text(
-        '''
+        f'''
         <html><body>
           <template id="aimoda-trend-flow-cover" data-aimoda-cover>
-            <section><img src="../assets/cover.jpg" alt="" /></section>
+            {STANDARD_COVER_HTML}
           </template>
         </body></html>
         ''',
@@ -76,7 +89,7 @@ def test_trend_flow_requires_consecutive_timeline(tmp_path):
     (trend_root / 'manifest.json').write_text(
         json.dumps(
             {
-                'specVersion': '2.0',
+                'specVersion': '3.0',
                 'contentType': 'trend_flow',
                 'slug': 'broken-trend-flow',
                 'title': 'Broken Trend Flow',
@@ -110,7 +123,7 @@ def test_extract_trend_flow_cover_template_from_entry_html(tmp_path):
           <body>
             <main>完整报告正文</main>
             <template id="aimoda-trend-flow-cover" data-aimoda-cover>
-              <section class="cover" onclick="alert('x')">
+              <section class="cover" data-aimoda-cover="trend-flow" data-cover-ratio="16:9" data-cover-width="1600" data-cover-height="900" onclick="alert('x')">
                 <h1>Miu Miu Cover</h1>
                 <img src="../assets/cover.jpg" alt="" />
                 <script>alert('unsafe')</script>
@@ -132,7 +145,7 @@ def test_extract_trend_flow_cover_template_from_entry_html(tmp_path):
     assert '<script' not in cover.html
 
 
-def test_extract_trend_flow_cover_fragment_from_rendered_content(tmp_path):
+def test_rejects_legacy_cover_fragment_from_rendered_content(tmp_path):
     trend_root = tmp_path / 'miumiu-trend-flow'
     (trend_root / 'pages').mkdir(parents=True)
     entry_path = trend_root / 'pages' / 'report.html'
@@ -158,19 +171,10 @@ def test_extract_trend_flow_cover_fragment_from_rendered_content(tmp_path):
         encoding='utf-8',
     )
 
-    cover = extract_trend_flow_cover_template(entry_path, trend_root)
+    with pytest.raises(ReportPackageError) as exc:
+        extract_trend_flow_cover_template(entry_path, trend_root)
 
-    assert cover is not None
-    assert cover.source == 'entry_fragment'
-    assert cover.asset_path == 'pages/report.html'
-    assert '<link rel="stylesheet" href="../assets/report.css">' in cover.html
-    assert '<style>.cover-c { color: #111; }</style>' in cover.html
-    assert '<style>.inner-cover > h2 { color: #111; }</style>' in cover.html
-    assert 'data-aimoda-cover-fragment' in cover.html
-    assert 'C 区块' in cover.html
-    assert '../assets/c.jpg' in cover.html
-    assert '<section>A</section>' not in cover.html
-    assert '<section>D</section>' not in cover.html
+    assert exc.value.code == 'trend_flow_cover_fragment_unsupported'
 
 
 def test_trend_flow_requires_cover_marker_for_upload(tmp_path):
@@ -185,7 +189,7 @@ def test_trend_flow_requires_cover_marker_for_upload(tmp_path):
     (trend_root / 'manifest.json').write_text(
         json.dumps(
             {
-                'specVersion': '2.0',
+                'specVersion': '3.0',
                 'contentType': 'trend_flow',
                 'slug': 'missing-cover-template',
                 'title': 'Missing Cover Template',

@@ -723,6 +723,11 @@ html:lang(zh-CN) {
     padding-top: var(--trend-reader-page-pt);
   }
 
+  .trend-reader-page--poster {
+    padding-bottom: clamp(0.75rem, 2dvh, 1.25rem);
+    padding-top: clamp(0.75rem, 2dvh, 1.25rem);
+  }
+
   .trend-reader-side-count {
     top: var(--trend-reader-side-count-top);
   }
@@ -739,10 +744,21 @@ html:lang(zh-CN) {
     padding-top: var(--trend-reader-canvas-pt);
   }
 
+  .trend-reader-canvas--poster {
+    padding-top: 0;
+  }
+
   .trend-reader-cover-frame {
     inset: 0;
     overflow: hidden;
     position: absolute;
+  }
+
+  .trend-reader-poster-action {
+    position: absolute;
+    right: clamp(1rem, 2.4vw, 2rem);
+    top: clamp(5.5rem, 9dvh, 7.5rem);
+    z-index: 20;
   }
 
   @media (max-height: 820px) and (min-width: 1024px) {
@@ -766,6 +782,12 @@ html:lang(zh-CN) {
     }
   }
 
+  @media (max-height: 820px) and (min-width: 1024px) {
+    .trend-reader-poster-action {
+      top: clamp(4.6rem, 7.2dvh, 5.75rem);
+    }
+  }
+
   @media (max-width: 767px) {
     .trend-reader-shell {
       --trend-reader-toolbar-top: 0.75rem;
@@ -775,6 +797,12 @@ html:lang(zh-CN) {
       --trend-reader-title-size: clamp(1.65rem, 7.5vw, 2.35rem);
       --trend-reader-canvas-pt: 0.85rem;
       --trend-reader-side-count-top: clamp(3.75rem, 8dvh, 4.75rem);
+    }
+
+    .trend-reader-poster-action {
+      bottom: 1rem;
+      right: 1rem;
+      top: auto;
     }
   }
 }
